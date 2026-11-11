@@ -277,8 +277,8 @@ public final class MapSession {
 
 	private static boolean sameFromEverySide(BlockLooks looks, BlockState oldState, BlockState newState) {
 		for (Facing facing : Facing.values()) {
-			int oldId = Block.BLOCK_STATE_REGISTRY.getId(facing.turned(oldState));
-			int newId = Block.BLOCK_STATE_REGISTRY.getId(facing.turned(newState));
+			int oldId = Block.BLOCK_STATE_REGISTRY.getId(FacingBlocks.turned(facing, oldState));
+			int newId = Block.BLOCK_STATE_REGISTRY.getId(FacingBlocks.turned(facing, newState));
 			if (oldId < 0 || newId < 0 || !looks.sameLook(oldId, newId)) {
 				return false;
 			}

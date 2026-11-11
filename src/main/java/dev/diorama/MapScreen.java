@@ -915,7 +915,7 @@ public final class MapScreen extends Screen {
 		TileKey tile = new TileKey(this.layer, (int) Math.floor(u / Projection.TILE_UNITS), (int) Math.floor(v / Projection.TILE_UNITS));
 		MapPick pick = new MapPick(session.map(), looks, tile, session.map().fogOfWar());
 		return switch (pick.pick(u, v)) {
-			case MapPick.FOUND -> CompletableFuture.completedFuture(new MapLevel.Spot(Projection.facing().worldPos(new BlockPos((int) Math.floor(u), pick.y, pick.z)), false));
+			case MapPick.FOUND -> CompletableFuture.completedFuture(new MapLevel.Spot(FacingBlocks.worldPos(Projection.facing(), new BlockPos((int) Math.floor(u), pick.y, pick.z)), false));
 			case MapPick.NOTHING -> CompletableFuture.completedFuture(MapLevel.Spot.NOTHING);
 			default -> session.map().savedSpot(this.layer, u, v, looks, readWorld);
 		};
@@ -936,7 +936,7 @@ public final class MapScreen extends Screen {
 		int y = this.layer == TileKey.SURFACE ? USUAL_GROUND_Y : this.layer;
 		double u = view.centerU() + (screenX - view.x() - view.width() / 2.0) / view.zoom();
 		double v = TileSpots.rowMiddle(view.centerV() + (screenY - view.y() - view.height() / 2.0) / view.zoom());
-		return Projection.facing().worldPos(new BlockPos((int) Math.floor(u), y, (int) Math.floor(Projection.zAt(v, y))));
+		return FacingBlocks.worldPos(Projection.facing(), new BlockPos((int) Math.floor(u), y, (int) Math.floor(Projection.zAt(v, y))));
 	}
 
 	private List<MapMenu.Item> spotItems(MapLevel.Spot found, @Nullable BlockPos rough) {

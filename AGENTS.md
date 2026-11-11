@@ -19,3 +19,10 @@ If boat can't start a run, the skill's Limits section says what to do.
 Xaero's Minimap and World Map are the standard Diorama follows, with JourneyMap as the second reference. Before deciding a behaviour, setting, default, name or file format, check what Xaero's does and match it. Depart from it where Diorama's 3D map calls for something else, and say why in the PR.
 
 When a product call goes to Dara, lead with Xaero's precedent.
+
+## Repository hygiene for the GTNH port
+
+- Track source, pinned build inputs (including Gradle wrapper JARs), reusable architecture and test instructions.
+- Keep machine paths/instance inventories, reference clones, screenshots, logs, generated audits and progress diaries in `/.local/`; existing local GTNH milestone notes are explicitly ignored. Do not copy credentials into these notes.
+- Keep `.gitignore` current when adding local tools or generated output. Do not blanket-ignore documentation, JARs or lockfiles needed to reproduce a build.
+- Before committing, inspect the staged file list and diff; keep reusable docs independent of ignored local evidence. Do not stage build caches, game directories or downloaded dependencies. A commit does not authorize a push or deployment.

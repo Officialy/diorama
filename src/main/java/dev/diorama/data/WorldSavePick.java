@@ -1,6 +1,7 @@
 package dev.diorama.data;
 
 import dev.diorama.Diorama;
+import dev.diorama.FacingBlocks;
 import dev.diorama.Projection;
 import dev.diorama.bake.BlockLooks;
 import dev.diorama.bake.ChunkSource;
@@ -68,7 +69,7 @@ public final class WorldSavePick {
 			}
 			TileKey tile = new TileKey(TileKey.SURFACE, (int) Math.floor(u / Projection.TILE_UNITS), (int) Math.floor(v / Projection.TILE_UNITS));
 			MapPick pick = MapPick.fromWorldTop(new dev.diorama.bake.TurnedSource(new Source(map, serverLevel, this.level), facing), looks, tile, fogOfWar);
-			return pick.pick(u, v) == MapPick.FOUND ? facing.worldPos(new BlockPos((int) Math.floor(u), pick.y, pick.z)) : null;
+			return pick.pick(u, v) == MapPick.FOUND ? FacingBlocks.worldPos(facing, new BlockPos((int) Math.floor(u), pick.y, pick.z)) : null;
 		}).exceptionally(t -> {
 			Diorama.LOGGER.warn("Couldn't read the world's chunks at map point {}, {}", u, v, t);
 			return null;

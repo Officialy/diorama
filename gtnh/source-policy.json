@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "upstreamBaseline": "8e8a21bbf285c247298f5eb2258a1ce3928be682",
+  "template": {
+    "repository": "GTNewHorizons/ExampleMod1.7.10",
+    "commit": "bd8e4160b677466de3cfff2c4011a3806fa74942",
+    "convention": "2.0.33",
+    "gradle": "9.7.1"
+  },
+  "preprocessing": {
+    "mode": "none",
+    "node": null,
+    "loader": null,
+    "constants": {},
+    "transformOrder": []
+  },
+  "shared": [
+    {
+      "path": "dev/diorama/bake/Mipmaps.java",
+      "fqn": "dev.diorama.bake.Mipmaps",
+      "reviewedSha256": "eff099bae78e7b625a950345d65749158c700c85b18dd72dc4f42f4fa66d6a13",
+      "reason": "Dependency-free ABGR mip algorithm; first shared input."
+    },
+    {
+      "path": "dev/diorama/Facing.java",
+      "fqn": "dev.diorama.Facing",
+      "reviewedSha256": "a937140caa233d16f8e80d281f53b2f7811da49c148e51ac7f3337fd3e58f880",
+      "reason": "Canonical coordinate rotations; Minecraft wrappers moved to modern-only FacingBlocks."
+    },
+    {
+      "path": "dev/diorama/Projection.java",
+      "fqn": "dev.diorama.Projection",
+      "reviewedSha256": "722223dac093ea4f42bdb3db8eb2faf092bc61a06305d62211b42a8ee52e7b9d",
+      "reason": "Canonical projection/style/tile value contract; no runtime Minecraft dependency."
+    },
+    {
+      "path": "dev/diorama/MapStyle.java",
+      "fqn": "dev.diorama.MapStyle",
+      "reviewedSha256": "a93421530369561cf8dc0acffb6074d60c58b3854bd93ece55091d59b825fa9c",
+      "reason": "Canonical projection/style/tile value contract; no runtime Minecraft dependency."
+    },
+    {
+      "path": "dev/diorama/bake/TileKey.java",
+      "fqn": "dev.diorama.bake.TileKey",
+      "reviewedSha256": "bcb5aa914cd1d40e38434c057c7e293f20f18069f23f6e96a300fc62f248df8f",
+      "reason": "Canonical projection/style/tile value contract; no runtime Minecraft dependency."
+    },
+    {
+      "path": "dev/diorama/bake/TileImage.java",
+      "fqn": "dev.diorama.bake.TileImage",
+      "reviewedSha256": "12a65a37ee60626aa191fcc7273ef25ea92191450e329ba855c8d06fbbf1b31c",
+      "reason": "Canonical projection/style/tile value contract; no runtime Minecraft dependency."
+    }
+  ],
+  "platform": [
+    {
+      "path": "dev/diorama/gtnh/DioramaLegacy.java",
+      "fqn": "dev.diorama.gtnh.DioramaLegacy"
+    },
+    {
+      "path": "dev/diorama/gtnh/CommonProxy.java",
+      "fqn": "dev.diorama.gtnh.CommonProxy"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/ClientProxy.java",
+      "fqn": "dev.diorama.gtnh.client.ClientProxy"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/DisplayProbeCommand.java",
+      "fqn": "dev.diorama.gtnh.client.DisplayProbeCommand"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/DisplayProbeScreen.java",
+      "fqn": "dev.diorama.gtnh.client.DisplayProbeScreen"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/ProbeGlState.java",
+      "fqn": "dev.diorama.gtnh.client.ProbeGlState"
+    },
+    {
+      "path": "dev/diorama/gtnh/diagnostic/ProbePixels.java",
+      "fqn": "dev.diorama.gtnh.diagnostic.ProbePixels"
+    }
+  ],
+  "deferred": [
+    "world snapshots",
+    "block appearances",
+    "CPU TileBaker closure",
+    "map display",
+    "tile storage",
+    "GPU baking"
+  ]
+}

@@ -1,9 +1,5 @@
 package dev.diorama;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.block.Rotation;
-import net.minecraft.world.level.block.state.BlockState;
-
 /**
  * Which way the map looks. The bakers, picks and lights only know a camera looking north; another
  * facing turns the world under them, block states included, so they see its other side, with the
@@ -14,18 +10,16 @@ import net.minecraft.world.level.block.state.BlockState;
  * the place a point at -x reaches to.
  */
 public enum Facing {
-	NORTH(0, Rotation.NONE),
-	EAST(1, Rotation.COUNTERCLOCKWISE_90),
-	SOUTH(2, Rotation.CLOCKWISE_180),
-	WEST(3, Rotation.CLOCKWISE_90);
+	NORTH(0),
+	EAST(1),
+	SOUTH(2),
+	WEST(3);
 
 	/** Quarter turns from north. */
 	public final int turns;
-	private final Rotation rotation;
 
-	Facing(int turns, Rotation rotation) {
+	Facing(int turns) {
 		this.turns = turns;
-		this.rotation = rotation;
 	}
 
 	/** The word for this facing in folder and file names. */
@@ -120,23 +114,5 @@ public enum Facing {
 			case WEST -> -x;
 			default -> z;
 		};
-	}
-
-	/** The world's block at a block in turned space. */
-	public BlockPos worldPos(BlockPos turned) {
-		return new BlockPos(this.worldBlockX(turned.getX(), turned.getZ()), turned.getY(), this.worldBlockZ(turned.getX(), turned.getZ()));
-	}
-
-	/** A block as turned space has it. */
-	public BlockState turned(BlockState state) {
-		if (this == NORTH) {
-			return state;
-		}
-		try {
-			return state.rotate(this.rotation);
-		} catch (RuntimeException e) {
-			// A mod's block that can't be turned is drawn as it stands.
-			return state;
-		}
 	}
 }

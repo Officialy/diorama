@@ -3,6 +3,7 @@ package dev.diorama.render;
 import dev.diorama.Claims;
 import dev.diorama.Diorama;
 import dev.diorama.Facing;
+import dev.diorama.FacingBlocks;
 import dev.diorama.Projection;
 import dev.diorama.bake.BlockLooks;
 import dev.diorama.bake.ChunkSource;
@@ -1238,7 +1239,7 @@ public final class MapLevel implements ChunkSource {
 			int[] spots = store.spots(key);
 			if (TileSpots.known(key, spots, u, v)) {
 				BlockPos spot = TileSpots.spot(key, spots, u, v);
-				return CompletableFuture.completedFuture(new Spot(spot == null ? null : facing.worldPos(spot), false));
+				return CompletableFuture.completedFuture(new Spot(spot == null ? null : FacingBlocks.worldPos(facing, spot), false));
 			}
 			if (!drawn(store.read(key), key, u, v)) {
 				return CompletableFuture.completedFuture(Spot.NOTHING);

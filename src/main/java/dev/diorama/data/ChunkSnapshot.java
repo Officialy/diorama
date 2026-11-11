@@ -1,6 +1,7 @@
 package dev.diorama.data;
 
 import dev.diorama.Facing;
+import dev.diorama.FacingBlocks;
 import dev.diorama.bake.TallChunks;
 import dev.diorama.mixin.BiomeManagerAccessor;
 import net.minecraft.client.Minecraft;
@@ -139,7 +140,7 @@ public final class ChunkSnapshot {
 				}
 				BlockState[] materials = copycats[i].material().clone();
 				for (int k = 0; k < materials.length; k++) {
-					materials[k] = facing.turned(materials[k]);
+					materials[k] = FacingBlocks.turned(facing, materials[k]);
 				}
 				out[i] = new SectionCopycats(at, materials);
 			}
@@ -149,7 +150,7 @@ public final class ChunkSnapshot {
 
 	/** The block at a place in the view, from a section's {@link #section} container. */
 	public BlockState state(PalettedContainer<BlockState> states, int x, int y, int z) {
-		return this.facing.turned(states.get(this.localX(x, z), y, this.localZ(x, z)));
+		return FacingBlocks.turned(this.facing, states.get(this.localX(x, z), y, this.localZ(x, z)));
 	}
 
 	/** The chunk itself, of a turned view. */
@@ -159,7 +160,7 @@ public final class ChunkSnapshot {
 
 	/** A block as this view has it. */
 	public BlockState turned(BlockState state) {
-		return this.facing.turned(state);
+		return FacingBlocks.turned(this.facing, state);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -511,6 +512,34 @@ public final class ChunkSnapshot {
 	public Holder<Biome> noiseBiome(int quartX, int quartY, int quartZ) {
 		Holder<Biome> biome = this.knownNoiseBiome(quartX, quartY, quartZ);
 		return biome == null ? this.fallbackBiome : biome;
+	}
+
+	/**
+	 * Unblended Nether fog RGB at a quart position in this view. Only captured biome data is read;
+	 * the baker owns blending and luminance limiting, without knowing Minecraft biome types.
+	 * Missing biome cells use {@link #noiseBiome}'s fallback; unrecognised biome keys use Nether wastes.
+	 */
+	public int fogColor(int quartX, int quartY, int quartZ) {
+		return fogColor(this.noiseBiome(quartX, quartY, quartZ));
+	}
+
+	// The Nether biomes' fog colours in the game.
+	public static final int NETHER_WASTES_FOG = 0x330808;
+
+	private static int fogColor(Holder<Biome> biome) {
+		if (biome.is(Biomes.CRIMSON_FOREST)) {
+			return 0x330303;
+		}
+		if (biome.is(Biomes.WARPED_FOREST)) {
+			return 0x1A051A;
+		}
+		if (biome.is(Biomes.SOUL_SAND_VALLEY)) {
+			return 0x1B4745;
+		}
+		if (biome.is(Biomes.BASALT_DELTAS)) {
+			return 0x685F70;
+		}
+		return NETHER_WASTES_FOG;
 	}
 
 	/**

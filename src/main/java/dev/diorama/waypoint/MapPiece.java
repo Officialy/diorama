@@ -1,5 +1,6 @@
 package dev.diorama.waypoint;
 
+import dev.diorama.FacingBlocks;
 import dev.diorama.MapSession;
 import dev.diorama.MapStyle;
 import dev.diorama.Maps;
@@ -231,7 +232,7 @@ final class MapPiece {
 				if (hit != null) {
 					pos.set(facing(bx, hit[1], true), hit[0] - row, facing(bx, hit[1], false));
 					// As the map sees it: the side facing the camera is the one shown.
-					state = Projection.facing().turned(level.getBlockState(pos));
+					state = FacingBlocks.turned(Projection.facing(), level.getBlockState(pos));
 				} else {
 					int pz = Projection.facing().blockZ(player.getX(), player.getZ());
 					pos.set(facing(bx, pz, true), player.getY() - 1 - row, facing(bx, pz, false));

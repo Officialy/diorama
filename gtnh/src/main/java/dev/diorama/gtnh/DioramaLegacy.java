@@ -1,0 +1,29 @@
+package dev.diorama.gtnh;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import cpw.mods.fml.common.Mod;
+import cpw.mods.fml.common.SidedProxy;
+import cpw.mods.fml.common.event.FMLInitializationEvent;
+
+/** Build/lifecycle scaffold only; no map or game-world access yet. */
+@Mod(
+    modid = "diorama",
+    name = "Diorama",
+    version = "0.8.1-gtnh.2-dev",
+    acceptableRemoteVersions = "*",
+    dependencies = "required-after:gtnhlib@[0.11.48,)")
+public final class DioramaLegacy {
+
+    @SidedProxy(clientSide = "dev.diorama.gtnh.client.ClientProxy", serverSide = "dev.diorama.gtnh.CommonProxy")
+    public static CommonProxy proxy;
+
+    private static final Logger LOG = LogManager.getLogger("Diorama");
+
+    @Mod.EventHandler
+    public void init(FMLInitializationEvent event) {
+        proxy.init();
+        LOG.info("Diorama legacy diagnostic build loaded; client command /dioramaprobe available. No map yet.");
+    }
+}

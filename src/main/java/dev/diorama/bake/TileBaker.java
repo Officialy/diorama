@@ -344,29 +344,10 @@ public final class TileBaker {
 		int color = this.fogAt.get(key);
 		if (color < 0) {
 			ChunkSnapshot snapshot = this.reader.snapshot(qx << 2, qz << 2);
-			color = snapshot == null ? NETHER_WASTES_FOG : fogColor(snapshot.noiseBiome(qx, qy, qz));
+			color = snapshot == null ? ChunkSnapshot.NETHER_WASTES_FOG : snapshot.fogColor(qx, qy, qz);
 			this.fogAt.put(key, color);
 		}
 		return color;
-	}
-
-	// The Nether biomes' fog colours in the game.
-	private static final int NETHER_WASTES_FOG = 0x330808;
-
-	private static int fogColor(net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> biome) {
-		if (biome.is(net.minecraft.world.level.biome.Biomes.CRIMSON_FOREST)) {
-			return 0x330303;
-		}
-		if (biome.is(net.minecraft.world.level.biome.Biomes.WARPED_FOREST)) {
-			return 0x1A051A;
-		}
-		if (biome.is(net.minecraft.world.level.biome.Biomes.SOUL_SAND_VALLEY)) {
-			return 0x1B4745;
-		}
-		if (biome.is(net.minecraft.world.level.biome.Biomes.BASALT_DELTAS)) {
-			return 0x685F70;
-		}
-		return NETHER_WASTES_FOG;
 	}
 
 	/** A baker that only answers colour and occlusion questions, for {@link GpuMesher}. */

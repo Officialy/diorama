@@ -41,3 +41,14 @@ replay_*.log
 
 # game logs from local runs
 logs/
+
+# Machine-only references, instance notes, screenshots, logs and progress diaries.
+# Keep reusable build/design/test instructions tracked; do not ignore all docs or jars.
+/.local/
+/docs/gtnh-batch-a.md
+/docs/gtnh-c1-geometry.md
+/docs/gtnh-c2-fog-boundary.md
+/docs/gtnh-checkpoints.md
+/docs/gtnh-first-loop.md
+/docs/gtnh-port-plan.md
+/docs/gtnh-version-baseline-audit.md
