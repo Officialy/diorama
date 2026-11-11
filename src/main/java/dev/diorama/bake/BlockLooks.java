@@ -85,7 +85,7 @@ import org.jspecify.annotations.Nullable;
  * filled copycats ({@link #copycat}), added by bake threads as they first meet them. Each is
  * written before its id is handed out, and never changes after.
  */
-public final class BlockLooks extends Looks {
+public final class BlockLooks extends StateLooks {
 	/** Held while a look is worked out: one at a time, across tables, since they share mods' code. */
 	private static final Object MAKING = new Object();
 	/**
@@ -146,7 +146,7 @@ public final class BlockLooks extends Looks {
 	}
 
 	/**
-	 * {@link Looks#bakeId} against the map's current table, for a reader without one of its own.
+	 * {@link StateLooks#bakeId} against the map's current table, for a reader without one of its own.
 	 */
 	public static int bakeId(BlockState state) {
 		return bakeId(state, current);
@@ -269,7 +269,7 @@ public final class BlockLooks extends Looks {
 			if (reloading) {
 				this.provisional = true;
 			}
-			KINDS.setRelease(this.kind, id, kind);
+			this.publish(id, kind);
 			this.made++;
 			this.makingNanos += System.nanoTime() - start;
 		}

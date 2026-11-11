@@ -1,44 +1,18 @@
 package dev.diorama.bake;
 
-import dev.diorama.Diorama;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import net.minecraft.core.BlockPos;
-import net.minecraft.tags.FluidTags;
-import net.minecraft.world.entity.EntityTypes;
-import net.minecraft.world.level.EmptyBlockGetter;
-import net.minecraft.world.level.NaturalSpawner;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.block.SnowLayerBlock;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jspecify.annotations.Nullable;
 
 /**
- * What each block state looks like on the map, as the tracer and mesher read it: how rays treat
- * it, its outline, and its average top and front colours. This half is what the game's own rules
- * say about a block (its kind, outline, light and spawn rules), which a dedicated server knows as
- * well as a client. Where the colours come from is up to the table: {@link BlockLooks} reads the
- * client's models and textures, {@link TableLooks} the vanilla colours shipped in the jar.
- *
- * <p>A state's look is worked out the first time anything asks for its id through {@link #ensure}
- * (or a method that calls it), on whichever thread asks. Once worked out, a look never changes,
- * so bake threads read it freely.
- *
- * <p>When a mod with copycats is installed, ids past the block state registry are looks for
- * filled copycats ({@link #copycat}), added by bake threads as they first meet them. Each is
- * written before its id is handed out, and never changes after.
+ * Primitive, lazily published looks read by tracers and meshers. Platform-specific subclasses
+ * supply looks under their own making lock; published looks never change.
  */
 public abstract class Looks {
 	public static final byte AIR = 0;
@@ -115,10 +89,8 @@ public abstract class Looks {
 	private volatile boolean warnedCopycats;
 
 	// Outlines found so far, used only while a look is worked out (one at a time, see make).
-	private final Map<VoxelShape, Integer> shapeByVoxels = new IdentityHashMap<>();
 	private final Map<String, Integer> shapeByBoxes = new HashMap<>();
 	private final List<float[]> shapeList = new ArrayList<>(List.of(new float[0]));
-	private boolean warnedShape;
 
 	protected Looks(int registrySize, int size) {
 		this.registrySize = registrySize;
@@ -140,33 +112,12 @@ public abstract class Looks {
 		java.util.Arrays.fill(this.kind, 0, registrySize, NOT_YET);
 	}
 
-	/**
-	 * Works out one state's look, unless another thread just did: under a lock, calls
-	 * {@link #work} and releases the kind it returns into {@link #kind} with {@link #KINDS}.
-	 */
+	/** Works out a look under the subclass lock and publishes it with {@link #publish}. */
 	protected abstract void make(int id);
 
-	/**
-	 * Fills in the state's colours and tint for a look whose kind the game's rules make
-	 * {@code kind}, and returns its kind, which the colours can change ({@link #GLASS} for a
-	 * see-through texture, {@link #AIR} for a block with nothing to show). Under the lock of
-	 * {@link #make}.
-	 */
-	protected abstract byte colours(int id, BlockState state, byte kind);
-
-	/**
-	 * What {@link #colours} gives a block with no texture to go by: its colour on Minecraft's own
-	 * maps, seen through where those maps see through it ({@link #AIR}). Returns its kind.
-	 */
-	protected byte flatColours(int id, BlockState state, byte kind) {
-		int mapColor = mapColor(state);
-		if (mapColor == 0) {
-			return AIR;
-		}
-		FaceColor face = new FaceColor();
-		face.add(new float[] {(mapColor >> 16 & 0xFF) / 255.0F, (mapColor >> 8 & 0xFF) / 255.0F, (mapColor & 0xFF) / 255.0F, 1.0F}, -1);
-		this.setColours(id, face, face);
-		return kind;
+	/** Publishes the completed look after all its fields have been written. */
+	protected final void publish(int id, byte kind) {
+		KINDS.setRelease(this.kind, id, kind);
 	}
 
 	/** Writes both faces' colours into the state's look. */
@@ -177,63 +128,6 @@ public abstract class Looks {
 		this.side[id] = sideFace.untinted();
 		this.sideTinted[id] = sideFace.tinted();
 		this.sideTintWeight[id] = sideFace.tintWeight();
-	}
-
-	/** The block's colour on Minecraft's own maps as 0xRRGGBB, or 0 where those maps see through it. */
-	protected static int mapColor(BlockState state) {
-		try {
-			return state.getMapColor(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).col;
-		} catch (RuntimeException | Error e) {
-			return 0;
-		}
-	}
-
-	/**
-	 * Fills in the state's look but its kind, which it returns: the game's rules here, the
-	 * colours from {@link #colours}. Under the lock of {@link #make}.
-	 */
-	protected final byte work(int id, BlockState state) {
-		this.emission[id] = (byte) state.getLightEmission();
-		this.constantTint[id] = -1;
-		// Minecraft's own spawn rules, asked of the block alone: none of them look around it.
-		try {
-			this.spawnOn[id] = state.isValidSpawn(EmptyBlockGetter.INSTANCE, BlockPos.ZERO, EntityTypes.ZOMBIE);
-			this.spawnIn[id] = NaturalSpawner.isValidEmptySpawnBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO, state, state.getFluidState(), EntityTypes.ZOMBIE)
-				&& state.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty();
-		} catch (RuntimeException | Error e) {
-			this.spawnOn[id] = false;
-			this.spawnIn[id] = false;
-		}
-		// A mod's block can give a null shape or throw when asked, and under ModernFix, which builds
-		// each state's cache on first use, so can anything that reads the cache. One that fails
-		// counts as a full block and keeps its model's colours.
-		byte kind = SOLID;
-		try {
-			kind = classify(state);
-			if (kind == SOLID) {
-				this.shape[id] = this.shapeIndex(state);
-			}
-		} catch (RuntimeException | Error e) {
-			if (!this.warnedShape) {
-				this.warnedShape = true;
-				Diorama.LOGGER.warn("The shape of {} failed when asked for ({}); such blocks draw as full blocks", state, e.toString());
-			}
-		}
-		if (kind == AIR) {
-			return AIR;
-		}
-		kind = this.colours(id, state, kind);
-		if (kind == AIR) {
-			this.shape[id] = 0;
-			return AIR;
-		}
-		if (this.shape[id] != 0 && !state.getFluidState().isEmpty()) {
-			int fluid = Block.BLOCK_STATE_REGISTRY.getId(state.getFluidState().createLegacyBlock());
-			if (fluid >= 0 && fluid < this.registrySize && fluid != id && this.kind[this.ensure(fluid)] == WATER) {
-				this.wetShape[id] = fluid;
-			}
-		}
-		return kind;
 	}
 
 	/**
@@ -259,39 +153,6 @@ public abstract class Looks {
 	}
 
 	/**
-	 * The state's id in the tables here. A state the game hasn't numbered, which some mods make
-	 * on the fly (Epic Fight's cracked ground, #180), takes its block's default state's id, or
-	 * air's. Only numbers it: {@link #lookId} also works its look out.
-	 */
-	public static int id(BlockState state) {
-		int id = Block.BLOCK_STATE_REGISTRY.getId(state);
-		if (id < 0) {
-			id = Block.BLOCK_STATE_REGISTRY.getId(state.getBlock().defaultBlockState());
-		}
-		if (id < 0) {
-			id = Block.BLOCK_STATE_REGISTRY.getId(net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
-		}
-		return Math.max(id, 0);
-	}
-
-	/**
-	 * {@link #id} for a bake. While NeoForge or Forge number every state again, as they do when a
-	 * world is left, states have no id for a moment and the table is short: the bake stops
-	 * ({@link StatesRenumbered}) rather than read those blocks as something else, since the map
-	 * still saves its last bakes as it closes.
-	 */
-	protected static int bakeId(BlockState state, @Nullable Looks looks) {
-		int id = Block.BLOCK_STATE_REGISTRY.getId(state);
-		if (id >= 0) {
-			return id;
-		}
-		if (looks != null && Block.BLOCK_STATE_REGISTRY.size() != looks.registrySize) {
-			throw StatesRenumbered.INSTANCE;
-		}
-		return id(state);
-	}
-
-	/**
 	 * Works the state's look out if nothing has asked for it yet, and returns the id. Any thread:
 	 * the first to ask does the work, others asking meanwhile wait for it. Every id whose look is
 	 * read here comes through this first, or through a method that calls it.
@@ -303,24 +164,7 @@ public abstract class Looks {
 		return id;
 	}
 
-	/** {@link #id}, with the state's look worked out. */
-	public int lookId(BlockState state) {
-		return this.ensure(id(state));
-	}
-
-	/**
-	 * {@link #bakeId}, with the state's look worked out. A look left unworked because states are
-	 * being numbered again stops the bake ({@link StatesRenumbered}), as {@link #bakeId} does.
-	 */
-	public int bakeLookId(BlockState state) {
-		int id = this.ensure(bakeId(state, this));
-		if (id < this.registrySize && (byte) KINDS.getAcquire(this.kind, id) == NOT_YET) {
-			throw StatesRenumbered.INSTANCE;
-		}
-		return id;
-	}
-
-	/** See {@link #bakeId}. */
+	/** Stops a bake while platform state ids are being numbered again. */
 	public static final class StatesRenumbered extends RuntimeException {
 		static final StatesRenumbered INSTANCE = new StatesRenumbered();
 
@@ -391,7 +235,7 @@ public abstract class Looks {
 	private void warnFull() {
 		if (!this.warnedCopycats) {
 			this.warnedCopycats = true;
-			Diorama.LOGGER.warn("More than {} kinds of filled copycat; the rest draw as they do empty", COPYCAT_LOOKS);
+			this.warnCopycatsFull();
 		}
 	}
 
@@ -419,78 +263,25 @@ public abstract class Looks {
 		return id;
 	}
 
-	/** A shape with more boxes than this counts as its bounding box. */
-	private static final int MAX_BOXES = 16;
+	/** Platform warning when filled-copycat capacity is first exhausted. */
+	protected void warnCopycatsFull() {}
 
-	/** Finds or adds the state's outline in {@link #shapes}; 0 for a full cube. Under the lock of {@link #make}. */
-	private int shapeIndex(BlockState state) {
-		Map<VoxelShape, Integer> byVoxels = this.shapeByVoxels;
+	/**
+	 * Interns owned, normalized boxes in their exact order, under the subclass making lock.
+	 * The caller handles empty and full-cube shapes and must not mutate the array afterwards.
+	 */
+	protected final int internShape(float[] ownedNormalizedBoxes) {
 		List<float[]> shapes = this.shapeList;
-		VoxelShape outline;
-		try {
-			outline = state.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
-		} catch (RuntimeException | Error e) {
-			return 0;
-		}
-		Integer known = byVoxels.get(outline);
-		if (known != null) {
-			return known;
-		}
-		int index = 0;
-		if (!outline.isEmpty() && outline != Shapes.block()) {
-			List<AABB> boxes = outline.toAabbs();
-			if (boxes.size() > MAX_BOXES) {
-				boxes = List.of(outline.bounds());
+		return this.shapeByBoxes.computeIfAbsent(java.util.Arrays.toString(ownedNormalizedBoxes), key -> {
+			shapes.add(ownedNormalizedBoxes);
+			// Room for more by doubling; the entry is published before the look that uses it.
+			float[][] published = this.shapes;
+			if (published.length < shapes.size()) {
+				published = java.util.Arrays.copyOf(published, Math.max(16, published.length * 2));
 			}
-			float[] flat = new float[boxes.size() * 6];
-			int n = 0;
-			boolean full = false;
-			for (AABB box : boxes) {
-				// Some mods' outlines reach into the next block; only the part in this one counts,
-				// and a box wholly outside it is dropped.
-				float[] b = {clamp01(box.minX), clamp01(box.minY), clamp01(box.minZ), clamp01(box.maxX), clamp01(box.maxY), clamp01(box.maxZ)};
-				if (b[0] >= b[3] || b[1] >= b[4] || b[2] >= b[5]) {
-					continue;
-				}
-				System.arraycopy(b, 0, flat, n, 6);
-				n += 6;
-				full |= b[0] == 0 && b[1] == 0 && b[2] == 0 && b[3] == 1 && b[4] == 1 && b[5] == 1;
-			}
-			float[] kept = java.util.Arrays.copyOf(flat, n);
-			if (!full && n > 0) {
-				index = this.shapeByBoxes.computeIfAbsent(java.util.Arrays.toString(kept), key -> {
-					shapes.add(kept);
-					// Room for more by doubling; the entry is published before the look that uses it.
-					float[][] published = this.shapes;
-					if (published.length < shapes.size()) {
-						published = java.util.Arrays.copyOf(published, Math.max(16, published.length * 2));
-					}
-					published[shapes.size() - 1] = kept;
-					this.shapes = published;
-					return shapes.size() - 1;
-				});
-			}
-		}
-		byVoxels.put(outline, index);
-		return index;
-	}
-
-	private static float clamp01(double v) {
-		return (float) Math.max(0, Math.min(1, v));
-	}
-
-	private static byte classify(BlockState state) {
-		if (state.isAir() || state.getRenderShape() == RenderShape.INVISIBLE && state.getFluidState().isEmpty()) {
-			return AIR;
-		}
-		FluidState fluid = state.getFluidState();
-		boolean noCollision = state.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty();
-		if (!fluid.isEmpty() && noCollision) {
-			return fluid.is(FluidTags.LAVA) ? LAVA : WATER;
-		}
-		if (noCollision) {
-			return state.getBlock() instanceof SnowLayerBlock ? SOLID : PLANT;
-		}
-		return SOLID;
+			published[shapes.size() - 1] = ownedNormalizedBoxes;
+			this.shapes = published;
+			return shapes.size() - 1;
+		});
 	}
 }

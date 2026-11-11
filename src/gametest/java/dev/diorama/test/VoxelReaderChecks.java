@@ -1,6 +1,7 @@
 package dev.diorama.test;
 
 import dev.diorama.Facing;
+import dev.diorama.FacingBlocks;
 import dev.diorama.bake.BlockLooks;
 import dev.diorama.bake.ChunkSource;
 import dev.diorama.bake.TurnedSource;
@@ -150,11 +151,11 @@ public final class VoxelReaderChecks {
 					throw new AssertionError(facing + " view of " + wx + "," + wz + " is outside the chunk");
 				}
 				var state = uniform != null ? uniform : palette != null ? palette.get(worldX & 15, i >> 8, worldZ & 15) : Blocks.AIR.defaultBlockState();
-				int stateId = BlockLooks.id(facing.turned(state));
+				int stateId = BlockLooks.id(FacingBlocks.turned(facing, state));
 				int expected = stateId;
 				var material = snapshot.copycatMaterial(worldX, wy, worldZ);
 				if (material != null) {
-					expected = looks.copycat(stateId, Block.BLOCK_STATE_REGISTRY.getId(facing.turned(material)));
+					expected = looks.copycat(stateId, Block.BLOCK_STATE_REGISTRY.getId(FacingBlocks.turned(facing, material)));
 				}
 				int solid = looks.kind[looks.ensure(expected)] == BlockLooks.SOLID ? looks.shape[expected] != 0 ? 2 : 1 : 0;
 				int read = reader.state(wx, wy, wz);

@@ -184,7 +184,7 @@ public final class VanillaTable {
 			List<BlockState> states = block.getStateDefinition().getPossibleStates();
 			int[] ids = new int[states.size()];
 			for (int i = 0; i < ids.length; i++) {
-				int id = looks.lookId(states.get(i));
+				int id = looks.ensure(StateLooks.id(states.get(i)));
 				ids[i] = index.computeIfAbsent(Look.of(looks, id), look -> {
 					kept.add(look);
 					return kept.size() - 1;

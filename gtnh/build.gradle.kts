@@ -10,7 +10,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.2-dev"
+version = "0.8.1-gtnh.3-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -34,7 +34,7 @@ val probe = sourceSets.create("probe") {
     java.srcDir(sharedRoot)
     java.srcDir("src/main/java")
     java.include("dev/diorama/gtnh/probe/CompatibilityProbe.java", "dev/diorama/gtnh/probe/DisplayPixelProbe.java", "dev/diorama/gtnh/probe/GeometryProbe.java",
-        "dev/diorama/gtnh/diagnostic/ProbePixels.java")
+        "dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/bake/AppearanceProbe.java")
     java.include(sharedSources)
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -187,15 +187,17 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             }
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed javac product: nested patch record (no enum switch helper emitted).
-            val expectedNested = setOf("dev/diorama/bake/TileImage\$Patch.class")
+            val expectedNested = setOf("dev/diorama/bake/TileImage\$Patch.class",
+                "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces\$Pitch.class")
             require(classes.keys.filterNot { it.startsWith("META-INF/versions/") }.toSet() == expectedBase + expectedNested) {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
             val expectedMr = setOf("dev/diorama/MapStyle.class", "dev/diorama/bake/TileKey.class",
-                "dev/diorama/bake/TileImage.class", "dev/diorama/bake/TileImage\$Patch.class")
+                "dev/diorama/bake/TileImage.class", "dev/diorama/bake/TileImage\$Patch.class", "dev/diorama/bake/ShapeFaces\$Pitch.class",
+                "dev/diorama/bake/Looks.class", "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces.class")
                 .map { "META-INF/versions/21/$it" }.toSet()
             require(classes.keys.filter { it.startsWith("META-INF/versions/") }.toSet() == expectedMr) { "Unexpected MR classes" }
-            require(expectedMr.all { classes[it] == 65 }) { "Expected Java21 MR record bytecode" }
+            require(expectedMr.all { classes[it] == 65 }) { "Expected Java21 MR bytecode" }
         }
         report.get().asFile.apply {
             parentFile.mkdirs()
@@ -275,36 +277,41 @@ tasks.register("verifyBaseline") {
 }
 tasks.named("check") { dependsOn(auditSources, verifyArtifact, verifyProbeParity, verifyDisplayPixels, "probeRuntime135Java25") }
 
-// The same canonical geometry/value classes, without Minecraft on the probe classpath.
-val geometryVariants = listOf("Native25", "Java8", "Java25", "Runtime135Java25")
-for (variant in geometryVariants) {
-    tasks.register<JavaExec>("geometry$variant") {
+// Exercise the canonical pure cores without Minecraft on the probe classpath.
+val coreProbeVariants = listOf("Native25", "Java8", "Java25", "Runtime135Java25")
+for ((prefix, mainName) in listOf(
+    "geometry" to "dev.diorama.gtnh.probe.GeometryProbe",
+    "appearance" to "dev.diorama.bake.AppearanceProbe"
+)) {
+    for (variant in coreProbeVariants) {
+        tasks.register<JavaExec>("$prefix$variant") {
+            group = "verification"
+            val native = variant == "Native25"
+            if (!native) dependsOn(downgradeProbeJar)
+            javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(if (variant == "Java8") 8 else 25) }
+            classpath = when (variant) {
+                "Native25" -> probe.runtimeClasspath
+                "Runtime135Java25" -> files(downgradeProbeJar.flatMap { it.archiveFile }, runtimeApiFiles, runtime135Support)
+                else -> files(downgradeProbeJar.flatMap { it.archiveFile }, probeApi)
+            }
+            if (variant == "Runtime135Java25") doFirst {
+                require(sha256(runtimeApiFiles.singleFile.readBytes()) == "e835bad6a1879e72dfc027be13da4d4b25d49bdb3bdac2ed1cb80b933c6f7c9b")
+            }
+            mainClass.set(mainName)
+            recordProbeResult("$prefix-$variant")
+        }
+    }
+    val verification = tasks.register("verify" + prefix.replaceFirstChar { it.uppercase() }) {
         group = "verification"
-        val native = variant == "Native25"
-        if (!native) dependsOn(downgradeProbeJar)
-        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(if (variant == "Java8") 8 else 25) }
-        classpath = when (variant) {
-            "Native25" -> probe.runtimeClasspath
-            "Runtime135Java25" -> files(downgradeProbeJar.flatMap { it.archiveFile }, runtimeApiFiles, runtime135Support)
-            else -> files(downgradeProbeJar.flatMap { it.archiveFile }, probeApi)
+        dependsOn(coreProbeVariants.map { "$prefix$it" })
+        doLast {
+            val hashes = coreProbeVariants.map {
+                layout.buildDirectory.file("reports/probe-$prefix-$it.sha256").get().asFile.readText().trim()
+            }
+            require(hashes.toSet().size == 1) { "Shared $prefix mismatch: $hashes" }
+            logger.lifecycle("Shared $prefix parity (native25, target8 on8/25, runtime135): "+hashes.first())
         }
-        if (variant == "Runtime135Java25") doFirst {
-            require(sha256(runtimeApiFiles.singleFile.readBytes()) == "e835bad6a1879e72dfc027be13da4d4b25d49bdb3bdac2ed1cb80b933c6f7c9b")
-        }
-        mainClass.set("dev.diorama.gtnh.probe.GeometryProbe")
-        recordProbeResult("geometry-$variant")
     }
+    tasks.named("verifyBaseline") { dependsOn(verification) }
+    tasks.named("check") { dependsOn(verification) }
 }
-val verifyGeometry = tasks.register("verifyGeometry") {
-    group = "verification"
-    dependsOn(geometryVariants.map { "geometry$it" })
-    doLast {
-        val hashes = geometryVariants.map {
-            layout.buildDirectory.file("reports/probe-geometry-$it.sha256").get().asFile.readText().trim()
-        }
-        require(hashes.toSet().size == 1) { "Shared geometry mismatch: $hashes" }
-        logger.lifecycle("Shared geometry parity (native25, target8 on8/25, runtime135): "+hashes.first())
-    }
-}
-tasks.named("verifyBaseline") { dependsOn(verifyGeometry) }
-tasks.named("check") { dependsOn(verifyGeometry) }

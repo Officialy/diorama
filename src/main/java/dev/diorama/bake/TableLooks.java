@@ -10,7 +10,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * game's rules, as for {@link BlockLooks}; a block the table doesn't know takes its colour on
  * Minecraft's own maps.
  */
-public final class TableLooks extends Looks {
+public final class TableLooks extends StateLooks {
 	private final VanillaTable table;
 	/** The table's look by state id, -1 for a state it doesn't know. */
 	private final int[] lookOf;
@@ -31,7 +31,7 @@ public final class TableLooks extends Looks {
 			}
 			BlockState state = Block.BLOCK_STATE_REGISTRY.byId(id);
 			byte kind = state == null ? AIR : this.work(id, state);
-			KINDS.setRelease(this.kind, id, kind);
+			this.publish(id, kind);
 		}
 	}
 

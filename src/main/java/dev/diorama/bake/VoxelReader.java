@@ -595,7 +595,7 @@ public final class VoxelReader {
 
 		/** The state's id for a bake, with its look worked out when there are looks to read. */
 		private int id(BlockState state) {
-			return this.looks == null ? BlockLooks.bakeId(state) : this.looks.bakeLookId(state);
+			return this.looks == null ? BlockLooks.bakeId(state) : StateLooks.bakeLookId(this.looks, state);
 		}
 
 		/** What the section holds: {@link #AIR_SECTION} where it has no blocks. */

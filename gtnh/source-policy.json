@@ -50,6 +50,24 @@
       "fqn": "dev.diorama.bake.TileImage",
       "reviewedSha256": "12a65a37ee60626aa191fcc7273ef25ea92191450e329ba855c8d06fbbf1b31c",
       "reason": "Canonical projection/style/tile value contract; no runtime Minecraft dependency."
+    },
+    {
+      "path": "dev/diorama/bake/Looks.java",
+      "fqn": "dev.diorama.bake.Looks",
+      "reviewedSha256": "f6d98796774cee6af8abc4cece4cc41dc4356b9f1090e1d10a4fc0c91d53a056",
+      "reason": "Canonical primitive appearance core; modern state/rule extraction is isolated in StateLooks."
+    },
+    {
+      "path": "dev/diorama/bake/FaceColor.java",
+      "fqn": "dev.diorama.bake.FaceColor",
+      "reviewedSha256": "f1a80c4ed5c5afbee1e0b95ca19616b0a2f2b2e0da9b880ab2a379702583898c",
+      "reason": "Canonical primitive appearance core; modern state/rule extraction is isolated in StateLooks."
+    },
+    {
+      "path": "dev/diorama/bake/ShapeFaces.java",
+      "fqn": "dev.diorama.bake.ShapeFaces",
+      "reviewedSha256": "b931bf93d35ad8870db372b6b2afe9d4a49a373eceb4eac60441913b760c6b43",
+      "reason": "Canonical primitive appearance core; modern state/rule extraction is isolated in StateLooks."
     }
   ],
   "platform": [
@@ -84,7 +102,7 @@
   ],
   "deferred": [
     "world snapshots",
-    "block appearances",
+    "legacy block appearance provider",
     "CPU TileBaker closure",
     "map display",
     "tile storage",
