@@ -68,6 +68,12 @@
       "fqn": "dev.diorama.bake.ShapeFaces",
       "reviewedSha256": "b931bf93d35ad8870db372b6b2afe9d4a49a373eceb4eac60441913b760c6b43",
       "reason": "Canonical primitive appearance core; modern state/rule extraction is isolated in StateLooks."
+    },
+    {
+      "path": "dev/diorama/bake/DecodedSections.java",
+      "fqn": "dev.diorama.bake.DecodedSections",
+      "reviewedSha256": "542c8bae72095f99d5ce8df1928d1fa9505fba44ae2f9168d945f89d19d43e96",
+      "reason": "Canonical job-local numeric section decoding/masks/cache; game state/palette numbering stays in VoxelReader adapter."
     }
   ],
   "platform": [

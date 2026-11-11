@@ -10,7 +10,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.3-dev"
+version = "0.8.1-gtnh.4-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -34,7 +34,7 @@ val probe = sourceSets.create("probe") {
     java.srcDir(sharedRoot)
     java.srcDir("src/main/java")
     java.include("dev/diorama/gtnh/probe/CompatibilityProbe.java", "dev/diorama/gtnh/probe/DisplayPixelProbe.java", "dev/diorama/gtnh/probe/GeometryProbe.java",
-        "dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/bake/AppearanceProbe.java")
+        "dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java")
     java.include(sharedSources)
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -186,15 +186,19 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 if (!name.startsWith("META-INF/versions/")) require(major == 52) { "Non-Java8 base class: $name=$major" }
             }
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
-            // Explicit reviewed javac product: nested patch record (no enum switch helper emitted).
+            // Explicit reviewed nested products; no catch-all allowance for extra classes.
             val expectedNested = setOf("dev/diorama/bake/TileImage\$Patch.class",
-                "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces\$Pitch.class")
+                "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces\$Pitch.class",
+                "dev/diorama/bake/DecodedSections\$Air.class", "dev/diorama/bake/DecodedSections\$Section.class",
+                "dev/diorama/bake/DecodedSections\$PackedIndices.class")
             require(classes.keys.filterNot { it.startsWith("META-INF/versions/") }.toSet() == expectedBase + expectedNested) {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
             val expectedMr = setOf("dev/diorama/MapStyle.class", "dev/diorama/bake/TileKey.class",
                 "dev/diorama/bake/TileImage.class", "dev/diorama/bake/TileImage\$Patch.class", "dev/diorama/bake/ShapeFaces\$Pitch.class",
-                "dev/diorama/bake/Looks.class", "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces.class")
+                "dev/diorama/bake/Looks.class", "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces.class",
+                "dev/diorama/bake/DecodedSections.class", "dev/diorama/bake/DecodedSections\$Air.class",
+                "dev/diorama/bake/DecodedSections\$Section.class", "dev/diorama/bake/DecodedSections\$PackedIndices.class")
                 .map { "META-INF/versions/21/$it" }.toSet()
             require(classes.keys.filter { it.startsWith("META-INF/versions/") }.toSet() == expectedMr) { "Unexpected MR classes" }
             require(expectedMr.all { classes[it] == 65 }) { "Expected Java21 MR bytecode" }
@@ -281,7 +285,8 @@ tasks.named("check") { dependsOn(auditSources, verifyArtifact, verifyProbeParity
 val coreProbeVariants = listOf("Native25", "Java8", "Java25", "Runtime135Java25")
 for ((prefix, mainName) in listOf(
     "geometry" to "dev.diorama.gtnh.probe.GeometryProbe",
-    "appearance" to "dev.diorama.bake.AppearanceProbe"
+    "appearance" to "dev.diorama.bake.AppearanceProbe",
+    "sections" to "dev.diorama.bake.SectionProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {
