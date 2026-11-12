@@ -3,6 +3,7 @@ package dev.diorama.data;
 import dev.diorama.Facing;
 import dev.diorama.FacingBlocks;
 import dev.diorama.bake.TallChunks;
+import dev.diorama.bake.TintBlend;
 import dev.diorama.mixin.BiomeManagerAccessor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -623,13 +624,7 @@ public final class ChunkSnapshot {
 	}
 
 	private int[] turnedColumns(int[] columns) {
-		int[] out = new int[256];
-		for (int x = 0; x < 16; x++) {
-			for (int z = 0; z < 16; z++) {
-				out[(z << 4) | x] = columns[(this.localZ(x, z) << 4) | this.localX(x, z)];
-			}
-		}
-		return out;
+		return TintBlend.turn(columns, this.columns());
 	}
 
 	public void setTints(Tints tints) {

@@ -1,20 +1,20 @@
 # Diorama 1.7.10 isolated build
 
-Current development build: **0.8.1-gtnh.4-dev** (shared decoded-section slice; no new in-game feature). Client command `/dioramaprobe` displays a fixed texture; no terrain map, HUD or persistent map data is connected. Do not treat it as a functional map release.
+Current development build: **0.8.1-gtnh.5-dev** (shared tint blending slice; no new in-game feature). Client command `/dioramaprobe` displays a fixed texture; no terrain map, HUD or persistent map data is connected. Do not treat it as a functional map release.
 
 ## Baseline
 
-Java25 + Forge1614 + lwjgl3ify + GTNHLib + UniMixins, **without Angelica**. Angelica/OptiFine are later separate optional test environments, not mandatory dependencies. The user confirmed the .1 display probe visually on 2026-11-11; the .4 decoded-section build is game-untested. Shaders remain off by default and shader-pack tests are deferred. The assistant does not launch or deploy any instance.
+Java25 + Forge1614 + lwjgl3ify + GTNHLib + UniMixins, **without Angelica**. Angelica/OptiFine are later separate optional test environments, not mandatory dependencies. The user confirmed the .1 display probe visually on 2026-11-11; the .5 tint blending build is game-untested. Shaders remain off by default and shader-pack tests are deferred. The assistant does not launch or deploy any instance.
 
 Build inputs are pinned to [ExampleMod template](https://github.com/GTNewHorizons/ExampleMod1.7.10/tree/bd8e4160b677466de3cfff2c4011a3806fa74942), GTNH convention2.0.33/settings0.2.2, Gradle9.7.1, compiler/daemon25, Forge10.13.4.1614/stable12. GTNHLib compile dependency is0.11.48; observed user runtime is0.11.51. Real pack compatibility and Java8 product support remain unestablished. There is no Diorama Mixin requirement yet.
 
-[Source policy](source-policy.json) directly selects canonical [Mipmaps](../src/main/java/dev/diorama/bake/Mipmaps.java), Facing/Projection/MapStyle, TileKey/TileImage and the primitive Looks/FaceColor/ShapeFaces and DecodedSections cores plus small local platform classes; [geometry probes](src/probe/java/dev/diorama/gtnh/probe/GeometryProbe.java) exercise those shared contracts. No copied algorithm tree, generated-modern cache, or integration into the modern Stonecutter project graph.
+[Source policy](source-policy.json) directly selects canonical [Mipmaps](../src/main/java/dev/diorama/bake/Mipmaps.java), Facing/Projection/MapStyle, TileKey/TileImage and the primitive Looks/FaceColor/ShapeFaces, DecodedSections and TintBlend cores plus small local platform classes; [geometry probes](src/probe/java/dev/diorama/gtnh/probe/GeometryProbe.java) exercise those shared contracts. No copied algorithm tree, generated-modern cache, or integration into the modern Stonecutter project graph.
 
-The latest canonical implementation remains the source and architecture reference; older version branches are only API comparisons. No Vulkan adapter or speculative backend framework is being added. Current progress: shared geometry, the modern snapshot fog-RGB boundary, primitive appearance data and decoded-section caches/IDs/masks are extracted. Modern BlockState rules remain in StateLooks; modern palette/copycat numbering remains in the VoxelReader adapter. The 1.7.10 input providers, snapshot/tint boundaries and complete CPU TileBaker closure remain pending. The fog boundary is Nether terrain haze, not the minimap unknown-area decorative fog.
+The latest canonical implementation remains the source and architecture reference; older version branches are only API comparisons. No Vulkan adapter or speculative backend framework is being added. Current progress: shared geometry, the modern snapshot fog-RGB boundary, primitive appearance data, decoded-section caches/IDs/masks and height-keyed tint averaging/view remapping are extracted. Modern BlockState rules remain in StateLooks; palette/copycat numbering remains in VoxelReader; biome zoom/resolvers stay in BiomeTints. The 1.7.10 input providers, full primitive snapshot/reader boundary and complete CPU TileBaker closure remain pending. The fog boundary is Nether terrain haze, not the minimap unknown-area decorative fog.
 
 ## Repository hygiene
 
-Keep build inputs, tests and reusable design instructions tracked. Machine-only notes, instance inventories, downloaded references and run evidence belong under the ignored `/.local/` directory; existing per-session GTNH diaries are also ignored. Generated source/bytecode, JAR outputs and audit reports stay under ignored build directories. Check staged files and maintain ignore rules on each milestone; wrapper JARs remain tracked.
+Keep build inputs, tests and reusable design instructions tracked. Machine-only notes, instance inventories, downloaded references and run evidence belong under the ignored `/.local/` directory; existing per-session GTNH diaries are also ignored. Generated source/bytecode, JAR outputs and audit reports stay under ignored build directories. Check staged files and maintain ignore rules on each milestone; wrapper JARs remain tracked. Development is currently local-only: no push or release preparation until the basic functional loop is complete and the user requests it.
 
 ## Commands (repository root)
 
@@ -27,9 +27,9 @@ Keep build inputs, tests and reusable design instructions tracked. Machine-only 
 ./gtnh/gradlew -p gtnh probeRuntime135Java25
 ```
 
-`verifyBaseline` audits source origins, legacy metadata/version, reobfuscated class set/Java8 base bytecode and absence of probe/game/modern-loader code; runs native25 fixtures plus display-pixel parity and four native/downgraded/runtime-API lanes for geometry, appearance and decoded sections, with local style checks. **It does not replace strict compatibility, GL or game testing.** Probe classes/artifacts are separate from the mod jar.
+`verifyBaseline` audits source origins, legacy metadata/version, reobfuscated class set/Java8 base bytecode and absence of probe/game/modern-loader code; runs native25 fixtures plus display-pixel parity and four native/downgraded/runtime-API lanes for geometry, appearance, decoded sections and tint blending, with local style checks. **It does not replace strict compatibility, GL or game testing.** Probe classes/artifacts are separate from the mod jar.
 
-The full pipeline is compile -> predowngrade jar -> downgraded dev jar -> reobfuscated jar. Deploy only the unsuffixed production artifact; not `dev`, `predowngrade`, `probe-*` or sources. Main configuration permits native21/25 MR entries where needed; the .4 build emits23 Java8 base classes and12 Java21 MR classes (records plus classes retained for their nest/API relationships), both explicitly audited. Game loader MR scanner behavior remains untested.
+The full pipeline is compile -> predowngrade jar -> downgraded dev jar -> reobfuscated jar. Deploy only the unsuffixed production artifact; not `dev`, `predowngrade`, `probe-*` or sources. Main configuration permits native21/25 MR entries where needed; the .5 build emits25 Java8 base classes and14 Java21 MR classes (records plus classes retained for their nest/API relationships), both explicitly audited. Game loader MR scanner behavior remains untested.
 
 Offline compatibility2.0.1 API is not the same as runtime1.3.5 requested by GTNHLib. Never put both APIs on one probe classpath. `probeRuntime135Java25` can take `-PruntimeProbeApi=<installed jar>`; its API bytes must match the reviewed runtime artifact. Supporting harness dependencies are recorded separately, not added to the mod jar.
 
@@ -42,6 +42,12 @@ Offline compatibility2.0.1 API is not the same as runtime1.3.5 requested by GTNH
 `verifySections` executes the canonical [DecodedSections](../src/main/java/dev/diorama/bake/DecodedSections.java) with numeric descriptors and a bulk-index fixture, without Minecraft on its classpath. The [probe](src/probe/java/dev/diorama/bake/SectionProbe.java) covers uniform/packed/dense/lazy paths, four rotated and arbitrary column maps, nonzero air, solid id zero, mask identity, partial shapes, real composed-look IDs, sparse highest-bit/negative-height boundaries and once-only caches. Masks-first must not materialize ID arrays; IDs-first reuses them.
 
 The modern BitStorage adapter is invoked once per bulk decode, not per voxel/ray. These checks do not test its actual bit layout/reflection, real block-state numbering/rotation, UNKNOWN/missing-chunk cache pinning, world capture, casters/light or terrain pixels; full VoxelReader/TileBaker are not yet selected for the legacy build.
+
+## Tint blend checks
+
+`verifyTints` runs the canonical [TintBlend](../src/main/java/dev/diorama/bake/TintBlend.java) with prepared numeric samples and a separate uncached scalar/long-sum oracle. The [probe](src/probe/java/dev/diorama/bake/TintBlendProbe.java) covers 126 cases: four RGB channels, radii0/1/3/7, negative chunk origins, terraced heights, missing neighbours, valid black, all-unknown fallback, alpha removal/integer division, flat-height cache counts and rotated/arbitrary column maps. The original Integer.MIN_VALUE cache-sentinel corner case is preserved explicitly, not silently fixed.
+
+The modern adapter keeps Minecraft biome zoom, colour resolvers (including custom water), fallback quart lookup and lazy snapshot tint publication; only averaging/cache/remapping moved. These compile-checked bindings are not executed by numeric fixtures: actual biome palettes/zoom, resolver hooks, concurrent snapshot publication, live world capture and terrain pixels remain untested. No full terrain bake is claimed.
 
 ## Known compatibility failures
 

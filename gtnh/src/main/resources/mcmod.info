@@ -3,7 +3,7 @@
     "modid": "diorama",
     "name": "Diorama",
     "description": "Experimental 1.7.10 port. Client display diagnostic: /dioramaprobe. No map functionality yet.",
-    "version": "0.8.1-gtnh.4-dev",
+    "version": "0.8.1-gtnh.5-dev",
     "mcversion": "1.7.10",
     "url": "https://github.com/wufe8/diorama",
     "authorList": ["SunkenInTime", "Diorama port contributors"],

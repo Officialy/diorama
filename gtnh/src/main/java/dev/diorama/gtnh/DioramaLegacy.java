@@ -11,7 +11,7 @@ import cpw.mods.fml.common.event.FMLInitializationEvent;
 @Mod(
     modid = "diorama",
     name = "Diorama",
-    version = "0.8.1-gtnh.4-dev",
+    version = "0.8.1-gtnh.5-dev",
     acceptableRemoteVersions = "*",
     dependencies = "required-after:gtnhlib@[0.11.48,)")
 public final class DioramaLegacy {

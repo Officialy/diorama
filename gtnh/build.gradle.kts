@@ -10,7 +10,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.4-dev"
+version = "0.8.1-gtnh.5-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -34,7 +34,7 @@ val probe = sourceSets.create("probe") {
     java.srcDir(sharedRoot)
     java.srcDir("src/main/java")
     java.include("dev/diorama/gtnh/probe/CompatibilityProbe.java", "dev/diorama/gtnh/probe/DisplayPixelProbe.java", "dev/diorama/gtnh/probe/GeometryProbe.java",
-        "dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java")
+        "dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java", "dev/diorama/bake/TintBlendProbe.java")
     java.include(sharedSources)
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -190,7 +190,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             val expectedNested = setOf("dev/diorama/bake/TileImage\$Patch.class",
                 "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces\$Pitch.class",
                 "dev/diorama/bake/DecodedSections\$Air.class", "dev/diorama/bake/DecodedSections\$Section.class",
-                "dev/diorama/bake/DecodedSections\$PackedIndices.class")
+                "dev/diorama/bake/DecodedSections\$PackedIndices.class", "dev/diorama/bake/TintBlend\$Source.class")
             require(classes.keys.filterNot { it.startsWith("META-INF/versions/") }.toSet() == expectedBase + expectedNested) {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
@@ -198,7 +198,8 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/bake/TileImage.class", "dev/diorama/bake/TileImage\$Patch.class", "dev/diorama/bake/ShapeFaces\$Pitch.class",
                 "dev/diorama/bake/Looks.class", "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces.class",
                 "dev/diorama/bake/DecodedSections.class", "dev/diorama/bake/DecodedSections\$Air.class",
-                "dev/diorama/bake/DecodedSections\$Section.class", "dev/diorama/bake/DecodedSections\$PackedIndices.class")
+                "dev/diorama/bake/DecodedSections\$Section.class", "dev/diorama/bake/DecodedSections\$PackedIndices.class",
+                "dev/diorama/bake/TintBlend.class", "dev/diorama/bake/TintBlend\$Source.class")
                 .map { "META-INF/versions/21/$it" }.toSet()
             require(classes.keys.filter { it.startsWith("META-INF/versions/") }.toSet() == expectedMr) { "Unexpected MR classes" }
             require(expectedMr.all { classes[it] == 65 }) { "Expected Java21 MR bytecode" }
@@ -286,7 +287,8 @@ val coreProbeVariants = listOf("Native25", "Java8", "Java25", "Runtime135Java25"
 for ((prefix, mainName) in listOf(
     "geometry" to "dev.diorama.gtnh.probe.GeometryProbe",
     "appearance" to "dev.diorama.bake.AppearanceProbe",
-    "sections" to "dev.diorama.bake.SectionProbe"
+    "sections" to "dev.diorama.bake.SectionProbe",
+    "tints" to "dev.diorama.bake.TintBlendProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {

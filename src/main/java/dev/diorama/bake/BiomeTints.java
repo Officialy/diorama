@@ -4,7 +4,6 @@ import dev.diorama.data.ChunkSnapshot;
 import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
-import net.minecraft.util.ARGB;
 import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
@@ -63,76 +62,41 @@ public final class BiomeTints {
 
 	/** Blends the snapshot's tints. Any thread. */
 	public static ChunkSnapshot.Tints blend(ChunkSnapshot snapshot) {
-		// Where the game had no chunk, the lookup gives null, and the blend leaves that block out:
-		// counting the biome the game assumes there, Plains, tinted the edge of the loaded area (#290).
-		BiomeManager biomes = new BiomeManager(snapshot::knownNoiseBiome, snapshot.biomeZoomSeed);
-		int[][] colors = new int[RESOLVERS.length][256];
-		int radius = snapshot.blendRadius;
-		int[] red = new int[RESOLVERS.length];
-		int[] green = new int[RESOLVERS.length];
-		int[] blue = new int[RESOLVERS.length];
-		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-		// Neighbouring columns share most of the blocks they blend, at the same height unless the
-		// ground steps, so each block's colours are worked out once per height.
-		int size = 16 + radius * 2;
-		int[] heights = new int[size * size];
-		java.util.Arrays.fill(heights, Integer.MIN_VALUE);
-		int[][] sampled = new int[RESOLVERS.length][size * size];
-		boolean[] known = new boolean[size * size];
-		for (int z = 0; z < 16; z++) {
-			for (int x = 0; x < 16; x++) {
-				int bx = (snapshot.chunkX << 4) + x;
-				int bz = (snapshot.chunkZ << 4) + z;
-				int y = snapshot.surface(x, z);
-				java.util.Arrays.fill(red, 0);
-				java.util.Arrays.fill(green, 0);
-				java.util.Arrays.fill(blue, 0);
-				int count = 0;
-				for (int dz = -radius; dz <= radius; dz++) {
-					for (int dx = -radius; dx <= radius; dx++) {
-						int cell = (z + dz + radius) * size + x + dx + radius;
-						if (heights[cell] != y) {
-							heights[cell] = y;
-							Holder<Biome> biome = biomes.getBiome(pos.set(bx + dx, y, bz + dz));
-							known[cell] = biome != null;
-							for (int r = 0; biome != null && r < RESOLVERS.length; r++) {
-								sampled[r][cell] = RESOLVERS[r].getColor(biome.value(), bx + dx, bz + dz);
-							}
-						}
-						if (known[cell]) {
-							count++;
-							for (int r = 0; r < RESOLVERS.length; r++) {
-								int color = sampled[r][cell];
-								red[r] += ARGB.red(color);
-								green[r] += ARGB.green(color);
-								blue[r] += ARGB.blue(color);
-							}
-						}
-					}
-				}
-				if (count == 0) {
-					// Every lookup landed in a chunk the game didn't have, which only happens next to
-					// one with the blend off or small: the column's own biome, without the fuzz.
-					Biome own = snapshot.noiseBiome(bx >> 2, y >> 2, bz >> 2).value();
-					count = 1;
-					for (int r = 0; r < RESOLVERS.length; r++) {
-						int color = RESOLVERS[r].getColor(own, bx, bz);
-						red[r] = ARGB.red(color);
-						green[r] = ARGB.green(color);
-						blue[r] = ARGB.blue(color);
-					}
-				}
-				int i = (z << 4) | x;
-				for (int r = 0; r < RESOLVERS.length; r++) {
-					//? if >=1.21 {
-					colors[r][i] = ARGB.color(red[r] / count, green[r] / count, blue[r] / count) & 0xFFFFFF;
-					//?} else {
-					/*// There was no colour without alpha yet; the alpha is masked off anyway.
-					colors[r][i] = ARGB.color(255, red[r] / count, green[r] / count, blue[r] / count) & 0xFFFFFF;
-					*///?}
-				}
+		int[][] colors = TintBlend.blend(snapshot.chunkX, snapshot.chunkZ, snapshot.blendRadius, RESOLVERS.length, new Samples(snapshot));
+		return new ChunkSnapshot.Tints(colors[0], colors[1], colors[2], colors[WATER]);
+	}
+
+	/** One sampler per blend; all reads come from the already captured biome neighbourhood. */
+	private static final class Samples implements TintBlend.Source {
+		private final ChunkSnapshot snapshot;
+		private final BiomeManager biomes;
+		private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+
+		Samples(ChunkSnapshot snapshot) {
+			this.snapshot = snapshot;
+			this.biomes = new BiomeManager(snapshot::knownNoiseBiome, snapshot.biomeZoomSeed);
+		}
+
+		@Override
+		public int surface(int x, int z) {
+			return this.snapshot.surface(x, z);
+		}
+
+		@Override
+		public boolean sample(int x, int y, int z, int[][] sampled, int cell) {
+			Holder<Biome> biome = this.biomes.getBiome(this.pos.set(x, y, z));
+			for (int r = 0; biome != null && r < RESOLVERS.length; r++) {
+				sampled[r][cell] = RESOLVERS[r].getColor(biome.value(), x, z);
+			}
+			return biome != null;
+		}
+
+		@Override
+		public void fallback(int x, int y, int z, int[] out) {
+			Biome own = this.snapshot.noiseBiome(x >> 2, y >> 2, z >> 2).value();
+			for (int r = 0; r < RESOLVERS.length; r++) {
+				out[r] = RESOLVERS[r].getColor(own, x, z);
 			}
 		}
-		return new ChunkSnapshot.Tints(colors[0], colors[1], colors[2], colors[WATER]);
 	}
 }

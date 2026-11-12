@@ -74,6 +74,12 @@
       "fqn": "dev.diorama.bake.DecodedSections",
       "reviewedSha256": "542c8bae72095f99d5ce8df1928d1fa9505fba44ae2f9168d945f89d19d43e96",
       "reason": "Canonical job-local numeric section decoding/masks/cache; game state/palette numbering stays in VoxelReader adapter."
+    },
+    {
+      "path": "dev/diorama/bake/TintBlend.java",
+      "fqn": "dev.diorama.bake.TintBlend",
+      "reviewedSha256": "b4117ac4d276c91f23fad68974cf7b2f3a366ac21a8519d8391f0f12a5c989ef",
+      "reason": "Canonical height-keyed RGB blending and numeric column remapping; biome zoom/resolvers remain in modern adapter."
     }
   ],
   "platform": [
