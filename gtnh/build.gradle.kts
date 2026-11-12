@@ -10,7 +10,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.5-dev"
+version = "0.8.1-gtnh.6-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -34,7 +34,7 @@ val probe = sourceSets.create("probe") {
     java.srcDir(sharedRoot)
     java.srcDir("src/main/java")
     java.include("dev/diorama/gtnh/probe/CompatibilityProbe.java", "dev/diorama/gtnh/probe/DisplayPixelProbe.java", "dev/diorama/gtnh/probe/GeometryProbe.java",
-        "dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java", "dev/diorama/bake/TintBlendProbe.java")
+        "dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java", "dev/diorama/bake/TintBlendProbe.java", "dev/diorama/bake/VoxelReaderProbe.java")
     java.include(sharedSources)
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -45,6 +45,8 @@ val probeApi = configurations.create("probeApi")
 dependencies {
     compileOnly("org.jspecify:jspecify:1.0.0")
     add(probe.compileOnlyConfigurationName, "org.jspecify:jspecify:1.0.0")
+    // Same primitive map library requested by pinned GTNHLib; no Minecraft or Forge on this classpath.
+    add(probe.implementationConfigurationName, "it.unimi.dsi:fastutil:8.5.18")
     add(probeApi.name, "xyz.wagyourtail.jvmdowngrader:jvmdowngrader-java-api:2.0.1:downgraded-8")
 }
 val probeJar = tasks.register<Jar>("probeJar") {
@@ -83,7 +85,7 @@ for (javaVersion in listOf(8, 25)) {
         systemProperty("diorama.probe.strictRecordText", providers.gradleProperty("strictRecordText").getOrElse("true"))
         dependsOn(downgradeProbeJar)
         javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(javaVersion) }
-        classpath = files(downgradeProbeJar.flatMap { it.archiveFile }, probeApi)
+        classpath = files(downgradeProbeJar.flatMap { it.archiveFile }, probeApi, configurations[probe.runtimeClasspathConfigurationName])
         mainClass.set("dev.diorama.gtnh.probe.CompatibilityProbe")
     }
 }
@@ -241,7 +243,7 @@ tasks.register<JavaExec>("probeRuntime135Java25") {
     group = "verification"
     dependsOn(downgradeProbeJar)
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
-    classpath = files(downgradeProbeJar.flatMap { it.archiveFile }, runtimeApiFiles, runtime135Support)
+    classpath = files(downgradeProbeJar.flatMap { it.archiveFile }, runtimeApiFiles, runtime135Support, configurations[probe.runtimeClasspathConfigurationName])
     mainClass.set("dev.diorama.gtnh.probe.CompatibilityProbe")
     systemProperty("diorama.probe.strictRecordText", providers.gradleProperty("strictRecordText").getOrElse("true"))
     recordProbeResult("target8-runtime135-on25")
@@ -259,7 +261,7 @@ for (javaVersion in listOf(8, 25)) {
         group = "verification"
         javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(javaVersion) }
         // Java8 runs transformed, Java25 original. Even transformed System calls need pinned API stubs.
-        classpath = if (javaVersion == 8) files(downgradeProbeJar.flatMap { it.archiveFile }, probeApi) else probe.runtimeClasspath
+        classpath = if (javaVersion == 8) files(downgradeProbeJar.flatMap { it.archiveFile }, probeApi, configurations[probe.runtimeClasspathConfigurationName]) else probe.runtimeClasspath
         mainClass.set("dev.diorama.gtnh.probe.DisplayPixelProbe")
         recordProbeResult("display-pixels-$javaVersion")
     }
@@ -288,7 +290,8 @@ for ((prefix, mainName) in listOf(
     "geometry" to "dev.diorama.gtnh.probe.GeometryProbe",
     "appearance" to "dev.diorama.bake.AppearanceProbe",
     "sections" to "dev.diorama.bake.SectionProbe",
-    "tints" to "dev.diorama.bake.TintBlendProbe"
+    "tints" to "dev.diorama.bake.TintBlendProbe",
+    "reader" to "dev.diorama.bake.VoxelReaderProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {
@@ -298,8 +301,8 @@ for ((prefix, mainName) in listOf(
             javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(if (variant == "Java8") 8 else 25) }
             classpath = when (variant) {
                 "Native25" -> probe.runtimeClasspath
-                "Runtime135Java25" -> files(downgradeProbeJar.flatMap { it.archiveFile }, runtimeApiFiles, runtime135Support)
-                else -> files(downgradeProbeJar.flatMap { it.archiveFile }, probeApi)
+                "Runtime135Java25" -> files(downgradeProbeJar.flatMap { it.archiveFile }, runtimeApiFiles, runtime135Support, configurations[probe.runtimeClasspathConfigurationName])
+                else -> files(downgradeProbeJar.flatMap { it.archiveFile }, probeApi, configurations[probe.runtimeClasspathConfigurationName])
             }
             if (variant == "Runtime135Java25") doFirst {
                 require(sha256(runtimeApiFiles.singleFile.readBytes()) == "e835bad6a1879e72dfc027be13da4d4b25d49bdb3bdac2ed1cb80b933c6f7c9b")

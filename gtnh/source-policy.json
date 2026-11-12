@@ -80,6 +80,12 @@
       "fqn": "dev.diorama.bake.TintBlend",
       "reviewedSha256": "b4117ac4d276c91f23fad68974cf7b2f3a366ac21a8519d8391f0f12a5c989ef",
       "reason": "Canonical height-keyed RGB blending and numeric column remapping; biome zoom/resolvers remain in modern adapter."
+    },
+    {
+      "path": "dev/diorama/bake/VoxelReaderCore.java",
+      "fqn": "dev.diorama.bake.VoxelReaderCore",
+      "reviewedSha256": "c456b4af3400917f7f2976149ac0a6b042759e79798a9c61a2053ec1129752d4",
+      "reason": "Canonical numeric job-local voxel queries, pinned chunks, caster masks, height and light defaults; snapshot adapters remain platform-specific."
     }
   ],
   "platform": [
