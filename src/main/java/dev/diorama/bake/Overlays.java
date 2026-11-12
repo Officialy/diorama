@@ -1,6 +1,5 @@
 package dev.diorama.bake;
 
-import net.minecraft.world.level.levelgen.WorldgenRandom;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -26,6 +25,6 @@ public record Overlays(@Nullable Long slimeSeed, boolean spawnSpots) {
 
 	/** Minecraft's own rule: a tenth of chunks, picked from the world seed. */
 	public static boolean slimeChunk(long seed, int chunkX, int chunkZ) {
-		return WorldgenRandom.seedSlimeChunk(chunkX, chunkZ, seed, 987234911L).nextInt(10) == 0;
+		return SlimeChunks.slimeChunk(seed, chunkX, chunkZ);
 	}
 }

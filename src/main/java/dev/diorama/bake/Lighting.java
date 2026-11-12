@@ -27,7 +27,7 @@ final class Lighting {
 
 	Lighting(MapStyle style) {
 		this.style = style;
-		double[] sun = CraftShadow.sun(style);
+		double[] sun = SunDirection.sun(style);
 		this.sunX = sun[0];
 		this.sunY = sun[1];
 		this.sunZ = sun[2];

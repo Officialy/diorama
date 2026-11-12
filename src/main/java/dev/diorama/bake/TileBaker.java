@@ -44,8 +44,8 @@ public final class TileBaker {
 	public static final float HAZE_MAX_LUMINANCE = 0.025F;
 
 	// The sun is in the west, slightly south, so shadows fall to the east; how high is per style.
-	public static final double SUN_AZIMUTH_X = -0.878;
-	public static final double SUN_AZIMUTH_Z = 0.479;
+	public static final double SUN_AZIMUTH_X = SunDirection.AZIMUTH_X;
+	public static final double SUN_AZIMUTH_Z = SunDirection.AZIMUTH_Z;
 	/** Small per-sample nudges of the sun direction, which soften shadow edges. */
 	public static final double[][] SUN_JITTER = {{0.03, 0.0, -0.02}, {-0.02, 0.0, 0.03}, {0.02, 0.0, 0.02}, {-0.03, 0.0, -0.03}};
 
@@ -363,7 +363,7 @@ public final class TileBaker {
 
 	/** Whether every saved ray crossing block {@code (x, y, z)} passed through it; see {@link TileSpots#passedWhenSaved}. */
 	boolean passedWhenSaved(int x, int y, int z) {
-		return TileSpots.passedWhenSaved(this.key, this.savedSpots, x, y, z);
+		return TileSpotQueries.passedWhenSaved(this.key, this.savedSpots, x, y, z);
 	}
 
 	/**
@@ -659,7 +659,7 @@ public final class TileBaker {
 				int cz = (int) m;
 				sb.append(' ').append(cx).append(',').append(cz).append(source.chunk(cx, cz) == null ? "(still missing)" : "(present now)");
 			}
-			dev.diorama.Diorama.LOGGER.info("Partial bake of {} ({} blocks) hit unknown chunks:{}", key, blocks.cardinality(), sb);
+			BakeDiagnostics.partial(key, blocks.cardinality(), sb);
 		}
 		return TileImage.partial(key, patches);
 	}
@@ -941,14 +941,14 @@ public final class TileBaker {
 			}
 			int id = this.reader.state(x, by, bz);
 			if (id == VoxelReader.UNKNOWN) {
-				if (!this.passesMissing(by) && !TileSpots.passedWhenSaved(this.key, this.savedSpots, x, by, bz)) {
+				if (!this.passesMissing(by) && !TileSpotQueries.passedWhenSaved(this.key, this.savedSpots, x, by, bz)) {
 					return false;
 				}
-				id = VoxelReader.AIR_ID;
+				id = this.reader.airId();
 			}
 			byte kind = this.looks.kind[id];
 			// Only solid blocks (and the see-through ones among them) have shapes.
-			int shape = kind == BlockLooks.SOLID || kind == BlockLooks.GLASS ? this.looks.shape[id] : 0;
+			int shape = kind == Looks.SOLID || kind == Looks.GLASS ? this.looks.shape[id] : 0;
 			boolean partial = shape != 0;
 			if (partial) {
 				double tIn = t;
@@ -967,13 +967,13 @@ public final class TileBaker {
 					enteredTop = this.shapeTop;
 				} else {
 					// The ray passes beside the block's boxes, on into the next cell.
-					kind = BlockLooks.AIR;
+					kind = Looks.AIR;
 				}
 			}
 
 			switch (kind) {
-				case BlockLooks.SOLID, BlockLooks.LAVA -> {
-					if ((this.lifted || this.depthLook) && kind == BlockLooks.SOLID && this.reader.ceilingUnderside(x, by, bz, this.lid(x, bz), this.limitY)) {
+				case Looks.SOLID, Looks.LAVA -> {
+					if ((this.lifted || this.depthLook) && kind == Looks.SOLID && this.reader.ceilingUnderside(x, by, bz, this.lid(x, bz), this.limitY)) {
 						// A ray that left the rock near a step in a stepped ceiling would clip the
 						// step below it and draw a piece of ceiling floating over the floor.
 						break;
@@ -993,7 +993,7 @@ public final class TileBaker {
 					}
 					double hitY = y0 - t * sin;
 					double hitZ = z0 - t * cos;
-					this.hitSolid = kind == BlockLooks.SOLID;
+					this.hitSolid = kind == Looks.SOLID;
 					this.hitId = id;
 					this.hitTop = enteredTop;
 					this.hitX = x;
@@ -1019,7 +1019,7 @@ public final class TileBaker {
 					}
 					return true;
 				}
-				case BlockLooks.WATER -> {
+				case Looks.WATER -> {
 					if (waterId < 0) {
 						waterId = id;
 						waterT = t;
@@ -1027,11 +1027,11 @@ public final class TileBaker {
 						waterBz = bz;
 					}
 				}
-				case BlockLooks.PLANT, BlockLooks.GLASS -> {
+				case Looks.PLANT, Looks.GLASS -> {
 					if (this.surfaceOnly) {
 						break;
 					}
-					float w = kind == BlockLooks.PLANT ? 0.4F : 0.25F;
+					float w = kind == Looks.PLANT ? 0.4F : 0.25F;
 					this.albedo(id, x, bz, true);
 					overR += through * w * this.albedoR;
 					overG += through * w * this.albedoG;
@@ -1106,7 +1106,7 @@ public final class TileBaker {
 
 	private int tint(int id, int x, int z) {
 		byte kind = this.looks.tint[id];
-		if (kind == BlockLooks.TINT_NONE) {
+		if (kind == Looks.TINT_NONE) {
 			int constant = this.looks.constantTint[id];
 			return constant < 0 ? 0xFFFFFF : constant;
 		}
@@ -1115,12 +1115,12 @@ public final class TileBaker {
 			return 0xFFFFFF;
 		}
 		int i = ((z & 15) << 4) | (x & 15);
-		ChunkSnapshot.Tints tints = BiomeTints.of(snapshot);
+		ChunkSnapshot.Tints tints = snapshot.bakeTints();
 		return switch (kind) {
-			case BlockLooks.TINT_GRASS -> tints.grass()[i];
-			case BlockLooks.TINT_FOLIAGE -> tints.foliage()[i];
-			case BlockLooks.TINT_DRY_FOLIAGE -> tints.dryFoliage()[i];
-			case BlockLooks.TINT_WATER -> tints.water()[i];
+			case Looks.TINT_GRASS -> tints.grass()[i];
+			case Looks.TINT_FOLIAGE -> tints.foliage()[i];
+			case Looks.TINT_DRY_FOLIAGE -> tints.dryFoliage()[i];
+			case Looks.TINT_WATER -> tints.water()[i];
 			default -> 0xFFFFFF;
 		};
 	}
@@ -1143,7 +1143,7 @@ public final class TileBaker {
 			? this.ambientOcclusionTop(x, by + 1, bz, fx, hitZ - bz)
 			: this.ambientOcclusionSouth(x, by, bz + 1, fx, hitY - by);
 		float emission = this.looks.emission[id] / 15.0F;
-		if (this.looks.kind[id] == BlockLooks.LAVA) {
+		if (this.looks.kind[id] == Looks.LAVA) {
 			// In the Nether's fog a lava sea reads as one glow rather than a field of speckles.
 			float crust = 1 + (this.lifted ? 0.1F : 0.3F) * blockNoise(x, by, bz);
 			this.albedoR *= crust;
@@ -1218,7 +1218,7 @@ public final class TileBaker {
 		if (emission > 0) {
 			// In the fog, small lights like shroomlights and glowstone glow softer, so they don't
 			// speckle the view; lava keeps its full glow.
-			float e = this.lifted && this.looks.kind[id] != BlockLooks.LAVA ? 0.3F + emission * 0.45F : 0.35F + emission * 0.85F;
+			float e = this.lifted && this.looks.kind[id] != Looks.LAVA ? 0.3F + emission * 0.45F : 0.35F + emission * 0.85F;
 			lr = Math.max(lr, e);
 			lg = Math.max(lg, e);
 			lb = Math.max(lb, e);

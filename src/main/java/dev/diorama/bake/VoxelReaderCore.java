@@ -66,6 +66,11 @@ public abstract class VoxelReaderCore {
 		Arrays.fill(this.tableX, Integer.MIN_VALUE);
 	}
 
+	/** The air look id for this reader's numbering domain; not necessarily zero. */
+	public final int airId() {
+		return this.airId;
+	}
+
 	/** Called only on the first request for a chunk in this job; null is pinned too. */
 	protected abstract @Nullable DecodedSections loadChunk(int chunkX, int chunkZ);
 

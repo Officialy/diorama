@@ -577,36 +577,17 @@ public final class ChunkSnapshot {
 	 * {@code Integer.MIN_VALUE} if none is.
 	 */
 	public int topBelow(int ceiling) {
-		if (this.maxY < ceiling) {
-			return this.maxY == Integer.MIN_VALUE ? Integer.MIN_VALUE : this.maxY + 1;
-		}
-		int top = Integer.MIN_VALUE;
-		for (int y : this.surface) {
-			if (y < ceiling) {
-				top = Math.max(top, y + 1);
-			}
-		}
-		return top;
+		return SnapshotHeights.topBelow(this.maxY, this.surface, ceiling);
 	}
 
 	/** The bottom y of the lowest section with blocks in it, from the one holding {@code y} up; {@code y} if none has. */
 	public int firstSectionFrom(int y) {
-		for (int i = Math.max(0, (y >> 4) - this.minSectionY); i < this.states.length; i++) {
-			if (this.states[i] != null || this.uniform[i] != null) {
-				return (this.minSectionY + i) << 4;
-			}
-		}
-		return y;
+		return SnapshotHeights.firstSectionFrom(this.minSectionY, this.states, this.uniform, y);
 	}
 
 	/** One above the highest section with blocks in it below the one holding {@code y}; {@code Integer.MIN_VALUE} if none has. */
 	public int lastSectionTopBelow(int y) {
-		for (int i = Math.min(this.states.length, (y >> 4) - this.minSectionY) - 1; i >= 0; i--) {
-			if (this.states[i] != null || this.uniform[i] != null) {
-				return (this.minSectionY + i + 1) << 4;
-			}
-		}
-		return Integer.MIN_VALUE;
+		return SnapshotHeights.lastSectionTopBelow(this.minSectionY, this.states, this.uniform, y);
 	}
 
 	/** The column's top block y, where its tints are sampled. */
@@ -625,6 +606,11 @@ public final class ChunkSnapshot {
 
 	private int[] turnedColumns(int[] columns) {
 		return TintBlend.turn(columns, this.columns());
+	}
+
+	/** The complete tint input expected by the platform-independent baker. */
+	public Tints bakeTints() {
+		return dev.diorama.bake.BiomeTints.of(this);
 	}
 
 	public void setTints(Tints tints) {

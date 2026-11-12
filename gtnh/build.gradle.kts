@@ -10,7 +10,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.6-dev"
+version = "0.8.1-gtnh.7-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -23,19 +23,37 @@ val sharedEntries = policy["shared"] as List<Map<String, String>>
 @Suppress("UNCHECKED_CAST")
 val platformEntries = policy["platform"] as List<Map<String, String>>
 val sharedSources = sharedEntries.map { it.getValue("path") }
+// Filter each root separately: platform adapters may deliberately share a canonical FQN.
+val canonicalJava = objects.sourceDirectorySet("canonicalShared", "Selected canonical Java").apply {
+    srcDir(sharedRoot)
+    include(sharedSources)
+}
+val platformJava = objects.sourceDirectorySet("legacyPlatform", "Selected legacy Java").apply {
+    srcDir("src/main/java")
+    include(platformEntries.map { it.getValue("path") })
+}
 sourceSets.named("main") {
-    java.srcDir(sharedRoot)
-    java.include(platformEntries.map { it.getValue("path") })
-    java.include(sharedSources)
+    java.setSrcDirs(emptyList<String>())
+    java.source(canonicalJava)
+    java.source(platformJava)
 }
 
 // Offline probes have no Minecraft classpath and are never included in the mod jar.
 val probe = sourceSets.create("probe") {
-    java.srcDir(sharedRoot)
-    java.srcDir("src/main/java")
-    java.include("dev/diorama/gtnh/probe/CompatibilityProbe.java", "dev/diorama/gtnh/probe/DisplayPixelProbe.java", "dev/diorama/gtnh/probe/GeometryProbe.java",
-        "dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java", "dev/diorama/bake/TintBlendProbe.java", "dev/diorama/bake/VoxelReaderProbe.java")
-    java.include(sharedSources)
+    java.setSrcDirs(emptyList<String>())
+    java.source(canonicalJava)
+    java.source(objects.sourceDirectorySet("offlineAdapters", "Game-free legacy adapters").apply {
+        srcDir("src/main/java")
+        include("dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/data/ChunkSnapshot.java",
+            "dev/diorama/bake/VoxelReader.java", "dev/diorama/bake/BiomeTints.java",
+            "dev/diorama/bake/BakeDiagnostics.java", "dev/diorama/bake/SlimeChunks.java")
+    })
+    java.source(objects.sourceDirectorySet("offlineFixtures", "Selected offline fixtures").apply {
+        srcDir("src/probe/java")
+        include("dev/diorama/gtnh/probe/CompatibilityProbe.java", "dev/diorama/gtnh/probe/DisplayPixelProbe.java", "dev/diorama/gtnh/probe/GeometryProbe.java",
+            "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java", "dev/diorama/bake/TintBlendProbe.java",
+            "dev/diorama/bake/VoxelReaderProbe.java", "dev/diorama/bake/TerrainProbe.java", "dev/diorama/bake/BakeUtilityProbe.java")
+    })
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
     javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(25) }
@@ -132,7 +150,8 @@ val auditSources = tasks.register("auditSources") {
             require(fqn == entry.getValue("fqn") && fqns.add(fqn)) { "Wrong/duplicate FQN: $fqn" }
             val hash = sha256(source.readBytes())
             if (kind == "shared") {
-                require(hash == entry.getValue("reviewedSha256")) { "Shared input changed; review source-policy: $source" }
+                val canonicalLfHash = sha256(text.replace("\r\n", "\n").toByteArray(Charsets.UTF_8))
+                require(canonicalLfHash == entry.getValue("reviewedSha256")) { "Shared input changed; review source-policy: $source" }
             }
             mapOf("fqn" to fqn, "kind" to kind, "path" to source.relativeTo(repositoryRoot).invariantSeparatorsPath, "sha256" to hash)
         }
@@ -192,7 +211,9 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             val expectedNested = setOf("dev/diorama/bake/TileImage\$Patch.class",
                 "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces\$Pitch.class",
                 "dev/diorama/bake/DecodedSections\$Air.class", "dev/diorama/bake/DecodedSections\$Section.class",
-                "dev/diorama/bake/DecodedSections\$PackedIndices.class", "dev/diorama/bake/TintBlend\$Source.class")
+                "dev/diorama/bake/DecodedSections\$PackedIndices.class", "dev/diorama/bake/TintBlend\$Source.class",
+                "dev/diorama/bake/VoxelReader\$Inputs.class", "dev/diorama/bake/VoxelReader\$Decoded.class",
+                "dev/diorama/data/ChunkSnapshot\$Tints.class")
             require(classes.keys.filterNot { it.startsWith("META-INF/versions/") }.toSet() == expectedBase + expectedNested) {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
@@ -201,7 +222,10 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/bake/Looks.class", "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces.class",
                 "dev/diorama/bake/DecodedSections.class", "dev/diorama/bake/DecodedSections\$Air.class",
                 "dev/diorama/bake/DecodedSections\$Section.class", "dev/diorama/bake/DecodedSections\$PackedIndices.class",
-                "dev/diorama/bake/TintBlend.class", "dev/diorama/bake/TintBlend\$Source.class")
+                "dev/diorama/bake/TintBlend.class", "dev/diorama/bake/TintBlend\$Source.class",
+                "dev/diorama/bake/BakeDiagnostics.class", "dev/diorama/bake/Overlays.class", "dev/diorama/bake/TileSurface.class",
+                "dev/diorama/bake/VoxelReader.class", "dev/diorama/bake/VoxelReader\$Inputs.class", "dev/diorama/bake/VoxelReader\$Decoded.class",
+                "dev/diorama/data/ChunkSnapshot.class", "dev/diorama/data/ChunkSnapshot\$Tints.class")
                 .map { "META-INF/versions/21/$it" }.toSet()
             require(classes.keys.filter { it.startsWith("META-INF/versions/") }.toSet() == expectedMr) { "Unexpected MR classes" }
             require(expectedMr.all { classes[it] == 65 }) { "Expected Java21 MR bytecode" }
@@ -291,7 +315,9 @@ for ((prefix, mainName) in listOf(
     "appearance" to "dev.diorama.bake.AppearanceProbe",
     "sections" to "dev.diorama.bake.SectionProbe",
     "tints" to "dev.diorama.bake.TintBlendProbe",
-    "reader" to "dev.diorama.bake.VoxelReaderProbe"
+    "reader" to "dev.diorama.bake.VoxelReaderProbe",
+    "terrain" to "dev.diorama.bake.TerrainProbe",
+    "bakeUtilities" to "dev.diorama.bake.BakeUtilityProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {

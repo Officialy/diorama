@@ -1,6 +1,6 @@
 # GTNH 移植技术设计：以持续同步成本为第一约束
 
-状态：2026-11-12。独立构建、固定图显示诊断、共享几何、现代快照雾色RGB边界、共享外观核心、section解码缓存/掩码核心、数值染色混合/转向及任务内数值读取器已实现；真实地图接入仍待完成。可执行命令及已知失败见[构建说明](../gtnh/README.md)。源码证据基线为 `8e8a21b`；始终参照最新规范实现，不建立旧版算法分叉，也不提前适配Vulkan。本文的目录、任务、接口名称除已存在者外均为拟议，不能当作已可运行命令。
+状态：2026-11-12。独立构建、固定图显示诊断、共享几何、现代快照雾色RGB边界、共享外观核心、section解码缓存/掩码核心、数值染色混合/转向、任务内数值读取器及原版CPU烘焙闭包已实现；数值快照可执行合成地形烘焙，真实地图接入仍待完成。可执行命令及已知失败见[构建说明](../gtnh/README.md)。源码证据基线为 `8e8a21b`；始终参照最新规范实现，不建立旧版算法分叉，也不提前适配Vulkan。本文的目录、任务、接口名称除已存在者外均为拟议，不能当作已可运行命令。
 
 ## 1. 设计决定
 
@@ -74,6 +74,8 @@ gtnh/
 - 保留min/maxY、topBelow、roof、turned、列染色等共享消费者契约；旧版biome是二维，不复刻现代三维palette/fuzz。
 - 旋转必须同时覆盖空间坐标与方块外观/形状朝向；不允许仅旋转坐标、楼梯颜色或侧面却保持原方向。
 
+C7使用同FQN平台适配，不引入大范围BakeSource/BakeChunk接口迁移。准备输入持有私有数值section（null/单一ID/4096ID）、完整世界section跨度、光照、列高度、四通道染色和单区块fogRGB；空气编号与Looks会话身份显式校验，垂直跨度不符直接拒绝。现代快照仅增加bakeTints委派及共享SnapshotHeights高度委派，原biome懒计算不变。TileBaker只调整常量所属类、空气编号读取、染色/日志与保存射线查询入口，完整追踪/光照/合并主体保持共享。平台与规范根分别过滤选源，禁止同FQN因全局include同时纳入。此准备数据契约不等于真实采集器；旋转、旧版刷怪光照规则和运行时捕获仍待完成。
+
 ### 3.2 Looks：规则填充与数组消费分离
 
 现有 `kind/tint/emission/top/side/shape/wetShape/shapes` 数组是正确接缝，保留字段布局和按需ensure发布方式。
@@ -89,7 +91,7 @@ gtnh/
 
 ### 3.3 VoxelReader：section入口与读取算法分离
 
-已由共享 `VoxelReaderCore`保留job-local区块固定/缺失缓存、最近section、solid/partial/caster mask、高度与光照边界算法；构造输入为世界高度、空气编号、kind/shape数组及debug标志，区块加载和光照读取由窄hook提供。现代 `VoxelReader`保留palette/BitStorage、状态/copycat编号和快照适配；后台热循环不新增逐voxel对象。尚未完成完整快照/tint契约或真实旧版输入。
+已由共享 `VoxelReaderCore`保留job-local区块固定/缺失缓存、最近section、solid/partial/caster mask、高度与光照边界算法；构造输入为世界高度、空气编号、kind/shape数组及debug标志，区块加载和光照读取由窄hook提供。现代 `VoxelReader`保留palette/BitStorage、状态/copycat编号和快照适配；后台热循环不新增逐voxel对象。同FQN旧版薄适配器已接入准备好的数值快照/tint；仍未采集真实旧版世界。
 
 拟议section契约提供：单一uniform look-id，或按需解码至现有索引格式的4096整数；索引继续为 `(y << 8) | (z << 4) | x`。现代packed快路径可保留，不强迫所有平台使用同一种内部存储。
 
@@ -183,7 +185,7 @@ master作为纯上游参考：先fetch upstream，把upstream/master快进到本
 ## 10. 本轮源码审计证据
 
 - [外观数组与现代规则混合](../src/main/java/dev/diorama/bake/Looks.java#L65-L103)：数组可作为接缝，但work/colours仍接现代BlockState；不能把整个类当成中立DTO。
-- [共享读取器](../src/main/java/dev/diorama/bake/VoxelReaderCore.java)保留区块/section缓存与遮挡算法；[现代适配器](../src/main/java/dev/diorama/bake/VoxelReader.java)仅负责快照、光照存储及palette/copycat编号。完整快照/tint与旧版采集仍待接入。
+- [共享读取器](../src/main/java/dev/diorama/bake/VoxelReaderCore.java)保留区块/section缓存与遮挡算法；[现代适配器](../src/main/java/dev/diorama/bake/VoxelReader.java)仅负责快照、光照存储及palette/copycat编号。准备数值快照/tint已接入原版CPU烘焙；真实旧版采集仍待完成。
 - [追踪器中的完全限定现代biome引用](../src/main/java/dev/diorama/bake/TileBaker.java#L342-L370)：说明只扫描import会漏掉耦合。
 - [Facing同时包含数学与游戏类型](../src/main/java/dev/diorama/Facing.java#L125-L140)：需要小切口，而不是第二套旋转数学。
 - [MapTexture已有窄契约](../src/main/java/dev/diorama/render/gpu/MapTexture.java#L8-L38)与[MapCanvas尚未隔离的游戏参数](../src/main/java/dev/diorama/render/gpu/MapCanvas.java#L3-L18)。

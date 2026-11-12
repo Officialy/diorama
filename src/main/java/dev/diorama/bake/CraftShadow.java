@@ -58,8 +58,7 @@ public final class CraftShadow {
 
 	/** Toward the sun, as a unit vector. */
 	public static double[] sun(MapStyle style) {
-		double elevation = Math.toRadians(style.sunElevation());
-		return new double[] {Math.cos(elevation) * TileBaker.SUN_AZIMUTH_X, Math.sin(elevation), Math.cos(elevation) * TileBaker.SUN_AZIMUTH_Z};
+		return SunDirection.sun(style);
 	}
 
 	/** The area a craft at {@code pose} may shadow, as {x0, z0, x1, z1} inclusive, given the lowest ground there. */

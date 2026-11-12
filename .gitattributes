@@ -1,6 +1,10 @@
 #
 # https://help.github.com/articles/dealing-with-line-endings/
 #
+# Normalize Java in Git without forcing machine-specific working-tree newlines.
+*.java          text
+.gitattributes  text eol=lf
+
 # Linux start script should use lf
 /gradlew        text eol=lf
 /gtnh/gradlew   text eol=lf

@@ -18,37 +18,37 @@
     {
       "path": "dev/diorama/bake/Mipmaps.java",
       "fqn": "dev.diorama.bake.Mipmaps",
-      "reviewedSha256": "eff099bae78e7b625a950345d65749158c700c85b18dd72dc4f42f4fa66d6a13",
+      "reviewedSha256": "53137709474dc66e2b321b8af7da7fd80b4232a52fb3a57731c24750672aa1d7",
       "reason": "Dependency-free ABGR mip algorithm; first shared input."
     },
     {
       "path": "dev/diorama/Facing.java",
       "fqn": "dev.diorama.Facing",
-      "reviewedSha256": "a937140caa233d16f8e80d281f53b2f7811da49c148e51ac7f3337fd3e58f880",
+      "reviewedSha256": "61dff5db1d538d8ae8944b7c8d043a41a2df7cdc035db4eb58b84df1c0539344",
       "reason": "Canonical coordinate rotations; Minecraft wrappers moved to modern-only FacingBlocks."
     },
     {
       "path": "dev/diorama/Projection.java",
       "fqn": "dev.diorama.Projection",
-      "reviewedSha256": "722223dac093ea4f42bdb3db8eb2faf092bc61a06305d62211b42a8ee52e7b9d",
+      "reviewedSha256": "ee7f2e43d8176bc51829028aeee469acbae5b0be7a4af4e6da8773b5c8cf9d7f",
       "reason": "Canonical projection/style/tile value contract; no runtime Minecraft dependency."
     },
     {
       "path": "dev/diorama/MapStyle.java",
       "fqn": "dev.diorama.MapStyle",
-      "reviewedSha256": "a93421530369561cf8dc0acffb6074d60c58b3854bd93ece55091d59b825fa9c",
+      "reviewedSha256": "b010bca8e1118281531661090690349c92a2a0327edf2fbd6c41f0ea901a7f31",
       "reason": "Canonical projection/style/tile value contract; no runtime Minecraft dependency."
     },
     {
       "path": "dev/diorama/bake/TileKey.java",
       "fqn": "dev.diorama.bake.TileKey",
-      "reviewedSha256": "bcb5aa914cd1d40e38434c057c7e293f20f18069f23f6e96a300fc62f248df8f",
+      "reviewedSha256": "41f1a8abbfa01e27f6f67dbd3118b4128704e6afbe199894a50ba138dbaf5f32",
       "reason": "Canonical projection/style/tile value contract; no runtime Minecraft dependency."
     },
     {
       "path": "dev/diorama/bake/TileImage.java",
       "fqn": "dev.diorama.bake.TileImage",
-      "reviewedSha256": "12a65a37ee60626aa191fcc7273ef25ea92191450e329ba855c8d06fbbf1b31c",
+      "reviewedSha256": "98254ec67058680aa1b842267267c8d6c63de632de881b842c5ff8264e34f97b",
       "reason": "Canonical projection/style/tile value contract; no runtime Minecraft dependency."
     },
     {
@@ -60,13 +60,13 @@
     {
       "path": "dev/diorama/bake/FaceColor.java",
       "fqn": "dev.diorama.bake.FaceColor",
-      "reviewedSha256": "f1a80c4ed5c5afbee1e0b95ca19616b0a2f2b2e0da9b880ab2a379702583898c",
+      "reviewedSha256": "38dc1b37125d09de7f789872581eac41f4cebdc7f7f06eadeb50d0a938051440",
       "reason": "Canonical primitive appearance core; modern state/rule extraction is isolated in StateLooks."
     },
     {
       "path": "dev/diorama/bake/ShapeFaces.java",
       "fqn": "dev.diorama.bake.ShapeFaces",
-      "reviewedSha256": "b931bf93d35ad8870db372b6b2afe9d4a49a373eceb4eac60441913b760c6b43",
+      "reviewedSha256": "928bece73bab20ee771529f4f19b53b9c86ca041eb138f517fdc3b1026f96290",
       "reason": "Canonical primitive appearance core; modern state/rule extraction is isolated in StateLooks."
     },
     {
@@ -84,8 +84,74 @@
     {
       "path": "dev/diorama/bake/VoxelReaderCore.java",
       "fqn": "dev.diorama.bake.VoxelReaderCore",
-      "reviewedSha256": "c456b4af3400917f7f2976149ac0a6b042759e79798a9c61a2053ec1129752d4",
+      "reviewedSha256": "43fdc4e325b9aec023576a5cf2a8e6dff2b493a6839b076757e991cc0725db0e",
       "reason": "Canonical numeric job-local voxel queries, pinned chunks, caster masks, height and light defaults; snapshot adapters remain platform-specific."
+    },
+    {
+      "path": "dev/diorama/bake/TileBaker.java",
+      "fqn": "dev.diorama.bake.TileBaker",
+      "reviewedSha256": "f5e06abaf598dc88a782e84bcf5851fd10d7ebce119a2fa99f046f74203620ef",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/ChunkSource.java",
+      "fqn": "dev.diorama.bake.ChunkSource",
+      "reviewedSha256": "c453873dba1a937923340e6b3b821c017fa486354e7f4e2eadd366c21e98ad47",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/TallChunks.java",
+      "fqn": "dev.diorama.bake.TallChunks",
+      "reviewedSha256": "4768e934c93fe28469d2ce68d3047cea643de75b5a31d81be6d189ecc03dcb86",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/Lighting.java",
+      "fqn": "dev.diorama.bake.Lighting",
+      "reviewedSha256": "f5c42aa87c81572f09d665ea64e9a506dec263865d6e8e336adec6768817fbe9",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/Overlays.java",
+      "fqn": "dev.diorama.bake.Overlays",
+      "reviewedSha256": "1fc35d9e1aeb616857dbe350510187d34404d37dfa55c3fff96ac6882ac897bb",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/CaveCut.java",
+      "fqn": "dev.diorama.bake.CaveCut",
+      "reviewedSha256": "81650e052c07b03ddc4adb827dd201da383bcc1c372b2bfeb2cde6dbdcedc59c",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/TileSurface.java",
+      "fqn": "dev.diorama.bake.TileSurface",
+      "reviewedSha256": "dd5b7e8890298e2d8c93d457b0355c481d12fc9c2937ee22f393dc7afb985de6",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/BlockLight.java",
+      "fqn": "dev.diorama.bake.BlockLight",
+      "reviewedSha256": "c12981691d89200e9b8d34dc0ad1432b661539185419c59add8e5783c3fc04f3",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/data/SnapshotHeights.java",
+      "fqn": "dev.diorama.data.SnapshotHeights",
+      "reviewedSha256": "5e35fa45845a46474222cd9e422f0723985d1a4e78dcebb2e44f8d112a5a559c",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/TileSpotQueries.java",
+      "fqn": "dev.diorama.bake.TileSpotQueries",
+      "reviewedSha256": "677ceacb1e80306c687ab29a11c2760ec78aabb060cdd870c2cb7083ea870d38",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/SunDirection.java",
+      "fqn": "dev.diorama.bake.SunDirection",
+      "reviewedSha256": "809680da9c02f66492c7b0d5b7ace9e73927d61a7cd23a8fe87cc72b812e4be0",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
     }
   ],
   "platform": [
@@ -116,14 +182,35 @@
     {
       "path": "dev/diorama/gtnh/diagnostic/ProbePixels.java",
       "fqn": "dev.diorama.gtnh.diagnostic.ProbePixels"
+    },
+    {
+      "path": "dev/diorama/data/ChunkSnapshot.java",
+      "fqn": "dev.diorama.data.ChunkSnapshot"
+    },
+    {
+      "path": "dev/diorama/bake/VoxelReader.java",
+      "fqn": "dev.diorama.bake.VoxelReader"
+    },
+    {
+      "path": "dev/diorama/bake/BiomeTints.java",
+      "fqn": "dev.diorama.bake.BiomeTints"
+    },
+    {
+      "path": "dev/diorama/bake/BakeDiagnostics.java",
+      "fqn": "dev.diorama.bake.BakeDiagnostics"
+    },
+    {
+      "path": "dev/diorama/bake/SlimeChunks.java",
+      "fqn": "dev.diorama.bake.SlimeChunks"
     }
   ],
   "deferred": [
-    "world snapshots",
+    "live legacy world capture and appearance preparation",
+    "legacy snapshot rotation and spawn rules",
     "legacy block appearance provider",
-    "CPU TileBaker closure",
     "map display",
     "tile storage",
     "GPU baking"
-  ]
+  ],
+  "reviewedHashNormalization": "UTF-8 with CRLF normalized to LF"
 }
