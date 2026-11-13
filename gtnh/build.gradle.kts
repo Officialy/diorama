@@ -10,7 +10,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.7-dev"
+version = "0.8.1-gtnh.8-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -46,13 +46,15 @@ val probe = sourceSets.create("probe") {
         srcDir("src/main/java")
         include("dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/data/ChunkSnapshot.java",
             "dev/diorama/bake/VoxelReader.java", "dev/diorama/bake/BiomeTints.java",
-            "dev/diorama/bake/BakeDiagnostics.java", "dev/diorama/bake/SlimeChunks.java")
+            "dev/diorama/bake/BakeDiagnostics.java", "dev/diorama/bake/SlimeChunks.java",
+            "dev/diorama/gtnh/capture/ChunkCapture.java")
     })
     java.source(objects.sourceDirectorySet("offlineFixtures", "Selected offline fixtures").apply {
         srcDir("src/probe/java")
         include("dev/diorama/gtnh/probe/CompatibilityProbe.java", "dev/diorama/gtnh/probe/DisplayPixelProbe.java", "dev/diorama/gtnh/probe/GeometryProbe.java",
             "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java", "dev/diorama/bake/TintBlendProbe.java",
-            "dev/diorama/bake/VoxelReaderProbe.java", "dev/diorama/bake/TerrainProbe.java", "dev/diorama/bake/BakeUtilityProbe.java")
+            "dev/diorama/bake/VoxelReaderProbe.java", "dev/diorama/bake/TerrainProbe.java", "dev/diorama/bake/BakeUtilityProbe.java",
+            "dev/diorama/gtnh/probe/CaptureProbe.java")
     })
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -213,7 +215,17 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/bake/DecodedSections\$Air.class", "dev/diorama/bake/DecodedSections\$Section.class",
                 "dev/diorama/bake/DecodedSections\$PackedIndices.class", "dev/diorama/bake/TintBlend\$Source.class",
                 "dev/diorama/bake/VoxelReader\$Inputs.class", "dev/diorama/bake/VoxelReader\$Decoded.class",
-                "dev/diorama/data/ChunkSnapshot\$Tints.class")
+                "dev/diorama/data/ChunkSnapshot\$Tints.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Access.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Chunk.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Inputs.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Pending.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Result.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Section.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Stale.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Status.class",
+                "dev/diorama/gtnh/client/ClientCaptureAccess\$LiveChunk.class",
+                "dev/diorama/gtnh/client/ClientCaptureAccess\$LiveSection.class")
             require(classes.keys.filterNot { it.startsWith("META-INF/versions/") }.toSet() == expectedBase + expectedNested) {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
@@ -225,7 +237,19 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/bake/TintBlend.class", "dev/diorama/bake/TintBlend\$Source.class",
                 "dev/diorama/bake/BakeDiagnostics.class", "dev/diorama/bake/Overlays.class", "dev/diorama/bake/TileSurface.class",
                 "dev/diorama/bake/VoxelReader.class", "dev/diorama/bake/VoxelReader\$Inputs.class", "dev/diorama/bake/VoxelReader\$Decoded.class",
-                "dev/diorama/data/ChunkSnapshot.class", "dev/diorama/data/ChunkSnapshot\$Tints.class")
+                "dev/diorama/data/ChunkSnapshot.class", "dev/diorama/data/ChunkSnapshot\$Tints.class",
+                "dev/diorama/gtnh/capture/ChunkCapture.class",
+                "dev/diorama/gtnh/client/ClientCaptureAccess.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Access.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Chunk.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Inputs.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Pending.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Result.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Section.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Stale.class",
+                "dev/diorama/gtnh/capture/ChunkCapture\$Status.class",
+                "dev/diorama/gtnh/client/ClientCaptureAccess\$LiveChunk.class",
+                "dev/diorama/gtnh/client/ClientCaptureAccess\$LiveSection.class")
                 .map { "META-INF/versions/21/$it" }.toSet()
             require(classes.keys.filter { it.startsWith("META-INF/versions/") }.toSet() == expectedMr) { "Unexpected MR classes" }
             require(expectedMr.all { classes[it] == 65 }) { "Expected Java21 MR bytecode" }
@@ -317,7 +341,8 @@ for ((prefix, mainName) in listOf(
     "tints" to "dev.diorama.bake.TintBlendProbe",
     "reader" to "dev.diorama.bake.VoxelReaderProbe",
     "terrain" to "dev.diorama.bake.TerrainProbe",
-    "bakeUtilities" to "dev.diorama.bake.BakeUtilityProbe"
+    "bakeUtilities" to "dev.diorama.bake.BakeUtilityProbe",
+    "capture" to "dev.diorama.gtnh.probe.CaptureProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {

@@ -152,6 +152,11 @@ public abstract class Looks {
 		return made;
 	}
 
+	/** Whether an allocated id has a published kind, without invoking platform preparation. */
+	public final boolean isPrepared(int id) {
+		return id >= 0 && id < this.kind.length && (byte) KINDS.getAcquire(this.kind, id) != NOT_YET;
+	}
+
 	/**
 	 * Works the state's look out if nothing has asked for it yet, and returns the id. Any thread:
 	 * the first to ask does the work, others asking meanwhile wait for it. Every id whose look is

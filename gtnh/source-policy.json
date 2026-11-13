@@ -54,7 +54,7 @@
     {
       "path": "dev/diorama/bake/Looks.java",
       "fqn": "dev.diorama.bake.Looks",
-      "reviewedSha256": "f6d98796774cee6af8abc4cece4cc41dc4356b9f1090e1d10a4fc0c91d53a056",
+      "reviewedSha256": "0e1a563d195d1c850a227e1af99f1fa742b7622468e72219eb1a557097c9bc10",
       "reason": "Canonical primitive appearance core; modern state/rule extraction is isolated in StateLooks."
     },
     {
@@ -202,6 +202,14 @@
     {
       "path": "dev/diorama/bake/SlimeChunks.java",
       "fqn": "dev.diorama.bake.SlimeChunks"
+    },
+    {
+      "path": "dev/diorama/gtnh/capture/ChunkCapture.java",
+      "fqn": "dev.diorama.gtnh.capture.ChunkCapture"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/ClientCaptureAccess.java",
+      "fqn": "dev.diorama.gtnh.client.ClientCaptureAccess"
     }
   ],
   "deferred": [
