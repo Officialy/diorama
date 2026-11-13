@@ -4,13 +4,14 @@ import groovy.json.JsonSlurper
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.zip.ZipFile
+import java.util.jar.Manifest
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
 
 plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.9-dev"
+version = "0.8.1-gtnh.10-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -48,7 +49,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/bake/VoxelReader.java", "dev/diorama/bake/BiomeTints.java",
             "dev/diorama/bake/BakeDiagnostics.java", "dev/diorama/bake/SlimeChunks.java",
             "dev/diorama/gtnh/capture/ChunkCapture.java", "dev/diorama/bake/PreparedBlockLooks.java",
-            "dev/diorama/gtnh/capture/OpaquePng.java")
+            "dev/diorama/gtnh/capture/OpaquePng.java", "dev/diorama/gtnh/capture/EpochFence.java")
     })
     java.source(objects.sourceDirectorySet("offlineFixtures", "Selected offline fixtures").apply {
         srcDir("src/probe/java")
@@ -56,7 +57,8 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java", "dev/diorama/bake/TintBlendProbe.java",
             "dev/diorama/bake/VoxelReaderProbe.java", "dev/diorama/bake/TerrainProbe.java", "dev/diorama/bake/BakeUtilityProbe.java",
             "dev/diorama/gtnh/probe/CaptureProbe.java", "dev/diorama/bake/SpriteAverageProbe.java",
-            "dev/diorama/bake/PreparedBlockLooksProbe.java", "dev/diorama/gtnh/probe/OpaquePngProbe.java")
+            "dev/diorama/bake/PreparedBlockLooksProbe.java", "dev/diorama/gtnh/probe/OpaquePngProbe.java",
+            "dev/diorama/gtnh/probe/EpochFenceProbe.java")
     })
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -203,6 +205,32 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 it.endsWith(".mixins.json") || it == "fabric.mod.json" || it == "META-INF/mods.toml" }) {
                 "Unexpected probe, embedded game or modern metadata"
             }
+            val manifest = Manifest(zip.getInputStream(zip.getEntry("META-INF/MANIFEST.MF"))).mainAttributes
+            require(manifest.getValue("FMLCorePlugin") == "dev.diorama.gtnh.loading.DioramaEarlyMixins" &&
+                manifest.getValue("MixinConfigs") == "mixins.diorama.json" &&
+                manifest.getValue("TweakClass") == "org.spongepowered.asm.launch.MixinTweaker" &&
+                manifest.getValue("FMLCorePluginContainsFMLMod") == "true") { "Early mixin bootstrap manifest drift" }
+            require(names.filter { it.startsWith("mixins.") && it.endsWith(".json") }.toSet() ==
+                setOf("mixins.diorama.json", "mixins.diorama.refmap.json")) { "Unexpected mixin assets" }
+            @Suppress("UNCHECKED_CAST")
+            val mixinConfig = JsonSlurper().parse(zip.getInputStream(zip.getEntry("mixins.diorama.json"))) as Map<String, Any>
+            require(mixinConfig == mapOf("required" to true, "minVersion" to "0.8.5-GTNH",
+                "package" to "dev.diorama.gtnh.mixins", "refmap" to "mixins.diorama.refmap.json",
+                "compatibilityLevel" to "JAVA_8", "mixins" to emptyList<String>(),
+                "client" to listOf("client.ResourceReloadMixin", "client.BlockAtlasMixin"),
+                "server" to emptyList<String>(), "injectors" to mapOf("defaultRequire" to 1))) { "Client hook configuration drift" }
+            @Suppress("UNCHECKED_CAST")
+            val refmap = JsonSlurper().parse(zip.getInputStream(zip.getEntry("mixins.diorama.refmap.json"))) as Map<String, Any>
+            val expectedMappings = mapOf(
+                "dev/diorama/gtnh/mixins/client/ResourceReloadMixin" to mapOf(
+                    "reloadResources(Ljava/util/List;)V" to "Lnet/minecraft/client/resources/SimpleReloadableResourceManager;func_110541_a(Ljava/util/List;)V",
+                    "reloadResourcePack(Lnet/minecraft/client/resources/IResourcePack;)V" to "Lnet/minecraft/client/resources/SimpleReloadableResourceManager;func_110545_a(Lnet/minecraft/client/resources/IResourcePack;)V"),
+                "dev/diorama/gtnh/mixins/client/BlockAtlasMixin" to mapOf(
+                    "loadTexture(Lnet/minecraft/client/resources/IResourceManager;)V" to "Lnet/minecraft/client/renderer/texture/TextureMap;func_110551_a(Lnet/minecraft/client/resources/IResourceManager;)V",
+                    "loadTextureAtlas(Lnet/minecraft/client/resources/IResourceManager;)V" to "Lnet/minecraft/client/renderer/texture/TextureMap;func_110571_b(Lnet/minecraft/client/resources/IResourceManager;)V"))
+            require(refmap == mapOf("mappings" to expectedMappings, "data" to mapOf("searge" to expectedMappings))) {
+                "Production SRG hook target refmap drift"
+            }
             names.filter { it.endsWith(".class") }.forEach { name ->
                 val bytes = zip.getInputStream(zip.getEntry(name)).use { it.readBytes() }
                 require(bytes.size >= 8 && bytes.take(4) == listOf(0xCA.toByte(), 0xFE.toByte(), 0xBA.toByte(), 0xBE.toByte()))
@@ -213,6 +241,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
             val expectedNested = setOf("dev/diorama/bake/TileImage\$Patch.class",
+                "dev/diorama/gtnh/client/ClientCaptureLifecycle\$Session.class",
                 "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces\$Pitch.class",
                 "dev/diorama/bake/DecodedSections\$Air.class", "dev/diorama/bake/DecodedSections\$Section.class",
                 "dev/diorama/bake/DecodedSections\$PackedIndices.class", "dev/diorama/bake/TintBlend\$Source.class",
@@ -233,6 +262,8 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             }
             val expectedMr = setOf("dev/diorama/MapStyle.class", "dev/diorama/bake/TileKey.class",
                 "dev/diorama/gtnh/client/ClientBlockAppearance.class",
+                "dev/diorama/gtnh/client/ClientCaptureLifecycle.class",
+                "dev/diorama/gtnh/client/ClientCaptureLifecycle\$Session.class",
                 "dev/diorama/bake/TileImage.class", "dev/diorama/bake/TileImage\$Patch.class", "dev/diorama/bake/ShapeFaces\$Pitch.class",
                 "dev/diorama/bake/Looks.class", "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces.class",
                 "dev/diorama/bake/DecodedSections.class", "dev/diorama/bake/DecodedSections\$Air.class",
@@ -348,7 +379,8 @@ for ((prefix, mainName) in listOf(
     "capture" to "dev.diorama.gtnh.probe.CaptureProbe",
     "spriteAverage" to "dev.diorama.bake.SpriteAverageProbe",
     "preparedLooks" to "dev.diorama.bake.PreparedBlockLooksProbe",
-    "opaquePng" to "dev.diorama.gtnh.probe.OpaquePngProbe"
+    "opaquePng" to "dev.diorama.gtnh.probe.OpaquePngProbe",
+    "epochFence" to "dev.diorama.gtnh.probe.EpochFenceProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {

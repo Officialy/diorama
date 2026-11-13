@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8.5-GTNH",
+  "package": "dev.diorama.gtnh.mixins",
+  "refmap": "mixins.diorama.refmap.json",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [],
+  "client": [
+    "client.ResourceReloadMixin",
+    "client.BlockAtlasMixin"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

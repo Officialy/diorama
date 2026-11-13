@@ -11,9 +11,9 @@ import cpw.mods.fml.common.event.FMLInitializationEvent;
 @Mod(
     modid = "diorama",
     name = "Diorama",
-    version = "0.8.1-gtnh.9-dev",
+    version = "0.8.1-gtnh.10-dev",
     acceptableRemoteVersions = "*",
-    dependencies = "required-after:gtnhlib@[0.11.48,)")
+    dependencies = "required-after:gtnhlib@[0.11.48,);required-after:unimixins@[0.3.1,)")
 public final class DioramaLegacy {
 
     @SidedProxy(clientSide = "dev.diorama.gtnh.client.ClientProxy", serverSide = "dev.diorama.gtnh.CommonProxy")

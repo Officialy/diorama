@@ -1,6 +1,6 @@
 # GTNH 移植技术设计：以持续同步成本为第一约束
 
-状态：2026-11-13。独立构建、固定图显示诊断、共享几何、现代快照雾色RGB边界、共享外观核心、section解码缓存/掩码核心、数值染色混合/转向、任务内数值读取器、原版CPU烘焙闭包、受保护的客户端采集/准备域接缝及受限vanilla cube资源准备已实现；数值快照可执行合成地形烘焙，实际采集执行与真实地图接入仍待验证/完成。可执行命令及已知失败见[构建说明](../gtnh/README.md)。源码证据基线为 `8e8a21b`；始终参照最新规范实现，不建立旧版算法分叉，也不提前适配Vulkan。本文的目录、任务、接口名称除已存在者外均为拟议，不能当作已可运行命令。
+状态：2026-11-13。独立构建、固定图显示诊断、共享几何、现代快照雾色RGB边界、共享外观核心、section解码缓存/掩码核心、数值染色混合/转向、任务内数值读取器、原版CPU烘焙闭包、受保护的客户端采集/准备域接缝、受限vanilla cube资源准备及早期资源/世界世代隔离已实现；数值快照可执行合成地形烘焙，实际采集执行与真实地图接入仍待验证/完成。可执行命令及已知失败见[构建说明](../gtnh/README.md)。源码证据基线为 `8e8a21b`；始终参照最新规范实现，不建立旧版算法分叉，也不提前适配Vulkan。本文的目录、任务、接口名称除已存在者外均为拟议，不能当作已可运行命令。
 
 ## 1. 设计决定
 
@@ -93,7 +93,13 @@ C8增加只读已加载区块的客户端绑定与无游戏类型的采集编排
 
 C9将BlockLooks的存储sRGB/alpha加权纹理均值原样抽为共享SpriteAverage；现代NativeImage访问/首帧裁剪/释放处理留在原适配器，不建立第二套颜色算法。旧版PreparedBlockLooks只允许owner线程显式发布已审计的不透明、无染色整cube，保留规范FaceColor/Looks数组和release发布；容量耗尽/未知外观仍pending，invalidate不修改旧任务持有的payload。实际资源绑定仅精确vanilla对象与类：air，stone/cobblestone meta0、dirt0/1（排除邻接相关podzol2）、planks0..5；普通sprite身份/动画/custom-loader检查后读取当前resource manager下PNG，不依赖Post保留像素。PNG严格全不透明/方形/匹配sprite、每边最多4096，先检查header尺寸再分配像素。
 
-这仍是显式准备且仅编译验证的客户端接缝：资源reload/stitch开始失效、结束后建立新表及异步结果接纳世代校验尚未自动接入。四通道验证均值、真实PNG与表发布/采集契约，不验证游戏资源或任意CTM/atlas改写。各向异性padding可能被严格尺寸拒绝；完整biome/fog、液体/grass/leaves/特殊renderer/上下文外观继续后置。NEID与EndlessIDs的存储API不同，后者还可能禁止原版数组getter；当前构造器在主线程检查后、读取存储前按准确modid明确拒绝两者（即使扩展开关关闭），不以原版数组长度或AIR fallback推断兼容，也不声称能识别所有任意存储改写。
+C9仍是显式准备且仅编译验证的客户端接缝；C10已添加以下早期资源失效与显式会话/接纳门禁，但尚未接调度或实际结果提交。四通道验证均值、真实PNG与表发布/采集契约，不验证游戏资源或任意CTM/atlas改写。各向异性padding可能被严格尺寸拒绝；完整biome/fog、液体/grass/leaves/特殊renderer/上下文外观继续后置。NEID与EndlessIDs的存储API不同，后者还可能禁止原版数组getter；当前构造器在主线程检查后、读取存储前按准确modid明确拒绝两者（即使扩展开关关闭），不以原版数组长度或AIR fallback推断兼容，也不声称能识别所有任意存储改写。
+
+C10以两个client-only早期Mixin拦截SimpleReloadableResourceManager完整reload/单包mutation和TextureMap两个公开load入口，不用晚到的普通listener冒充开始。Forge Post返回后的marker、atlas正常RETURN与manager最外层正常RETURN共同构成许可；完整资源周期的manager/atlas身份单独记录，不依赖已创建Session。纯EpochFence管理不可复活token、嵌套depth、世界可用性及资源许可。HEAD无RETURN留下depth，默认包fallback也不抹除，直到重启保持关闭；atlas在栈时任何资源mutation/nested reload永久fault，避免已上传旧atlas再次认证新资源。这是保守可用性取舍，不是异常finally恢复。
+
+ClientProxy只在END tick观察世界/provider/dimension/noSky，不自动读块、开会话或安排worker。Unload在旧world仍挂于Minecraft时立即撤销，不在该回调重新绑定旧对象。显式Session同时绑定原采集器/外观表；每次接纳复核实际world/provider/资源身份，接纳只是未来非重入主线程merge前predicate，不宣称已接像素上传/落盘事务。UniMixins0.3.1成为明确运行依赖；包内bootstrap/config/refmap与Java8/MR清单精确审计。原生hook/事件仍未游戏执行验证，纯状态机四通道通过不替代它。
+
+UI候选评估见[ModularUI2评估](gtnh-ui-evaluation.md)：适合设置/路点薄壳原型，不据此迁移地图/HUD、改产品行为或加入依赖；共享模型/地图算法仍以持续同步成本为约束。
 
 ### 3.3 VoxelReader：section入口与读取算法分离
 

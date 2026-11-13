@@ -228,10 +228,30 @@
     {
       "path": "dev/diorama/gtnh/client/ClientBlockAppearance.java",
       "fqn": "dev.diorama.gtnh.client.ClientBlockAppearance"
+    },
+    {
+      "path": "dev/diorama/gtnh/capture/EpochFence.java",
+      "fqn": "dev.diorama.gtnh.capture.EpochFence"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/ClientCaptureLifecycle.java",
+      "fqn": "dev.diorama.gtnh.client.ClientCaptureLifecycle"
+    },
+    {
+      "path": "dev/diorama/gtnh/loading/DioramaEarlyMixins.java",
+      "fqn": "dev.diorama.gtnh.loading.DioramaEarlyMixins"
+    },
+    {
+      "path": "dev/diorama/gtnh/mixins/client/ResourceReloadMixin.java",
+      "fqn": "dev.diorama.gtnh.mixins.client.ResourceReloadMixin"
+    },
+    {
+      "path": "dev/diorama/gtnh/mixins/client/BlockAtlasMixin.java",
+      "fqn": "dev.diorama.gtnh.mixins.client.BlockAtlasMixin"
     }
   ],
   "deferred": [
-    "native capture/resource execution and automatic epoch lifecycle",
+    "native capture/resource and early lifecycle hook game execution",
     "legacy snapshot rotation and spawn rules",
     "complete legacy block appearance/biome provider beyond explicit vanilla cube subset",
     "map display",

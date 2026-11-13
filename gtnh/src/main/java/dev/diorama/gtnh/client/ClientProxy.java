@@ -7,13 +7,16 @@ import net.minecraft.client.resources.IReloadableResourceManager;
 import net.minecraft.client.resources.IResourceManager;
 import net.minecraft.client.resources.IResourceManagerReloadListener;
 import net.minecraftforge.client.ClientCommandHandler;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.world.WorldEvent;
 
 import cpw.mods.fml.common.FMLCommonHandler;
+import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import dev.diorama.gtnh.CommonProxy;
 
-/** Diagnostic registration only; never installs a HUD or reads world blocks. */
+/** Diagnostic UI plus lifecycle identity observation; never installs a HUD or reads world blocks. */
 public final class ClientProxy extends CommonProxy implements IResourceManagerReloadListener {
 
     private volatile int resourceGeneration;
@@ -22,6 +25,7 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
     @Override
     public void init() {
         ClientCommandHandler.instance.registerCommand(new DisplayProbeCommand(this));
+        MinecraftForge.EVENT_BUS.register(this);
         FMLCommonHandler.instance()
             .bus()
             .register(this);
@@ -35,7 +39,9 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
 
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || requestedWorld == null) return;
+        if (event.phase != TickEvent.Phase.END) return;
+        ClientCaptureLifecycle.observeWorld();
+        if (requestedWorld == null) return;
         Minecraft minecraft = Minecraft.getMinecraft();
         if (minecraft.theWorld != requestedWorld) {
             requestedWorld = null;
@@ -47,6 +53,11 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
             // Do not surprise the user by opening later after an unrelated GUI closes.
             requestedWorld = null;
         }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onWorldUnload(WorldEvent.Unload event) {
+        if (event.world instanceof WorldClient old) ClientCaptureLifecycle.unloaded(old);
     }
 
     @Override
