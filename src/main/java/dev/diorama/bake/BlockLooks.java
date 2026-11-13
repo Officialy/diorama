@@ -701,11 +701,10 @@ public final class BlockLooks extends StateLooks {
 		}
 		int w = Math.min(contents.width(), image.getWidth());
 		int h = Math.min(contents.height(), image.getHeight());
-		double r = 0;
-		double g = 0;
-		double b = 0;
-		double weight = 0;
-		int visible = 0;
+		if (w <= 0 || h <= 0) {
+			return new float[4];
+		}
+		SpriteAverage average = new SpriteAverage();
 		try {
 			for (int y = 0; y < h; y++) {
 				for (int x = 0; x < w; x++) {
@@ -716,31 +715,13 @@ public final class BlockLooks extends StateLooks {
 					int abgr = image.getPixelRGBA(x, y);
 					int argb = (abgr & 0xFF00FF00) | (abgr >> 16 & 0xFF) | (abgr & 0xFF) << 16;
 					*///?}
-					int a = argb >>> 24;
-					if (a < 26) {
-						continue;
-					}
-					double wa = a / 255.0;
-					// Average the stored (sRGB) values, as Xaero's World Map and JourneyMap do. In linear
-					// light the bright pixels outweigh the dark ones: a casing that is a dark panel in a
-					// brass frame came out the frame's colour, and an enchanting table's red top grey.
-					r += ((argb >> 16) & 0xFF) * wa;
-					g += ((argb >> 8) & 0xFF) * wa;
-					b += (argb & 0xFF) * wa;
-					weight += wa;
-					visible++;
+					average.add(argb);
 				}
 			}
 		} catch (IllegalStateException freed) {
 			// "Image is not allocated": NativeImage checks before every read.
 			return null;
 		}
-		if (weight == 0) {
-			return new float[] {0.0F, 0.0F, 0.0F, 0.0F};
-		}
-		return new float[] {
-			(float) (r / weight / 255), (float) (g / weight / 255), (float) (b / weight / 255),
-			(float) visible / (w * h)
-		};
+		return average.finish(w * h);
 	}
 }

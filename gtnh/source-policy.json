@@ -152,6 +152,12 @@
       "fqn": "dev.diorama.bake.SunDirection",
       "reviewedSha256": "809680da9c02f66492c7b0d5b7ace9e73927d61a7cd23a8fe87cc72b812e4be0",
       "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms."
+    },
+    {
+      "path": "dev/diorama/bake/SpriteAverage.java",
+      "fqn": "dev.diorama.bake.SpriteAverage",
+      "reviewedSha256": "e111a676cde0798ca3b3ea59fa492fb37a377806d68dd2e4a38c453acc80c651",
+      "reason": "Exact canonical stored-sRGB alpha-weighted sprite averaging; native image access remains platform-specific."
     }
   ],
   "platform": [
@@ -210,12 +216,24 @@
     {
       "path": "dev/diorama/gtnh/client/ClientCaptureAccess.java",
       "fqn": "dev.diorama.gtnh.client.ClientCaptureAccess"
+    },
+    {
+      "path": "dev/diorama/bake/PreparedBlockLooks.java",
+      "fqn": "dev.diorama.bake.PreparedBlockLooks"
+    },
+    {
+      "path": "dev/diorama/gtnh/capture/OpaquePng.java",
+      "fqn": "dev.diorama.gtnh.capture.OpaquePng"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/ClientBlockAppearance.java",
+      "fqn": "dev.diorama.gtnh.client.ClientBlockAppearance"
     }
   ],
   "deferred": [
-    "live legacy world capture and appearance preparation",
+    "native capture/resource execution and automatic epoch lifecycle",
     "legacy snapshot rotation and spawn rules",
-    "legacy block appearance provider",
+    "complete legacy block appearance/biome provider beyond explicit vanilla cube subset",
     "map display",
     "tile storage",
     "GPU baking"

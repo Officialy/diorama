@@ -17,6 +17,7 @@ import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 
 import org.jspecify.annotations.Nullable;
 
+import cpw.mods.fml.common.Loader;
 import dev.diorama.gtnh.capture.ChunkCapture;
 
 /**
@@ -37,6 +38,12 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
     public ClientCaptureAccess(WorldClient expectedWorld, Object session, BooleanSupplier generationCurrent) {
         this.minecraft = Minecraft.getMinecraft();
         if (!this.onThread()) throw new IllegalStateException("Client capture requires the Minecraft main thread");
+        // These mods replace the storage contract itself (and EndlessIDs may deliberately crash
+        // vanilla array getters). Do not probe their arrays or infer support from a virtual AIR ID.
+        if (Loader.isModLoaded("neid") || Loader.isModLoaded("endlessids")) {
+            throw new UnsupportedOperationException(
+                "Extended block storage requires a separately audited typed adapter");
+        }
         this.world = Objects.requireNonNull(expectedWorld, "expectedWorld");
         this.session = Objects.requireNonNull(session, "session");
         this.generationCurrent = Objects.requireNonNull(generationCurrent, "generationCurrent");

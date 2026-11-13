@@ -1,6 +1,6 @@
 # GTNH 移植技术设计：以持续同步成本为第一约束
 
-状态：2026-11-12。独立构建、固定图显示诊断、共享几何、现代快照雾色RGB边界、共享外观核心、section解码缓存/掩码核心、数值染色混合/转向、任务内数值读取器、原版CPU烘焙闭包及受保护的客户端采集/准备域接缝已实现；数值快照可执行合成地形烘焙，实际采集执行与真实地图接入仍待验证/完成。可执行命令及已知失败见[构建说明](../gtnh/README.md)。源码证据基线为 `8e8a21b`；始终参照最新规范实现，不建立旧版算法分叉，也不提前适配Vulkan。本文的目录、任务、接口名称除已存在者外均为拟议，不能当作已可运行命令。
+状态：2026-11-13。独立构建、固定图显示诊断、共享几何、现代快照雾色RGB边界、共享外观核心、section解码缓存/掩码核心、数值染色混合/转向、任务内数值读取器、原版CPU烘焙闭包、受保护的客户端采集/准备域接缝及受限vanilla cube资源准备已实现；数值快照可执行合成地形烘焙，实际采集执行与真实地图接入仍待验证/完成。可执行命令及已知失败见[构建说明](../gtnh/README.md)。源码证据基线为 `8e8a21b`；始终参照最新规范实现，不建立旧版算法分叉，也不提前适配Vulkan。本文的目录、任务、接口名称除已存在者外均为拟议，不能当作已可运行命令。
 
 ## 1. 设计决定
 
@@ -82,7 +82,7 @@ C8增加只读已加载区块的客户端绑定与无游戏类型的采集编排
 
 现有 `kind/tint/emission/top/side/shape/wetShape/shapes` 数组是正确接缝，保留字段布局和按需ensure发布方式。
 
-已实现窄契约：现代 `StateLooks extends Looks`承接状态分类/编号/形状采集；共享 `Looks`保留数组、`ensure` acquire、`publish` release与`internShape`。现代BlockLooks/TableLooks保留原锁和填充流程。旧版提供者尚未实现，届时只读取已准备的外观资料。
+已实现窄契约：现代 `StateLooks extends Looks`承接状态分类/编号/形状采集；共享 `Looks`保留数组、`ensure` acquire、`publish` release与`internShape`。现代BlockLooks/TableLooks保留原锁和填充流程。旧版PreparedBlockLooks已提供受限不透明cube的显式发布；完整规则/模型/biome提供者尚未实现，后台仍只能读取已准备的外观资料。
 
 - 追踪循环继续直接读数组，不为每像素创建DTO或执行平台类型判断。
 - 现代BlockState分类、spawn/fluid/shape查询、颜色及注册表编号移到现代提供者；旧版提供者使用旧游戏数据。
@@ -90,6 +90,10 @@ C8增加只读已加载区块的客户端绑定与无游戏类型的采集编排
 - 先完成条目其余字段，再发布kind；资源重载生成新的外观代次，旧任务结果失效。
 - 线程门禁：后台首次ensure/fillLook只能读取已准备的不可变外观资料，不得访问活世界、TileEntity或调用GL。必须主线程执行的颜色/形状/纹理查询在采集或准备阶段完成；缺失时显式pending/retry，或使用有标记的保守结果并触发重烘焙，不得后台同步等待渲染线程。
 - Java8 acquire/release转换与真实运行测试是单独门槛，不以“编译成功”替代并发语义验证。
+
+C9将BlockLooks的存储sRGB/alpha加权纹理均值原样抽为共享SpriteAverage；现代NativeImage访问/首帧裁剪/释放处理留在原适配器，不建立第二套颜色算法。旧版PreparedBlockLooks只允许owner线程显式发布已审计的不透明、无染色整cube，保留规范FaceColor/Looks数组和release发布；容量耗尽/未知外观仍pending，invalidate不修改旧任务持有的payload。实际资源绑定仅精确vanilla对象与类：air，stone/cobblestone meta0、dirt0/1（排除邻接相关podzol2）、planks0..5；普通sprite身份/动画/custom-loader检查后读取当前resource manager下PNG，不依赖Post保留像素。PNG严格全不透明/方形/匹配sprite、每边最多4096，先检查header尺寸再分配像素。
+
+这仍是显式准备且仅编译验证的客户端接缝：资源reload/stitch开始失效、结束后建立新表及异步结果接纳世代校验尚未自动接入。四通道验证均值、真实PNG与表发布/采集契约，不验证游戏资源或任意CTM/atlas改写。各向异性padding可能被严格尺寸拒绝；完整biome/fog、液体/grass/leaves/特殊renderer/上下文外观继续后置。NEID与EndlessIDs的存储API不同，后者还可能禁止原版数组getter；当前构造器在主线程检查后、读取存储前按准确modid明确拒绝两者（即使扩展开关关闭），不以原版数组长度或AIR fallback推断兼容，也不声称能识别所有任意存储改写。
 
 ### 3.3 VoxelReader：section入口与读取算法分离
 

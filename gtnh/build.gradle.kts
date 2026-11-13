@@ -10,7 +10,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.8-dev"
+version = "0.8.1-gtnh.9-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -47,14 +47,16 @@ val probe = sourceSets.create("probe") {
         include("dev/diorama/gtnh/diagnostic/ProbePixels.java", "dev/diorama/data/ChunkSnapshot.java",
             "dev/diorama/bake/VoxelReader.java", "dev/diorama/bake/BiomeTints.java",
             "dev/diorama/bake/BakeDiagnostics.java", "dev/diorama/bake/SlimeChunks.java",
-            "dev/diorama/gtnh/capture/ChunkCapture.java")
+            "dev/diorama/gtnh/capture/ChunkCapture.java", "dev/diorama/bake/PreparedBlockLooks.java",
+            "dev/diorama/gtnh/capture/OpaquePng.java")
     })
     java.source(objects.sourceDirectorySet("offlineFixtures", "Selected offline fixtures").apply {
         srcDir("src/probe/java")
         include("dev/diorama/gtnh/probe/CompatibilityProbe.java", "dev/diorama/gtnh/probe/DisplayPixelProbe.java", "dev/diorama/gtnh/probe/GeometryProbe.java",
             "dev/diorama/bake/AppearanceProbe.java", "dev/diorama/bake/SectionProbe.java", "dev/diorama/bake/TintBlendProbe.java",
             "dev/diorama/bake/VoxelReaderProbe.java", "dev/diorama/bake/TerrainProbe.java", "dev/diorama/bake/BakeUtilityProbe.java",
-            "dev/diorama/gtnh/probe/CaptureProbe.java")
+            "dev/diorama/gtnh/probe/CaptureProbe.java", "dev/diorama/bake/SpriteAverageProbe.java",
+            "dev/diorama/bake/PreparedBlockLooksProbe.java", "dev/diorama/gtnh/probe/OpaquePngProbe.java")
     })
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -230,6 +232,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
             val expectedMr = setOf("dev/diorama/MapStyle.class", "dev/diorama/bake/TileKey.class",
+                "dev/diorama/gtnh/client/ClientBlockAppearance.class",
                 "dev/diorama/bake/TileImage.class", "dev/diorama/bake/TileImage\$Patch.class", "dev/diorama/bake/ShapeFaces\$Pitch.class",
                 "dev/diorama/bake/Looks.class", "dev/diorama/bake/Looks\$StatesRenumbered.class", "dev/diorama/bake/ShapeFaces.class",
                 "dev/diorama/bake/DecodedSections.class", "dev/diorama/bake/DecodedSections\$Air.class",
@@ -342,7 +345,10 @@ for ((prefix, mainName) in listOf(
     "reader" to "dev.diorama.bake.VoxelReaderProbe",
     "terrain" to "dev.diorama.bake.TerrainProbe",
     "bakeUtilities" to "dev.diorama.bake.BakeUtilityProbe",
-    "capture" to "dev.diorama.gtnh.probe.CaptureProbe"
+    "capture" to "dev.diorama.gtnh.probe.CaptureProbe",
+    "spriteAverage" to "dev.diorama.bake.SpriteAverageProbe",
+    "preparedLooks" to "dev.diorama.bake.PreparedBlockLooksProbe",
+    "opaquePng" to "dev.diorama.gtnh.probe.OpaquePngProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {
