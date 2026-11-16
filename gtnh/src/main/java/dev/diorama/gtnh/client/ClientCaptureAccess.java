@@ -19,10 +19,11 @@ import org.jspecify.annotations.Nullable;
 
 import cpw.mods.fml.common.Loader;
 import dev.diorama.gtnh.capture.ChunkCapture;
+import dev.diorama.gtnh.capture.SectionBlocks;
 
 /**
- * Synchronous main-thread binding for the audited vanilla client provider and 12-bit section layout.
- * Extended block storage is unsupported rather than silently truncated. Live wrappers are for
+ * Synchronous main-thread binding for the vanilla client provider and audited section storage.
+ * Optional EndlessIDs access is isolated from the vanilla array path. Live wrappers are for
  * immediate ChunkCapture consumption only; they must never be published to a worker or retained.
  */
 public final class ClientCaptureAccess implements ChunkCapture.Access {
@@ -34,16 +35,17 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
     private final Object session;
     private final BooleanSupplier generationCurrent;
     private final int airBlockId;
+    private final boolean endlessLoaded;
+    private final boolean extended;
 
     public ClientCaptureAccess(WorldClient expectedWorld, Object session, BooleanSupplier generationCurrent) {
         this.minecraft = Minecraft.getMinecraft();
         if (!this.onThread()) throw new IllegalStateException("Client capture requires the Minecraft main thread");
-        // These mods replace the storage contract itself (and EndlessIDs may deliberately crash
-        // vanilla array getters). Do not probe their arrays or infer support from a virtual AIR ID.
-        if (Loader.isModLoaded("neid") || Loader.isModLoaded("endlessids")) {
-            throw new UnsupportedOperationException(
-                "Extended block storage requires a separately audited typed adapter");
+        if (Loader.isModLoaded("neid")) {
+            throw new UnsupportedOperationException("NEID storage requires its own typed adapter");
         }
+        this.endlessLoaded = Loader.isModLoaded("endlessids");
+        this.extended = this.endlessLoaded && EndlessSectionStorage.enabled();
         this.world = Objects.requireNonNull(expectedWorld, "expectedWorld");
         this.session = Objects.requireNonNull(session, "session");
         this.generationCurrent = Objects.requireNonNull(generationCurrent, "generationCurrent");
@@ -62,8 +64,8 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
             throw new UnsupportedOperationException("Expected the complete client world section span 0..256");
         }
         this.airBlockId = Block.getIdFromBlock(Blocks.air);
-        if (this.airBlockId < 0 || this.airBlockId > 4095) {
-            throw new UnsupportedOperationException("Air registry ID does not fit the audited vanilla section layout");
+        if (this.airBlockId < 0 || this.airBlockId > (this.extended ? 0xFFFFFF : 4095)) {
+            throw new UnsupportedOperationException("Air registry ID does not fit the selected section layout");
         }
         this.requireCurrent();
     }
@@ -109,22 +111,24 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
             throw new UnsupportedOperationException("Unsupported client chunk section span");
         }
         boolean hasSkyLight = !this.dimensionProvider.hasNoSky;
+        SectionBlocks[] blocks = new SectionBlocks[sections.length];
         for (int i = 0; i < sections.length; i++) {
             ExtendedBlockStorage section = sections[i];
             if (section == null) continue;
             if (section.getClass() != ExtendedBlockStorage.class || section.getYLocation() != (i << 4)) {
                 throw new UnsupportedOperationException("Unsupported client section representation or origin");
             }
-            byte[] low = section.getBlockLSBArray();
-            if (low == null || low.length != 4096) {
-                throw new UnsupportedOperationException("Unsupported block-ID low-byte representation");
-            }
-            nibble(section.getBlockMSBArray(), false);
-            nibble(section.getMetadataArray(), true);
+            if (this.endlessLoaded) EndlessSectionStorage.check(section, this.extended);
+            // Do not call the legacy ID/meta getters when EndlessIDs has replaced them.
+            blocks[i] = this.extended ? EndlessSectionStorage.read(section)
+                : SectionBlocks.vanilla(
+                    section.getBlockLSBArray(),
+                    data(section.getBlockMSBArray()),
+                    data(section.getMetadataArray()));
             nibble(section.getBlocklightArray(), true);
             nibble(section.getSkylightArray(), hasSkyLight);
         }
-        return new LiveChunk(this, chunk, sections, hasSkyLight);
+        return new LiveChunk(this, chunk, sections, blocks, hasSkyLight);
     }
 
     private static void nibble(@Nullable NibbleArray values, boolean required) {
@@ -135,8 +139,8 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         }
     }
 
-    private static int nibble(NibbleArray values, int index) {
-        return (values.data[index >> 1] >>> ((index & 1) << 2)) & 15;
+    private static byte @Nullable [] data(@Nullable NibbleArray values) {
+        return values == null ? null : values.data;
     }
 
     private static final class LiveChunk implements ChunkCapture.Chunk {
@@ -144,13 +148,15 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         private final ClientCaptureAccess access;
         private final net.minecraft.world.chunk.Chunk chunk;
         private final ExtendedBlockStorage[] sections;
+        private final SectionBlocks[] blocks;
         private final boolean hasSkyLight;
 
         private LiveChunk(ClientCaptureAccess access, net.minecraft.world.chunk.Chunk chunk,
-            ExtendedBlockStorage[] sections, boolean hasSkyLight) {
+            ExtendedBlockStorage[] sections, SectionBlocks[] blocks, boolean hasSkyLight) {
             this.access = access;
             this.chunk = chunk;
             this.sections = sections;
+            this.blocks = blocks;
             this.hasSkyLight = hasSkyLight;
         }
 
@@ -188,7 +194,7 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         public ChunkCapture.@Nullable Section section(int index) {
             this.check(index, 0);
             ExtendedBlockStorage storage = this.sections[index];
-            return storage == null ? null : new LiveSection(this, storage);
+            return storage == null ? null : new LiveSection(this, storage, this.blocks[index]);
         }
 
         private void check(int sectionIndex, int cell) {
@@ -220,10 +226,12 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
 
         private final LiveChunk owner;
         private final ExtendedBlockStorage section;
+        private final SectionBlocks blocks;
 
-        private LiveSection(LiveChunk owner, ExtendedBlockStorage section) {
+        private LiveSection(LiveChunk owner, ExtendedBlockStorage section, SectionBlocks blocks) {
             this.owner = owner;
             this.section = section;
+            this.blocks = blocks;
         }
 
         private void check(int index) {
@@ -234,9 +242,12 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         @Override
         public int blockId(int index) {
             this.check(index);
-            int raw = this.section.getBlockLSBArray()[index] & 255;
-            NibbleArray add = this.section.getBlockMSBArray();
-            if (add != null) raw |= nibble(add, index) << 8;
+            int raw = this.blocks.blockId(index);
+            if (this.owner.access.extended) {
+                if (EndlessSectionStorage.blockId(this.section, index) != raw)
+                    throw new UnsupportedOperationException("EndlessIDs raw ID differs from audited storage");
+                return raw;
+            }
             int observed = Block
                 .getIdFromBlock(this.section.getBlockByExtId(index & 15, index >> 8, (index >> 4) & 15));
             // Never normalize an unregistered raw ID to the air returned by the vanilla registry
@@ -250,9 +261,11 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         @Override
         public int metadata(int index) {
             this.check(index);
-            int raw = nibble(this.section.getMetadataArray(), index);
-            if (this.section.getExtBlockMetadata(index & 15, index >> 8, (index >> 4) & 15) != raw) {
-                throw new UnsupportedOperationException("Virtual metadata differs from audited vanilla nibble storage");
+            int raw = this.blocks.metadata(index);
+            int observed = this.owner.access.extended ? EndlessSectionStorage.metadata(this.section, index)
+                : this.section.getExtBlockMetadata(index & 15, index >> 8, (index >> 4) & 15);
+            if (observed != raw) {
+                throw new UnsupportedOperationException("Virtual metadata differs from audited raw storage");
             }
             return raw;
         }

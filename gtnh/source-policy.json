@@ -162,6 +162,14 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/capture/SectionBlocks.java",
+      "fqn": "dev.diorama.gtnh.capture.SectionBlocks"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/EndlessSectionStorage.java",
+      "fqn": "dev.diorama.gtnh.client.EndlessSectionStorage"
+    },
+    {
       "path": "dev/diorama/gtnh/DioramaLegacy.java",
       "fqn": "dev.diorama.gtnh.DioramaLegacy"
     },

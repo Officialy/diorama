@@ -168,7 +168,7 @@ public final class ChunkCapture {
                         current(access, session);
                         int metadata = section.metadata(cell);
                         current(access, session);
-                        if (blockId < 0 || metadata < 0 || metadata > 15)
+                        if (blockId < 0 || metadata < 0 || metadata > 65535)
                             throw new IllegalArgumentException("Invalid captured block ID or metadata");
                         int id = inputs
                             .lookId(blockId, metadata, worldX0 + (cell & 15), y, worldZ0 + ((cell >>> 4) & 15));

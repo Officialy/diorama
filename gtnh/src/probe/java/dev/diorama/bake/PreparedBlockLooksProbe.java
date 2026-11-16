@@ -21,11 +21,13 @@ public final class PreparedBlockLooksProbe {
     public static void main(String[] args) throws Exception {
         digest = MessageDigest.getInstance("SHA-256");
         allocation();
+        extendedKeys();
         rejectedInputs();
         lifecycle();
         wrongThread();
         publication();
         capture();
+        extendedCapture();
         StringBuilder hex = new StringBuilder();
         for (byte value : digest.digest()) {
             hex.append(Character.forDigit((value >>> 4) & 15, 16));
@@ -74,10 +76,38 @@ public final class PreparedBlockLooksProbe {
         require(t.find(Integer.MAX_VALUE, 15) == 96, "highest raw ID and metadata survive");
     }
 
+    private static void extendedKeys() {
+        // Adjacent IDs expose overlap from nibble packing; high IDs expose int shifts/truncation.
+        int[] rawIds = { 0, 1, 16, 65535, 65536, 0x00ffffff, 0x01000000, 0x01000001, Integer.MAX_VALUE };
+        int[] metadata = { 0, 1, 15, 16, 255, 256, 65535 };
+        PreparedBlockLooks t = new PreparedBlockLooks(new Object(), 1 + rawIds.length * metadata.length);
+        int expected = 1;
+        for (int raw : rawIds) {
+            for (int meta : metadata) {
+                require(t.find(raw, meta) == -1, "extended key must not alias an existing key");
+                int id = t.cube(raw, meta, TOP, SIDE, 5);
+                require(id == expected++, "extended keys allocate distinct dense IDs");
+                fields(t, id, Looks.SOLID, 0xFF8000, 0x0040FF, 5);
+                put(raw);
+                put(meta);
+                put(id);
+            }
+        }
+        expected = 1;
+        for (int raw : rawIds) {
+            for (int meta : metadata) {
+                int id = expected++;
+                require(t.find(raw, meta) == id, "all extended keys survive later insertions without collision");
+                require(t.cube(raw, meta, SIDE, TOP, 0) == id, "extended duplicate retains ID at capacity");
+                fields(t, id, Looks.SOLID, 0xFF8000, 0x0040FF, 5);
+            }
+        }
+    }
+
     private static void rejectedInputs() {
         PreparedBlockLooks t = new PreparedBlockLooks(new Object(), 2);
         String before = payload(t, 0) + payload(t, 1);
-        int[][] keys = { { -1, 0 }, { 1, -1 }, { 1, 16 } };
+        int[][] keys = { { -1, 0 }, { Integer.MIN_VALUE, 0 }, { 1, -1 }, { 1, 65536 }, { 1, Integer.MAX_VALUE } };
         for (int[] key : keys) {
             expect(IllegalArgumentException.class, () -> t.find(key[0], key[1]));
             expect(IllegalArgumentException.class, () -> t.cube(key[0], key[1], TOP, SIDE, 0));
@@ -256,6 +286,36 @@ public final class PreparedBlockLooksProbe {
         for (int value : ids) put(value);
     }
 
+    private static void extendedCapture() {
+        for (int raw : new int[] { 65536, 0x00ffffff, 0x01000000, 0x01000001, Integer.MAX_VALUE }) {
+            for (int meta : new int[] { 16, 255, 256, 65535 }) {
+                Scene scene = new Scene();
+                scene.raw = raw;
+                scene.meta = meta;
+                require(
+                    scene.capture()
+                        .status() == ChunkCapture.Status.PENDING_APPEARANCE,
+                    "extended unprepared key stays pending");
+                int id = scene.table.cube(raw, meta, TOP, SIDE, 12);
+                ChunkCapture.Result result = scene.capture();
+                require(
+                    result.status() == ChunkCapture.Status.READY,
+                    "extended key captures through prepared resolver");
+                require(
+                    scene.resolvedRaw == raw && scene.resolvedMeta == meta,
+                    "resolver receives complete extended key");
+                require(
+                    result.snapshot()
+                        .sectionIds(0)[Scene.CELL] == id,
+                    "extended captured ID matches prepared key");
+                fields(scene.table, id, Looks.SOLID, 0xFF8000, 0x0040FF, 12);
+                put(raw);
+                put(meta);
+                put(id);
+            }
+        }
+    }
+
     private static final class Scene implements ChunkCapture.Chunk, ChunkCapture.Section, ChunkCapture.Inputs {
 
         static final int CELL = (3 << 8) | (4 << 4) | 2;
@@ -264,6 +324,8 @@ public final class PreparedBlockLooksProbe {
         final PreparedBlockLooks table = new PreparedBlockLooks(epoch, 3);
         Object accessEpoch = epoch;
         boolean unknown;
+        int raw = 4095, meta = 15;
+        int resolvedRaw = -1, resolvedMeta = -1;
         int lookCalls;
         final ChunkCapture.Access access = new ChunkCapture.Access() {
 
@@ -317,11 +379,11 @@ public final class PreparedBlockLooksProbe {
         }
 
         public int blockId(int cell) {
-            return cell == CELL ? (unknown ? 4094 : 4095) : 0;
+            return cell == CELL ? (unknown ? 4094 : raw) : 0;
         }
 
         public int metadata(int cell) {
-            return cell == CELL ? 15 : 0;
+            return cell == CELL ? meta : 0;
         }
 
         public int blockLight(int index, int cell) {
@@ -342,6 +404,10 @@ public final class PreparedBlockLooksProbe {
 
         public int lookId(int raw, int meta, int x, int y, int z) {
             lookCalls++;
+            if (raw != 0) {
+                resolvedRaw = raw;
+                resolvedMeta = meta;
+            }
             return raw == 0 ? table.airId() : table.find(raw, meta);
         }
 

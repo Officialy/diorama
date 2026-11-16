@@ -11,7 +11,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.10-dev"
+version = "0.8.1-gtnh.11-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -49,7 +49,8 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/bake/VoxelReader.java", "dev/diorama/bake/BiomeTints.java",
             "dev/diorama/bake/BakeDiagnostics.java", "dev/diorama/bake/SlimeChunks.java",
             "dev/diorama/gtnh/capture/ChunkCapture.java", "dev/diorama/bake/PreparedBlockLooks.java",
-            "dev/diorama/gtnh/capture/OpaquePng.java", "dev/diorama/gtnh/capture/EpochFence.java")
+            "dev/diorama/gtnh/capture/OpaquePng.java", "dev/diorama/gtnh/capture/EpochFence.java",
+            "dev/diorama/gtnh/capture/SectionBlocks.java")
     })
     java.source(objects.sourceDirectorySet("offlineFixtures", "Selected offline fixtures").apply {
         srcDir("src/probe/java")
@@ -58,7 +59,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/bake/VoxelReaderProbe.java", "dev/diorama/bake/TerrainProbe.java", "dev/diorama/bake/BakeUtilityProbe.java",
             "dev/diorama/gtnh/probe/CaptureProbe.java", "dev/diorama/bake/SpriteAverageProbe.java",
             "dev/diorama/bake/PreparedBlockLooksProbe.java", "dev/diorama/gtnh/probe/OpaquePngProbe.java",
-            "dev/diorama/gtnh/probe/EpochFenceProbe.java")
+            "dev/diorama/gtnh/probe/EpochFenceProbe.java", "dev/diorama/gtnh/probe/SectionBlocksProbe.java")
     })
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -261,6 +262,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
             val expectedMr = setOf("dev/diorama/MapStyle.class", "dev/diorama/bake/TileKey.class",
+                "dev/diorama/gtnh/capture/SectionBlocks.class",
                 "dev/diorama/gtnh/client/ClientBlockAppearance.class",
                 "dev/diorama/gtnh/client/ClientCaptureLifecycle.class",
                 "dev/diorama/gtnh/client/ClientCaptureLifecycle\$Session.class",
@@ -380,7 +382,8 @@ for ((prefix, mainName) in listOf(
     "spriteAverage" to "dev.diorama.bake.SpriteAverageProbe",
     "preparedLooks" to "dev.diorama.bake.PreparedBlockLooksProbe",
     "opaquePng" to "dev.diorama.gtnh.probe.OpaquePngProbe",
-    "epochFence" to "dev.diorama.gtnh.probe.EpochFenceProbe"
+    "epochFence" to "dev.diorama.gtnh.probe.EpochFenceProbe",
+    "sectionBlocks" to "dev.diorama.gtnh.probe.SectionBlocksProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {

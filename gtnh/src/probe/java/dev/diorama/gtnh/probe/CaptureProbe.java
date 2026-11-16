@@ -24,6 +24,7 @@ public final class CaptureProbe {
         guards();
         completeCapture(true);
         completeCapture(false);
+        extendedMetadata();
         knownEmpty();
         pending();
         stale();
@@ -307,6 +308,35 @@ public final class CaptureProbe {
         status(pendingStale.capture(), ChunkCapture.Status.STALE_SESSION, pendingStale.originalEpoch);
     }
 
+    private static void extendedMetadata() {
+        int[] rawIds = { 65536, 0x00ffffff, 0x01000000, 0x01000001, Integer.MAX_VALUE };
+        int[] metadata = { 16, 255, 256, 65535 };
+        for (int raw : rawIds) {
+            for (int meta : metadata) {
+                Fixture f = new Fixture(1, true);
+                Arrays.fill(f.raw[0], raw);
+                Arrays.fill(f.meta[0], meta);
+                f.overrideLook = 0;
+                ChunkCapture.Result result = f.capture();
+                status(result, ChunkCapture.Status.READY, f.epoch);
+                require(f.count("look") == 4096, "every extended raw ID and metadata reaches resolver unchanged");
+                require(
+                    result.snapshot()
+                        .sectionIds(0)[0] == 0,
+                    "extended values resolve to published solid zero");
+                put(raw);
+                put(meta);
+            }
+        }
+        for (int[] key : new int[][] { { -1, 0 }, { 1, -1 }, { 1, 65536 }, { 1, Integer.MAX_VALUE } }) {
+            Fixture f = new Fixture(1, true);
+            f.raw[0][0] = key[0];
+            f.meta[0][0] = key[1];
+            expect(IllegalArgumentException.class, () -> f.capture(), "invalid extended key rejected");
+            require(f.count("look") == 0, "invalid key rejected before resolver");
+        }
+    }
+
     private static void invalid() {
         reject(f -> f.actualX++, "wrong chunk x");
         reject(f -> f.actualZ--, "wrong chunk z");
@@ -324,7 +354,7 @@ public final class CaptureProbe {
         }, "z block origin overflow");
         reject(f -> f.raw[0][0] = -1, "negative raw ID");
         reject(f -> f.meta[0][0] = -1, "negative metadata");
-        reject(f -> f.meta[0][0] = 16, "metadata above nibble");
+        reject(f -> f.meta[0][0] = 65536, "metadata above unsigned short");
         reject(f -> f.overrideLook = 100, "resolved look outside allocation");
         reject(f -> f.air = -1, "negative air");
         reject(f -> f.air = 0, "air resolves to solid");

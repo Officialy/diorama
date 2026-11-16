@@ -44,9 +44,10 @@ public final class PreparedBlockLooks extends Looks {
     }
 
     private static long key(int rawId, int metadata) {
-        if (rawId < 0 || metadata < 0 || metadata > 15)
-            throw new IllegalArgumentException("Invalid raw block ID or legacy metadata");
-        return ((long) rawId << 4) | metadata;
+        if (rawId < 0 || metadata < 0 || metadata > 65535)
+            throw new IllegalArgumentException("Invalid raw block ID or 16-bit metadata");
+        // Widen before shifting: all 31 nonnegative raw ID bits and 16 metadata bits are distinct.
+        return ((long) rawId << 16) | metadata;
     }
 
     /** Only allocated and published entries are returned. Missing/invalidated entries stay pending. */
