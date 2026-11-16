@@ -1,116 +1,21 @@
-# Diorama 1.7.10 isolated build
+# Diorama 1.7.10 / GTNH
 
-Current development build: **0.8.1-gtnh.10-dev** (early resource/world epoch fencing; no new in-game feature). Client command `/dioramaprobe` displays a fixed texture; no terrain map, HUD or persistent map data is connected. Do not treat it as a functional map release.
+独立旧版构建；移植方向与结构见[主要计划](../docs/gtnh-port-design.md)。
 
-## Baseline
+## 构建
 
-Java25 + Forge1614 + lwjgl3ify + GTNHLib + UniMixins, **without Angelica**. Angelica/OptiFine are later separate optional test environments, not mandatory dependencies. The .10 lifecycle-hook build is game-untested; machine-local smoke-test observations are not a reproducible acceptance baseline. Shaders remain off by default and shader-pack tests are deferred. The assistant does not launch or deploy any instance.
-
-Build inputs are pinned to [ExampleMod template](https://github.com/GTNewHorizons/ExampleMod1.7.10/tree/bd8e4160b677466de3cfff2c4011a3806fa74942), GTNH convention2.0.33/settings0.2.2, Gradle9.7.1, compiler/daemon25, Forge10.13.4.1614/stable12. GTNHLib compile dependency is0.11.48. Real pack compatibility and Java8 product support remain unestablished. UniMixins0.3.1+ is now required for two narrow client lifecycle Mixins, bootstrapped before the target client classes load. This changes the earlier no-Mixin scaffold; it is not a renderer-internal or Angelica dependency. The current native capture explicitly rejects installed NEID or EndlessIDs before any section-array access; this remains a vanilla-storage diagnostic path, not GTNH pack compatibility.
-
-[Source policy](source-policy.json) directly selects canonical [Mipmaps](../src/main/java/dev/diorama/bake/Mipmaps.java), Facing/Projection/MapStyle, TileKey/TileImage and the primitive Looks/FaceColor/ShapeFaces, DecodedSections, TintBlend and VoxelReaderCore cores and the canonical CPU TileBaker closure plus small local platform classes; [geometry probes](src/probe/java/dev/diorama/gtnh/probe/GeometryProbe.java) exercise those shared contracts. No copied algorithm tree, generated-modern cache, or integration into the modern Stonecutter project graph.
-
-The latest canonical implementation remains the source and architecture reference; older version branches are only API comparisons. No Vulkan adapter or speculative backend framework is being added. Current progress: shared geometry, the modern snapshot fog-RGB boundary, primitive appearance data, decoded-section caches/IDs/masks and height-keyed tint averaging/view remapping are extracted. The numeric VoxelReaderCore now owns job-local chunk pinning, last-section caches, solidity/caster masks, solid height and light lookup defaults. Modern BlockState rules remain in StateLooks; palette/copycat numbering and snapshot/light adapters remain in VoxelReader; biome zoom/resolvers stay in BiomeTints. The complete original CPU TileBaker now compiles with same-FQN prepared numeric snapshot/reader adapters; SnapshotHeights, saved-ray queries and sun math are shared. A loaded-only client capture binding, guarded capture-to-prepared-input orchestration and restricted explicit vanilla-cube resource preparation now compile. Actual world capture execution, model/colour preparation, snapshot rotation and legacy spawn rules remain untested or pending; nothing schedules this capture from the current client UI. The fog boundary is Nether terrain haze, not the minimap unknown-area decorative fog. The new appearance path does not supply biome tints/fog or a complete capture Inputs implementation.
-
-## Repository hygiene
-
-Keep build inputs, tests and reusable design instructions tracked. Machine-only notes, instance inventories, downloaded references and run evidence belong under the ignored `/.local/` directory; existing per-session GTNH diaries are also ignored. Generated source/bytecode, JAR outputs and audit reports stay under ignored build directories. Reviewed shared hashes normalize CRLF to LF; provenance still records physical input hashes, so Windows checkout newlines cannot silently alter algorithm review or break a fresh LF checkout. Check staged files and maintain ignore rules on each milestone; wrapper JARs remain tracked. Development is currently local-only: no push or release preparation until the basic functional loop is complete and the user requests it.
-
-## Commands (repository root)
+在仓库根目录执行（Windows 使用 `gradlew.bat`）：
 
 ```sh
-# Build/package + selected offline/native/pixel checks; never launches Minecraft:
 ./gtnh/gradlew -p gtnh assemble verifyBaseline
-# Full strict compatibility checks; known failures remain RED:
-./gtnh/gradlew -p gtnh build --continue
-# Same transformed bytes, actual GTNHLib runtime API version on Java25:
-./gtnh/gradlew -p gtnh probeRuntime135Java25
 ```
 
-`verifyBaseline` audits source origins, legacy metadata/version, reobfuscated class set/Java8 base bytecode and absence of probe/game/modern-loader code; runs native25 fixtures plus display-pixel parity and four native/downgraded/runtime-API lanes for geometry, appearance, decoded sections, tint blending, numeric voxel reading, full/patch terrain baking, bake utilities, capture orchestration, sprite averaging, prepared cube publication, real PNG decoding and resource/world epoch fences, with local style checks. **It does not replace strict compatibility, GL or game testing.** Probe classes/artifacts are separate from the mod jar.
+不启动游戏；离线检查不代替游戏验收。完整严格检查使用 `build --continue`，不以基准任务代替完整兼容结论。
 
-The full pipeline is compile -> predowngrade jar -> downgraded dev jar -> reobfuscated jar. Deploy only the unsuffixed production artifact; not `dev`, `predowngrade`, `probe-*` or sources. Main configuration permits native21/25 MR entries where needed; the .10 build emits67 Java8 base classes and37 Java21 MR classes (records plus classes retained for their nest/API relationships), both explicitly audited. Game loader MR scanner behavior remains untested.
+## 固定输入
 
-Offline compatibility2.0.1 API is not the same as runtime1.3.5 requested by GTNHLib. Never put both APIs on one probe classpath. `probeRuntime135Java25` can take `-PruntimeProbeApi=<installed jar>`; its API bytes must match the reviewed runtime artifact. Supporting harness dependencies are recorded separately, not added to the mod jar.
+- JDK25、Gradle9.7.1、GTNH convention2.0.33 / settings0.2.2。
+- Forge10.13.4.1614 / stable12、JVM Downgrader2.0.1、GTNHLib0.11.48；早期资源钩子依赖 UniMixins0.3.1+。
+- [构建配置](build.gradle.kts)、[依赖配置](dependencies.gradle)、[选源清单](source-policy.json) 为具体输入依据，wrapper 必须保留。
 
-## Appearance core checks
-
-`verifyAppearance` runs the canonical [appearance core](../src/main/java/dev/diorama/bake/Looks.java) with a synthetic provider and no Minecraft classpath. The [probe](src/probe/java/dev/diorama/bake/AppearanceProbe.java) covers all payload fields, same-look comparisons, ordered shape dedup/growth, face colours/geometry, water links, copycat composition/capacity and bounded concurrent first-use publication (12 rounds, six readers). It does not test modern block rules/models, registry reload, GL or actual legacy world input, and is not a JMM proof. The existing copycat capacity fallback during an in-flight insertion is preserved and tested separately from spare-capacity publication.
-
-## Decoded-section checks
-
-`verifySections` executes the canonical [DecodedSections](../src/main/java/dev/diorama/bake/DecodedSections.java) with numeric descriptors and a bulk-index fixture, without Minecraft on its classpath. The [probe](src/probe/java/dev/diorama/bake/SectionProbe.java) covers uniform/packed/dense/lazy paths, four rotated and arbitrary column maps, nonzero air, solid id zero, mask identity, partial shapes, real composed-look IDs, sparse highest-bit/negative-height boundaries and once-only caches. Masks-first must not materialize ID arrays; IDs-first reuses them.
-
-The modern BitStorage adapter is invoked once per bulk decode, not per voxel/ray. These section checks do not test its actual bit layout/reflection, real block-state numbering/rotation, world capture or terrain pixels. Numeric reader checks below cover UNKNOWN pinning and casters/light separately; the modern VoxelReader adapter is not selected for the legacy build. The original TileBaker uses the prepared legacy adapter in separate terrain checks below.
-
-## Tint blend checks
-
-`verifyTints` runs the canonical [TintBlend](../src/main/java/dev/diorama/bake/TintBlend.java) with prepared numeric samples and a separate uncached scalar/long-sum oracle. The [probe](src/probe/java/dev/diorama/bake/TintBlendProbe.java) covers 126 cases: four RGB channels, radii0/1/3/7, negative chunk origins, terraced heights, missing neighbours, valid black, all-unknown fallback, alpha removal/integer division, flat-height cache counts and rotated/arbitrary column maps. The original Integer.MIN_VALUE cache-sentinel corner case is preserved explicitly, not silently fixed.
-
-The modern adapter keeps Minecraft biome zoom, colour resolvers (including custom water), fallback quart lookup and lazy snapshot tint publication; only averaging/cache/remapping moved. These compile-checked bindings are not executed by numeric fixtures: actual biome palettes/zoom, resolver hooks, concurrent snapshot publication, live world capture and actual game terrain remain untested. Prepared-input terrain bakes are checked separately below.
-
-## Numeric voxel reader checks
-
-`verifyReader` runs the canonical [VoxelReaderCore](../src/main/java/dev/diorama/bake/VoxelReaderCore.java) through a prepared numeric provider in the [probe](src/probe/java/dev/diorama/bake/VoxelReaderProbe.java). It checks present/missing chunk pinning, direct-table collisions, independent state/solid caches, nonzero air and solid ID zero, half-open world bounds, mask identity, solid heights, scalar caster expectations and captured-light coordinates/defaults. Unread caster neighbours must not trigger source loads; cached caster results retain the original order-dependent conservative behavior. Pocket/lid/ceiling queries share the original algorithms.
-
-The primitive map dependency is fastutil8.5.18, already requested by pinned GTNHLib; offline lanes pin it separately without adding Minecraft/Forge to the probe classpath or embedding the library. Transformed lanes use only transformed probe/core bytes plus dependency jars, not native probe classes. These checks do not execute modern palette/copycat numbering, real snapshot capture/light storage, legacy providers, GL or terrain baking, and do not establish performance.
-
-## Original CPU terrain checks
-
-`verifyTerrain` executes the canonical [TileBaker](../src/main/java/dev/diorama/bake/TileBaker.java), not a reduced tracer, through [prepared numeric snapshots](src/main/java/dev/diorama/data/ChunkSnapshot.java) and a thin [reader adapter](src/main/java/dev/diorama/bake/VoxelReader.java). The [terrain probe](src/probe/java/dev/diorama/bake/TerrainProbe.java) checks a spatially varying full512-square surface and three aligned32-square patches at every mip, coverage and block-light level; independent alpha-weighted mip sums; water/glass/half-slabs and grass tint effects; known air versus UNKNOWN; saved pixel/light preservation; captured cave light, unseen fog and lifted roof scenes. Snapshot copy ownership, nonzero air and look-domain rejection, complete vertical-span rejection and missing sky-light-layer defaults are tested. Material/lighting comparisons are bounded expectations, not an independent exact rendering oracle.
-
-Inputs are explicitly prepared: null/one-ID/4096-ID sections, complete world section span, private captured light, column tops, four blended RGB arrays and one chunk fog RGB. Reader inputs carry stable air and Looks identity; unsupported generic sources or mismatched domains/spans are rejected. Tints are read-only by contract. Input producers must prepare the final orientation; rotated snapshots are not yet implemented. Source roots are filtered separately so canonical and platform classes with the same FQN never compile together.
-
-`verifyBakeUtilities` checks shared [saved-ray queries](../src/main/java/dev/diorama/bake/TileSpotQueries.java), sun math and the legacy slime seed against scalar row enumeration, known-angle expectations and an independent48-bit LCG with signed32 overflow cases. Modern RNG still delegates to Minecraft. These tests do **not** establish live capture, legacy spawn eligibility (the modern zero-block-light rule is not a1.7.10 rule), models/registries, rotated legacy inputs, GL, persistent maps, MR scanning or performance. No new game command, terrain HUD or world connection is enabled by this build.
-
-## Guarded capture boundary
-
-`verifyCapture` tests the actual [capture orchestrator](src/main/java/dev/diorama/gtnh/capture/ChunkCapture.java) without Minecraft or fake game classes. The [probe](src/probe/java/dev/diorama/gtnh/probe/CaptureProbe.java) checks source-thread rejection before any live/appearance callback, missing versus known air, complete16-section spans, raw ID/meta/contextual coordinate mapping, private copies, nonzero air/solid zero, resolved-kind surface heights, captured light including known-air sections, no-sky behavior, pending appearance and stale session precedence. Already-published allocated looks are queried with `isPrepared`, never `ensure`/`make`; a resolver remains responsible for its allocated-ID domain. Only READY carries a snapshot and opaque capture epoch; later worker-result acceptance must recheck that epoch. No implicit white tint, full-cube model or AIR fallback is supplied.
-
-The [native client binding](src/main/java/dev/diorama/gtnh/client/ClientCaptureAccess.java) is **compile-checked only**. It requires the Minecraft main thread, exact audited client provider, current world/provider/resource epoch and standard0..256 storage. The audited provider lookup reads only its loaded map; `chunkExists` is not used because vanilla returns true for missing chunks. EmptyChunk or a chunk awaiting terrain/light readiness is unavailable, while a fully received real all-air chunk remains known. Raw LSB/Add nibble data retain unknown IDs rather than using the registry air fallback. Known NEID/EndlessIDs installations are conservatively refused before storage reads, including configurations with extensions disabled. Unsupported detected provider/storage shapes or virtual/raw-ID discrepancies are rejected, not silently truncated; these checks are not universal detection of arbitrary storage-transforming mods. **This is not validated NEID/extended-storage integration or general GTNH pack support.**
-
-All light layers are explicitly copied, including null block sections: legacy sky light there follows the opacity height map, not the prepared snapshot modern nearest-layer default. Surface heights come from resolved non-air looks, not opacity heights. Nether retains all16 sections despite its128 actual-height hint. Biome/tint preparation and a complete resource/model appearance provider are still required Inputs; unavailable looks/tints stay pending. Static atlas sprite pixels can be discarded before the post-stitch event, so that event is not assumed to provide a general CPU texture cache. There is no new capture command, worker scheduler, world-map persistence or automatic world read in the current UI.
-
-## Restricted appearance preparation
-
-[SpriteAverage](../src/main/java/dev/diorama/bake/SpriteAverage.java) is the exact stored-sRGB, alpha-weighted averaging algorithm extracted from canonical BlockLooks; the modern native-image access, frame crop and freed-image behavior stay in that adapter. No copied legacy colour algorithm or modern-state simulation is introduced.
-
-[PreparedBlockLooks](src/main/java/dev/diorama/bake/PreparedBlockLooks.java) is an append-only numeric table, using the canonical FaceColor/Looks payload and release publication. An owner thread explicitly admits already-audited opaque untinted cubes. Raw-ID/metadata keys are distinct from look IDs; air is explicitly reserved, unallocated entries stay unprepared, duplicates cannot rewrite published payloads and full tables return pending. Invalidation stops new lookups/preparation without changing in-flight payloads; future result acceptance still must reject the old epoch.
-
-The [native preparer](src/main/java/dev/diorama/gtnh/client/ClientBlockAppearance.java) is **compile-checked only** and is not registered on any UI/tick. It supports only exact vanilla objects/classes: air; stone/cobblestone metadata0; dirt0/1 (not contextual podzol2); planks0..5. It checks ordinary current uploaded/registered sprite identity, no animation/custom loader, and reads the active resource manager's block PNG, never GL or discarded atlas frames. The [PNG decoder](src/main/java/dev/diorama/gtnh/capture/OpaquePng.java) admits only fully opaque square PNGs matching the sprite dimensions, at most4096 per edge, and checks header dimensions before pixel allocation. Caller streams remain owned by the caller; native resource streams are always closed. Missing resources, transparency, unsupported states and failures stay pending, not white/full-cube/AIR fallbacks.
-
-The external generation guard must become false at reload/stitch start and only admit a fresh table after completion, also covering the capture session. Resource-manager identity alone is insufficient: vanilla reuses that object. C10 supplies this guard through explicit lifecycle sessions below; direct callers outside that coordinator still own the contract. PNG re-decoding is not proof of arbitrary runtime atlas/CTM transformations; anisotropic padding may cause dimension rejection. Grass/leaves, water/lava, biome colours, contextual models/colours, TESR/ISBRH, rotations, spawn rules and generic mod appearances remain pending.
-
-Four-lane probes:
-
-- `verifySpriteAverage`:65,814 numeric cases, alpha threshold25/26, channels, sRGB, coverage, independent long-rational oracle and original-loop bit parity.
-- `verifyPreparedLooks`:1,628 assertions covering complete fields, key/capacity/invalid-input atomicity, ownership, epochs,16 bounded release/acquire rounds and actual game-free ChunkCapture integration.
-- `verifyOpaquePng`:324 cases/2,127 assertions using real ImageIO PNGs, every nonopaque alpha, malformed signatures/IO, huge header early rejection and stream ownership. These are prepared-input tests, not real Minecraft resource/reload execution or a JMM/performance proof.
-
-## Early lifecycle and acceptance fence
-
-[EpochFence](src/main/java/dev/diorama/gtnh/capture/EpochFence.java) is an owner-thread, game-free state machine. Every resource mutation, atlas/reload start or world change retires its plain-object token permanently. It only grants a fresh token after an observed complete outer resource reload with a successful block-atlas return after the latest mutation. Standalone atlas loads and direct single-pack changes revoke permission but do not themselves restore it. Neither a Post event nor registering a reload listener is treated as a complete reload.
-
-The [early loader](src/main/java/dev/diorama/gtnh/loading/DioramaEarlyMixins.java) and [client-only config](src/main/resources/mixins.diorama.json) install required hooks for [reloadResources and reloadResourcePack](src/main/java/dev/diorama/gtnh/mixins/client/ResourceReloadMixin.java), and [both public block-atlas loading entries](src/main/java/dev/diorama/gtnh/mixins/client/BlockAtlasMixin.java). A separate marker runs after Forge Post callbacks/fluid-icon updates; normal atlas RETURN and outer manager RETURN are still required. No overwrite, cancellation, renderer-private access or MixinExtras is used. The artifact audit checks exact config/client list, bootstrap manifest, four production SRG method mappings, Java8 base and explicit MR inventories. **This is static/package validation, not proof the loader applied the hooks in game.**
-
-[ClientCaptureLifecycle](src/main/java/dev/diorama/gtnh/client/ClientCaptureLifecycle.java) revokes prepared tables on resource starts and client-world Unload. END tick observes only world/provider identities and dimension/no-sky scalars, never blocks or textures; it does not open a capture session automatically. Explicit session creation binds C9 appearance and C8 capture to the same opaque token. Each capture/acceptance checks actual world/chunk provider/dimension provider/scalars and the completed resource-manager/atlas identities itself; no reliance on a previous tick alone. Only audited ordinary manager/atlas classes are admitted. Acceptance is a predicate immediately before a nonreentrant main-thread merge, not a worker scheduler, upload transaction or disk-commit implementation; reentrant operations need another check before committing.
-
-Conservative safety limits:
-
-- HEAD without normal RETURN leaves an outstanding depth, so **capture remains unavailable until client restart**, even if vanilla's default-pack fallback restores the game display. Counters are not reset by a later reload or tick.
-- Resource mutation/nested manager reload while any atlas is in flight permanently closes the fence, including mutations inside Post callbacks. Native reentrant-resource recovery is not claimed.
-- No observed complete cycle means pending until a complete successful reload is actually observed; startup completion is not guessed from a callback. No reload is forced by this mod.
-- Arbitrary bytecode-transformer/renderer behavior, in-place state ABA, custom manager/atlas classes and off-thread resource reload are not established support. Existing NEID/EndlessIDs rejection remains.
-
-`verifyEpochFence` runs four lanes with119,656 sequences and4,530,186 assertions per lane: nested barriers, direct mutations, missing RETURN/fallback, in-flight atlas mutation, stale/null/foreign tokens, world changes, owner-thread rejection, independent outstanding-event-list oracle and actual prepared-table/ChunkCapture.Result token integration. The probe does not execute Minecraft, the native event adapter, Mixin transformation, GL or performance tests. No terrain command/HUD/worker queue is enabled.
-
-## Known compatibility failures
-
-Target8 with JVM Downgrader2.0.1 differs from native Java25. The [compatibility probe](src/probe/java/dev/diorama/gtnh/probe/CompatibilityProbe.java) retains both failing assertions:
-
-- **Nested record text:** the downgraded `toString()` includes the outer class name. Current selected production sources do not parse record text or use it as a persistence/network/cache-key format; this is a diagnostic-text difference, not an observed rendering or capture defect. Record accessors/equality/hash semantics are separate contracts; the text mismatch alone does not establish a defect in them.
-- **Singleton `List.of(null)`:** the downgraded implementation accepts null instead of throwing NPE. This is a real Java API contract deviation: a future caller relying on immediate null rejection could fail later instead. Current selected production call sites use empty/multiple-element lists or freshly allocated nonnull arrays for singleton lists; the legacy platform sources contain no `List.of` calls. No current functional dependency on singleton null rejection was found. Reassess when selecting new upstream sources or upgrading the downgrader/runtime API.
-
-**Current impact:** neither deviation has an identified functional effect on the implemented path, but the full strict `build` task still fails. `assemble verifyBaseline` remains the scoped build/check command, not a claim of complete Java API or in-game compatibility. Exact record text is strict by default; `-PstrictRecordText=false` is diagnostic only and does not fix List semantics. Do not weaken gates or add shared-source workarounds just to hide these deviations. Routine progress reports need not repeat these unchanged documented issues; report new failures, changed impact, or a strict-build result when specifically relevant.
-
-Game handoff: [display probe steps](../docs/gtnh-display-smoke.md). Architecture and port boundaries: [technical design](../docs/gtnh-port-design.md). Optional rendering integration: [Angelica research](../docs/gtnh-angelica-research.md). UI library assessment: [ModularUI2 evaluation](../docs/gtnh-ui-evaluation.md). Pixel tests do not establish GL compatibility, renderer support or full map functionality.
+目前仍是开发中的移植，尚非可用地图产品。仅本地开发，不自动推送、部署或启动实例。过程状态和已知问题只记本地简短备忘，不在此维护逐版本进度、测试数字或接口详解。
