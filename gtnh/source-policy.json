@@ -162,6 +162,18 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/capture/TintCapture.java",
+      "fqn": "dev.diorama.gtnh.capture.TintCapture"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/ClientBiomeColors.java",
+      "fqn": "dev.diorama.gtnh.client.ClientBiomeColors"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/EndlessBiomeStorage.java",
+      "fqn": "dev.diorama.gtnh.client.EndlessBiomeStorage"
+    },
+    {
       "path": "dev/diorama/gtnh/capture/SectionBlocks.java",
       "fqn": "dev.diorama.gtnh.capture.SectionBlocks"
     },

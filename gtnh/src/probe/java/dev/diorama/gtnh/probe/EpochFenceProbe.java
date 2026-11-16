@@ -459,7 +459,7 @@ public final class EpochFenceProbe {
             return table.find(raw, meta);
         }
 
-        public ChunkSnapshot.Tints tints(int x, int z) {
+        public ChunkSnapshot.Tints tints(int x, int z, int[] surface) {
             int[] white = new int[256];
             Arrays.fill(white, 0xFFFFFF);
             return new ChunkSnapshot.Tints(white, white, white, white);

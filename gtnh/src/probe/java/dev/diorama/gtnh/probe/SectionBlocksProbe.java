@@ -358,7 +358,7 @@ public final class SectionBlocksProbe {
         }
 
         @Override
-        public ChunkSnapshot.Tints tints(int x, int z) {
+        public ChunkSnapshot.Tints tints(int x, int z, int[] surface) {
             return tint;
         }
 

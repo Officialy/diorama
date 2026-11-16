@@ -20,6 +20,7 @@ import org.jspecify.annotations.Nullable;
 import cpw.mods.fml.common.Loader;
 import dev.diorama.gtnh.capture.ChunkCapture;
 import dev.diorama.gtnh.capture.SectionBlocks;
+import dev.diorama.gtnh.capture.TintCapture;
 
 /**
  * Synchronous main-thread binding for the vanilla client provider and audited section storage.
@@ -37,6 +38,7 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
     private final int airBlockId;
     private final boolean endlessLoaded;
     private final boolean extended;
+    private final boolean extendedBiomes;
 
     public ClientCaptureAccess(WorldClient expectedWorld, Object session, BooleanSupplier generationCurrent) {
         this.minecraft = Minecraft.getMinecraft();
@@ -46,6 +48,7 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         }
         this.endlessLoaded = Loader.isModLoaded("endlessids");
         this.extended = this.endlessLoaded && EndlessSectionStorage.enabled();
+        this.extendedBiomes = this.endlessLoaded && EndlessBiomeStorage.enabled();
         this.world = Objects.requireNonNull(expectedWorld, "expectedWorld");
         this.session = Objects.requireNonNull(session, "session");
         this.generationCurrent = Objects.requireNonNull(generationCurrent, "generationCurrent");
@@ -96,6 +99,24 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
 
     @Override
     public ChunkCapture.@Nullable Chunk loaded(int chunkX, int chunkZ) {
+        net.minecraft.world.chunk.Chunk chunk = this.loadedChunk(chunkX, chunkZ);
+        if (chunk == null) return null;
+        return this.wrap(chunk);
+    }
+
+    /** Copies only already-received biome columns; never resolves or writes unknown biome cells. */
+    public int @Nullable [] biomes(int chunkX, int chunkZ) {
+        net.minecraft.world.chunk.Chunk chunk = this.loadedChunk(chunkX, chunkZ);
+        if (chunk == null) return null;
+        if (chunk.getClass() != net.minecraft.world.chunk.Chunk.class)
+            throw new UnsupportedOperationException("Unsupported client biome chunk representation");
+        int[] copied = this.endlessLoaded ? EndlessBiomeStorage.read(chunk, this.extendedBiomes)
+            : TintCapture.biomes(chunk.getBiomeArray());
+        this.requireCurrent();
+        return copied;
+    }
+
+    private net.minecraft.world.chunk.@Nullable Chunk loadedChunk(int chunkX, int chunkZ) {
         this.requireCurrent();
         net.minecraft.world.chunk.Chunk chunk = this.chunkProvider.provideChunk(chunkX, chunkZ);
         // Do not test ordinary chunk contents for emptiness: a loaded all-air chunk is known data.
@@ -106,6 +127,11 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         if (chunk.worldObj != this.world || chunk.xPosition != chunkX || chunk.zPosition != chunkZ) {
             throw new IllegalStateException("Loaded client chunk belongs to another world or coordinate");
         }
+        this.requireCurrent();
+        return chunk;
+    }
+
+    private ChunkCapture.Chunk wrap(net.minecraft.world.chunk.Chunk chunk) {
         ExtendedBlockStorage[] sections = chunk.getBlockStorageArray();
         if (sections == null || sections.length != 16) {
             throw new UnsupportedOperationException("Unsupported client chunk section span");

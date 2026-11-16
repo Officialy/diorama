@@ -11,8 +11,10 @@ import org.jspecify.annotations.Nullable;
 
 import dev.diorama.bake.Looks;
 import dev.diorama.bake.PreparedBlockLooks;
+import dev.diorama.data.ChunkSnapshot;
 import dev.diorama.gtnh.capture.ChunkCapture;
 import dev.diorama.gtnh.capture.EpochFence;
+import dev.diorama.gtnh.capture.TintCapture;
 
 /**
  * Early resource hooks and owner-thread capture/acceptance gate. No worker, texture upload, disk
@@ -201,16 +203,18 @@ public final class ClientCaptureLifecycle {
     }
 
     /** Native owner-thread handle: never send it, its access, or its appearance callbacks to workers. */
-    public static final class Session {
+    public static final class Session implements ChunkCapture.Inputs {
 
         private final Object token;
         private final ClientBlockAppearance appearance;
         private final ClientCaptureAccess access;
+        private final ClientBiomeColors biomes;
 
         private Session(Object token, ClientBlockAppearance appearance, ClientCaptureAccess access) {
             this.token = token;
             this.appearance = appearance;
             this.access = access;
+            this.biomes = new ClientBiomeColors(access);
         }
 
         public Object token() {
@@ -231,6 +235,40 @@ public final class ClientCaptureLifecycle {
 
         public ClientCaptureAccess access() {
             return this.access;
+        }
+
+        /** Explicit one-shot capture; callers prepare supported looks first. Nothing is scheduled here. */
+        public ChunkCapture.Result capture(int chunkX, int chunkZ) {
+            return ChunkCapture.capture(this.access, this, chunkX, chunkZ);
+        }
+
+        @Override
+        public Object session() {
+            return this.token;
+        }
+
+        @Override
+        public int airId() {
+            return this.appearance.looks()
+                .airId();
+        }
+
+        @Override
+        public int lookId(int rawId, int metadata, int x, int y, int z) {
+            // The current audited cube whitelist is context-independent; unknowns remain pending.
+            return this.appearance.find(rawId, metadata);
+        }
+
+        @Override
+        public ChunkSnapshot.@Nullable Tints tints(int chunkX, int chunkZ, int[] surface) {
+            // Vanilla grass/leaves/water use a 3x3 neighbourhood. No new user setting is introduced.
+            return TintCapture.prepare(this.biomes, this.token, chunkX, chunkZ, surface, 1);
+        }
+
+        @Override
+        public int fogColor(int chunkX, int chunkZ) {
+            // Canonical unrecognised-biome Nether haze, not camera/weather/potion fog.
+            return ChunkSnapshot.NETHER_WASTES_FOG;
         }
     }
 }

@@ -72,8 +72,11 @@ public final class ChunkCapture {
         /** A published valid look ID, or negative if appearance is not ready/supported. */
         int lookId(int blockId, int metadata, int worldX, int worldY, int worldZ);
 
-        /** Null means not ready; white arrays are not an implicit success fallback. */
-        ChunkSnapshot.@Nullable Tints tints(int chunkX, int chunkZ);
+        /**
+         * Receives a detached resolved-non-air height array in (localZ << 4) | localX order; empty
+         * columns are Integer.MIN_VALUE. Null means not ready, never an implicit white fallback.
+         */
+        ChunkSnapshot.@Nullable Tints tints(int chunkX, int chunkZ, int[] surface);
 
         int fogColor(int chunkX, int chunkZ);
     }
@@ -200,7 +203,7 @@ public final class ChunkCapture {
                 skyLight[sectionIndex] = sky;
             }
             current(access, session);
-            ChunkSnapshot.Tints tints = inputs.tints(chunkX, chunkZ);
+            ChunkSnapshot.Tints tints = inputs.tints(chunkX, chunkZ, surface.clone());
             current(access, session);
             if (tints == null) throw new Pending();
             int fog = inputs.fogColor(chunkX, chunkZ);

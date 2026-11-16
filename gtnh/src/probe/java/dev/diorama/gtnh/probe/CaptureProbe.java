@@ -26,6 +26,7 @@ public final class CaptureProbe {
         completeCapture(false);
         extendedMetadata();
         knownEmpty();
+        surfaceInputs();
         pending();
         stale();
         invalid();
@@ -142,6 +143,7 @@ public final class CaptureProbe {
             require(
                 snapshot.surface(column & 15, column >>> 4) == surfaces[column],
                 "column top uses resolved kind, not opacity or raw zero");
+            require(f.retainedSurface[column] == surfaces[column], "tint callback receives real resolved surface");
             put(surfaces[column]);
         }
         require(snapshot.fogColor(-999, 100, 999) == 0x456789, "prepared fog RGB strips alpha");
@@ -213,8 +215,10 @@ public final class CaptureProbe {
         require(
             empty.count("look") == 0 && empty.count("blockLight") == 65536,
             "known empty still captures all Nether light");
-        for (int c = 0; c < 256; c++)
+        for (int c = 0; c < 256; c++) {
             require(allAir.surface(c & 15, c >>> 4) == Integer.MIN_VALUE, "all-air column sentinel");
+            require(empty.retainedSurface[c] == Integer.MIN_VALUE, "null-section tint surface sentinel");
+        }
         Fixture alternate = new Fixture(1, true);
         Arrays.fill(alternate.raw[0], 255);
         ChunkSnapshot alt = alternate.capture()
@@ -222,6 +226,8 @@ public final class CaptureProbe {
         require(
             alt.maxY == Integer.MIN_VALUE && alt.sectionIds(0).length == 1 && alt.sectionIds(0)[0] == 3,
             "alternate AIR kind determines height and preserves uniform ID");
+        for (int c = 0; c < 256; c++)
+            require(alternate.retainedSurface[c] == Integer.MIN_VALUE, "resolved nonzero raw AIR tint sentinel");
         Fixture negative = new Fixture(2, true);
         negative.minSection = -2;
         ChunkSnapshot below = negative.capture()
@@ -240,6 +246,52 @@ public final class CaptureProbe {
             glass.maxY == 15 && glass.surface(1, 1) == 15 && glass.surface(2, 1) == 14,
             "glass and water count as non-air height");
         put(glass.maxY);
+    }
+
+    private static void surfaceInputs() {
+        Fixture f = new Fixture(4, true);
+        f.minSection = -2;
+        for (int[] section : f.raw) Arrays.fill(section, 255);
+        int[] expected = new int[256];
+        Arrays.fill(expected, Integer.MIN_VALUE);
+        int maximum = Integer.MIN_VALUE;
+        for (int column = 0; column < 256; column++) {
+            if (column % 5 == 0) continue;
+            int si = (column & 1) == 0 ? 0 : 2;
+            int y = column & 15;
+            f.raw[si][(y << 8) | column] = switch (column % 3) {
+                case 0 -> 0;
+                case 1 -> 4095;
+                default -> 256;
+            };
+            expected[column] = (f.minSection + si) * 16 + y;
+            maximum = Math.max(maximum, expected[column]);
+        }
+        f.surfaceCallback = surface -> {
+            require(
+                f.count("section") == 4 && f.count("look") == 3 * 4096
+                    && f.count("blockLight") == 4 * 4096
+                    && f.count("skyLight") == 4 * 4096,
+                "tint callback follows complete resolved surface and light capture");
+            require(Arrays.equals(surface, expected), "all 256 tint heights match independent sparse oracle");
+            Arrays.fill(surface, Integer.MAX_VALUE);
+        };
+        ChunkCapture.Result result = f.capture();
+        status(result, ChunkCapture.Status.READY, f.epoch);
+        ChunkSnapshot snapshot = result.snapshot();
+        require(f.count("tints") == 1, "one surface callback per complete capture");
+        require(snapshot.maxY == maximum, "callback mutation does not affect maximum height");
+        for (int column = 0; column < 256; column++) {
+            require(f.retainedSurface[column] == Integer.MAX_VALUE, "callback mutation exercised");
+            require(
+                snapshot.surface(column & 15, column >>> 4) == expected[column],
+                "callback cannot mutate capture-owned column heights");
+        }
+        Arrays.fill(f.retainedSurface, Integer.MIN_VALUE);
+        require(snapshot.maxY == maximum, "retained callback array cannot change snapshot maximum");
+        for (int column = 0; column < 256; column++) require(
+            snapshot.surface(column & 15, column >>> 4) == expected[column],
+            "retained callback array cannot change snapshotted column heights");
     }
 
     private static void pending() {
@@ -494,6 +546,8 @@ public final class CaptureProbe {
         private final int[][] raw, meta, blocks, skies;
         private final boolean[] nullSections;
         private ChunkSnapshot.Tints tint;
+        private int[] retainedSurface;
+        private Consumer<int[]> surfaceCallback;
         private int overrideLook = Integer.MIN_VALUE;
         private int rawMask;
         private final Map<String, Integer> calls = new HashMap<>();
@@ -598,9 +652,12 @@ public final class CaptureProbe {
             }
 
             @Override
-            public ChunkSnapshot.Tints tints(int x, int z) {
+            public ChunkSnapshot.Tints tints(int x, int z, int[] surface) {
                 touch("tints");
                 require(x == cx && z == cz, "tint chunk coordinates");
+                require(surface.length == 256, "complete tint surface dimensions");
+                retainedSurface = surface;
+                if (surfaceCallback != null) surfaceCallback.accept(surface);
                 return tint;
             }
 
