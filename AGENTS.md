@@ -2,7 +2,7 @@
 
 ## Tooling
 
-modaccel (https://github.com/Noisemaker111/modding-accelerator, local clone `E:\w\scratch-modacc\modding-accelerator`) drives the running game, so agents can verify work and experiment in seconds. Building this tooling is part of the job.
+modaccel (https://github.com/Noisemaker111/modding-accelerator) drives the running game, so agents can verify work and experiment in seconds. Keep the local clone location in ignored machine-local notes rather than this file. Building this tooling is part of the job.
 
 When a modaccel change would make your task faster, or you catch yourself repeating a manual step in Minecraft, change modaccel first and use it in the task. Then open a PR upstream saying what it did in practice.
 
@@ -23,6 +23,7 @@ When a product call goes to Dara, lead with Xaero's precedent.
 ## Repository hygiene for the GTNH port
 
 - Track source, pinned build inputs (including Gradle wrapper JARs), reusable architecture and test instructions.
+- Known downgrader deviations and their scoped impact are documented in [the legacy build README](gtnh/README.md#known-compatibility-failures). Do not repeat unchanged, non-impacting deviations in routine progress reports; retain strict assertions and report new failures or changed impact honestly.
 - Keep machine paths/instance inventories, reference clones, screenshots, logs, generated audits and progress diaries in `/.local/`; existing local GTNH milestone notes are explicitly ignored. Do not copy credentials into these notes.
 - Keep `.gitignore` current when adding local tools or generated output. Do not blanket-ignore documentation, JARs or lockfiles needed to reproduce a build.
 - Before committing, inspect the staged file list and diff; keep reusable docs independent of ignored local evidence. Do not stage build caches, game directories or downloaded dependencies. A commit does not authorize a push or deployment. Current development is local-only; defer push/release preparation until the basic functional loop is complete and the user requests it.

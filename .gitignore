@@ -24,6 +24,11 @@ bin/
 .classpath
 .project
 
+# python tool caches
+
+__pycache__/
+*.py[cod]
+
 # macos
 
 *.DS_Store
