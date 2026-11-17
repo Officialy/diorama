@@ -13,8 +13,6 @@ import net.minecraft.block.BlockGrass;
 import net.minecraft.block.BlockNewLeaf;
 import net.minecraft.block.BlockOldLeaf;
 import net.minecraft.block.BlockStaticLiquid;
-import net.minecraft.block.BlockStone;
-import net.minecraft.block.BlockWood;
 import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -26,6 +24,7 @@ import net.minecraft.client.resources.data.IMetadataSection;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.IIcon;
 import net.minecraft.util.ResourceLocation;
+import net.minecraft.world.IBlockAccess;
 
 import org.jspecify.annotations.Nullable;
 
@@ -33,10 +32,11 @@ import dev.diorama.bake.PreparedBlockLooks;
 import dev.diorama.gtnh.capture.GrassContext;
 import dev.diorama.gtnh.capture.LegacyLeaves;
 import dev.diorama.gtnh.capture.OpaquePng;
+import dev.diorama.gtnh.capture.StaticCubeAppearance;
 import dev.diorama.gtnh.capture.WaterPng;
 
 /**
- * Explicit client-thread preparation for audited vanilla cubes, leaves, grass contexts and water.
+ * Explicit client-thread preparation for static opaque cubes and audited vanilla leaves, grass and water.
  * Never called by a worker or a tick hook. Animations stay pending except the water-only first-frame
  * path; unsupported renderers, contexts, custom loaders and resources stay pending.
  * generationCurrent must cover resource reload/stitch completion, not just manager identity (the
@@ -90,12 +90,12 @@ public final class ClientBlockAppearance {
     public int find(int rawId, int metadata, int context) {
         if (!this.current()) return -1;
         if (context < 0 || context > GrassContext.SNOWY) return -1;
-        if (rawId < 0 || metadata < 0 || metadata > 15) return -1;
+        if (rawId < 0 || metadata < 0 || metadata > 65535) return -1;
         Block block = Block.getBlockById(rawId);
         if (block == null || Block.getIdFromBlock(block) != rawId) return -1;
         int id = block == Blocks.air && block.getClass() == BlockAir.class && context == 0 ? this.looks.airId()
             : grass(block, metadata) && context != 0 ? this.looks.find(rawId, metadata, context)
-                : context == 0 && supported(block, metadata) ? this.looks.find(rawId, metadata) : -1;
+                : context == 0 ? this.looks.find(rawId, metadata) : -1;
         return this.current() ? id : -1;
     }
 
@@ -107,38 +107,27 @@ public final class ClientBlockAppearance {
     public int prepare(int rawId, int metadata, int context) {
         if (!this.current()) return -1;
         if (context < 0 || context > GrassContext.SNOWY) return -1;
-        if (rawId < 0 || metadata < 0 || metadata > 15) return -1;
+        if (rawId < 0 || metadata < 0 || metadata > 65535) return -1;
         int existing = this.find(rawId, metadata, context);
         if (existing >= 0) return existing;
         Block block = Block.getBlockById(rawId);
         if (block == null || Block.getIdFromBlock(block) != rawId) return -1;
         if (grass(block, metadata)) return context == 0 ? -1 : this.prepareGrass(rawId, metadata, context, block);
-        if (context != 0 || !supported(block, metadata)) return -1;
+        if (context != 0) return -1;
         if (leaf(block, metadata)) return this.prepareLeaves(rawId, metadata, block);
         if (water(block, metadata)) return this.prepareWater(rawId, metadata, block);
-        float[] top = null;
-        float[] side = null;
-        try {
-            if (block.getRenderType() != 0 || !block.isOpaqueCube()
-                || !block.renderAsNormalBlock()
-                || block.hasTileEntity(metadata)
-                || block.getRenderColor(metadata) != 0xFFFFFF
-                || block.getLightValue() != 0) return -1;
-            top = this.average(block.getIcon(1, metadata));
-            side = this.average(block.getIcon(3, metadata));
-        } catch (IOException | RuntimeException unsupported) {
-            top = null;
-            side = null;
-            // This includes close failures after pixels were read; never publish that attempt.
-            // Missing/broken resource packs do not provide a ready white or missing-texture look.
-        } finally {
-            // Even getIcon, custom-loader probes, metadata reads and stream close can reenter mods.
-            // No entry has been published yet; an epoch change invalidates all future lookups.
-            this.current();
-        }
-        if (!this.active || top == null || side == null) return -1;
-        // These exact audited classes have zero emission, no biome tint and full-cube geometry.
-        return this.looks.cube(rawId, metadata, top, side, 0);
+        return StaticCubeAppearance.prepare(this.looks, rawId, metadata, new StaticCubeAppearance.Access() {
+
+            @Override
+            public boolean eligible() {
+                return staticCube(block, metadata);
+            }
+
+            @Override
+            public float[] average(int side) throws IOException {
+                return ClientBlockAppearance.this.average(block.getIcon(side, metadata));
+            }
+        }, this::current);
     }
 
     public boolean isGrass(int rawId, int metadata) {
@@ -177,14 +166,43 @@ public final class ClientBlockAppearance {
         return this.looks.grass(rawId, metadata, context, top, side, overlay);
     }
 
-    private static boolean supported(Block block, int metadata) {
-        return (block == Blocks.stone && block.getClass() == BlockStone.class && metadata == 0)
-            || (block == Blocks.cobblestone && block.getClass() == Block.class && metadata == 0)
-            || (block == Blocks.bedrock && block.getClass() == Block.class && metadata == 0)
-            || (block == Blocks.dirt && block.getClass() == BlockDirt.class && metadata <= 1)
-            || (block == Blocks.planks && block.getClass() == BlockWood.class && metadata <= 5)
-            || leaf(block, metadata)
-            || water(block, metadata);
+    /** A conservative generic path, not a per-mod colour table or a full renderer emulator. */
+    private static boolean staticCube(Block block, int metadata) {
+        Class<?> type = block.getClass();
+        Class<?>[] position = { IBlockAccess.class, int.class, int.class, int.class };
+        // Default world methods are essential: inventory colour/icon/light alone prove nothing
+        // about a mod's biome, neighbour or tile-entity dependent rendering.
+        if (!StaticCubeAppearance
+            .inherits(type, Block.class, new String[] { "colorMultiplier", "func_149720_d" }, position)
+            || !StaticCubeAppearance.inherits(type, Block.class, new String[] { "getLightValue" }, position)
+            || !StaticCubeAppearance
+                .inherits(type, Block.class, new String[] { "setBlockBoundsBasedOnState", "func_149719_a" }, position)
+            // Exact vanilla dirt overrides world icons only for podzol (meta 2), not meta 0/1.
+            || (!(block == Blocks.dirt && type == BlockDirt.class && metadata >= 0 && metadata <= 1)
+                && !StaticCubeAppearance.inherits(
+                    type,
+                    Block.class,
+                    new String[] { "getIcon", "func_149673_e" },
+                    IBlockAccess.class,
+                    int.class,
+                    int.class,
+                    int.class,
+                    int.class))
+            || !StaticCubeAppearance.inherits(type, Block.class, new String[] { "canRenderInPass" }, int.class))
+            return false;
+        return block.getRenderType() == 0 && block.isOpaqueCube()
+            && block.renderAsNormalBlock()
+            && !block.hasTileEntity(metadata)
+            && block.getRenderBlockPass() == 0
+            && block.getRenderColor(metadata) == 0xFFFFFF
+            && block.getLightValue() == 0
+            && StaticCubeAppearance.unitBounds(
+                block.getBlockBoundsMinX(),
+                block.getBlockBoundsMinY(),
+                block.getBlockBoundsMinZ(),
+                block.getBlockBoundsMaxX(),
+                block.getBlockBoundsMaxY(),
+                block.getBlockBoundsMaxZ());
     }
 
     private static boolean leaf(Block block, int metadata) {
