@@ -7,6 +7,7 @@ import net.minecraft.client.resources.IReloadableResourceManager;
 import net.minecraft.client.resources.IResourceManager;
 import net.minecraft.client.resources.IResourceManagerReloadListener;
 import net.minecraftforge.client.ClientCommandHandler;
+import net.minecraftforge.client.event.GuiOpenEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.world.WorldEvent;
 
@@ -21,10 +22,13 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
 
     private volatile int resourceGeneration;
     private WorldClient requestedWorld;
+    private GuiChat terrainChat;
+    private WorldClient terrainWorld;
 
     @Override
     public void init() {
         ClientCommandHandler.instance.registerCommand(new DisplayProbeCommand(this));
+        ClientCommandHandler.instance.registerCommand(new TerrainPreviewCommand(this));
         MinecraftForge.EVENT_BUS.register(this);
         FMLCommonHandler.instance()
             .bus()
@@ -35,6 +39,36 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
 
     void requestDisplayProbe() {
         requestedWorld = Minecraft.getMinecraft().theWorld;
+    }
+
+    void requestTerrainPreview() {
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (!minecraft.func_152345_ab()) throw new IllegalStateException("Terrain command requires client thread");
+        terrainChat = null;
+        terrainWorld = null;
+        if (minecraft.theWorld == null) return;
+        if (minecraft.currentScreen instanceof GuiChat chat) {
+            terrainChat = chat;
+            terrainWorld = minecraft.theWorld;
+        } else {
+            minecraft.displayGuiScreen(new TerrainPreviewScreen(minecraft.theWorld));
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = true)
+    public void onGuiOpen(GuiOpenEvent event) {
+        if (terrainChat == null) return;
+        Minecraft minecraft = Minecraft.getMinecraft();
+        GuiChat originating = terrainChat;
+        WorldClient originatingWorld = terrainWorld;
+        // Consume precisely one transition, including cancellation or another mod replacing null.
+        terrainChat = null;
+        terrainWorld = null;
+        if (!event.isCanceled() && event.gui == null
+            && minecraft.currentScreen == originating
+            && minecraft.theWorld == originatingWorld) {
+            event.gui = new TerrainPreviewScreen(originatingWorld);
+        }
     }
 
     @SubscribeEvent
@@ -57,6 +91,10 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onWorldUnload(WorldEvent.Unload event) {
+        if (event.world == terrainWorld) {
+            terrainChat = null;
+            terrainWorld = null;
+        }
         if (event.world instanceof WorldClient old) ClientCaptureLifecycle.unloaded(old);
     }
 

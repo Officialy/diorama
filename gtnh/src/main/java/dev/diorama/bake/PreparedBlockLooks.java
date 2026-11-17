@@ -10,7 +10,7 @@ import org.jspecify.annotations.Nullable;
 import dev.diorama.gtnh.capture.GrassContext;
 
 /**
- * Append-only, owner-thread preparation of audited cubes, leaves and explicit grass contexts. This
+ * Append-only, owner-thread preparation of audited cubes, leaves, grass contexts and water. This
  * is not a classifier: the client producer must prove geometry, texture and the applicable context
  * before preparation. Workers only consume published Looks arrays; no game callbacks are retained here.
  */
@@ -128,6 +128,22 @@ public final class PreparedBlockLooks extends Looks {
         return this.commit(key, topFace, sideFace, 0, -1, TINT_GRASS);
     }
 
+    /**
+     * Canonical water is a liquid medium, not an opaque cube or a legacy sloped surface. All legacy
+     * levels use the still sprite; the shared tracer owns cell entry, depth and water blending.
+     */
+    public int water(int rawId, int metadata, float[] average) {
+        this.requireOwner();
+        if (metadata < 0 || metadata > 15) throw new IllegalArgumentException("Invalid vanilla water metadata");
+        long key = key(rawId, metadata);
+        int existing = this.existingId(key);
+        if (existing != 0) return existing;
+        checkAverage(average);
+        FaceColor face = new FaceColor();
+        face.add(average, 0);
+        return this.commit(key, face, face, 0, -1, TINT_WATER, WATER);
+    }
+
     // Zero is reserved air, so it can signal a new key without allocating or changing payload.
     private int existingId(long key) {
         if (!this.active) return -1;
@@ -135,14 +151,23 @@ public final class PreparedBlockLooks extends Looks {
     }
 
     private int commit(long key, FaceColor top, FaceColor side, int emission, int constantTint, byte tint) {
+        return this.commit(key, top, side, emission, constantTint, tint, SOLID);
+    }
+
+    private int commit(long key, FaceColor top, FaceColor side, int emission, int constantTint, byte tint, byte kind) {
         if (this.next == this.kind.length) return -1;
         int id = this.next;
         this.setColours(id, top, side);
+        if (kind == WATER) {
+            // Match BlockLooks.colours: both slots retain the still colour with tint weight one.
+            this.top[id] = this.topTinted[id];
+            this.side[id] = this.sideTinted[id];
+        }
         this.emission[id] = (byte) emission;
         this.constantTint[id] = constantTint;
         this.tint[id] = tint;
         // Spawn rules are deliberately not inferred: legacy spawn overlays are not enabled.
-        this.publish(id, SOLID);
+        this.publish(id, kind);
         this.ids.put(key, id);
         this.next++;
         return id;

@@ -11,7 +11,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.14-dev"
+version = "0.8.1-gtnh.15-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -51,7 +51,8 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/gtnh/capture/ChunkCapture.java", "dev/diorama/bake/PreparedBlockLooks.java",
             "dev/diorama/gtnh/capture/OpaquePng.java", "dev/diorama/gtnh/capture/EpochFence.java",
             "dev/diorama/gtnh/capture/SectionBlocks.java", "dev/diorama/gtnh/capture/TintCapture.java",
-            "dev/diorama/gtnh/capture/LegacyLeaves.java", "dev/diorama/gtnh/capture/GrassContext.java")
+            "dev/diorama/gtnh/capture/LegacyLeaves.java", "dev/diorama/gtnh/capture/GrassContext.java", "dev/diorama/gtnh/capture/WaterPng.java",
+            "dev/diorama/gtnh/capture/TerrainPreview.java", "dev/diorama/gtnh/client/TerrainPreviewJob.java", "dev/diorama/gtnh/client/PreviewUpload.java")
     })
     java.source(objects.sourceDirectorySet("offlineFixtures", "Selected offline fixtures").apply {
         srcDir("src/probe/java")
@@ -60,7 +61,8 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/bake/VoxelReaderProbe.java", "dev/diorama/bake/TerrainProbe.java", "dev/diorama/bake/BakeUtilityProbe.java",
             "dev/diorama/gtnh/probe/CaptureProbe.java", "dev/diorama/bake/SpriteAverageProbe.java",
             "dev/diorama/bake/PreparedBlockLooksProbe.java", "dev/diorama/gtnh/probe/OpaquePngProbe.java",
-            "dev/diorama/gtnh/probe/EpochFenceProbe.java", "dev/diorama/gtnh/probe/SectionBlocksProbe.java", "dev/diorama/gtnh/probe/TintCaptureProbe.java", "dev/diorama/bake/GrassProbe.java")
+            "dev/diorama/gtnh/probe/EpochFenceProbe.java", "dev/diorama/gtnh/probe/SectionBlocksProbe.java", "dev/diorama/gtnh/probe/TintCaptureProbe.java", "dev/diorama/bake/GrassProbe.java", "dev/diorama/bake/WaterProbe.java",
+            "dev/diorama/bake/TerrainPreviewProbe.java", "dev/diorama/gtnh/client/TerrainPreviewJobProbe.java", "dev/diorama/gtnh/client/PreviewUploadProbe.java")
     })
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -242,7 +244,8 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             }
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
-            val expectedNested = setOf("dev/diorama/gtnh/capture/GrassContext\$Source.class",
+            val expectedNested = setOf("dev/diorama/gtnh/capture/TerrainPreview\$Work.class",
+                "dev/diorama/gtnh/capture/GrassContext\$Source.class",
                 "dev/diorama/bake/TileImage\$Patch.class",
                 "dev/diorama/gtnh/capture/TintCapture\$Source.class",
                 "dev/diorama/gtnh/capture/TintCapture\$Prepared.class",
@@ -265,7 +268,10 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             require(classes.keys.filterNot { it.startsWith("META-INF/versions/") }.toSet() == expectedBase + expectedNested) {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
-            val expectedMr = setOf("dev/diorama/MapStyle.class", "dev/diorama/bake/TileKey.class",
+            val expectedMr = setOf("dev/diorama/gtnh/capture/TerrainPreview.class",
+                "dev/diorama/gtnh/capture/TerrainPreview\$Work.class",
+                "dev/diorama/gtnh/client/TerrainPreviewScreen.class",
+                "dev/diorama/MapStyle.class", "dev/diorama/bake/TileKey.class",
                 "dev/diorama/gtnh/capture/GrassContext.class",
                 "dev/diorama/gtnh/capture/GrassContext\$Source.class",
                 "dev/diorama/gtnh/capture/TintCapture.class",
@@ -394,7 +400,11 @@ for ((prefix, mainName) in listOf(
     "epochFence" to "dev.diorama.gtnh.probe.EpochFenceProbe",
     "sectionBlocks" to "dev.diorama.gtnh.probe.SectionBlocksProbe",
     "tintCapture" to "dev.diorama.gtnh.probe.TintCaptureProbe",
-    "grass" to "dev.diorama.bake.GrassProbe"
+    "grass" to "dev.diorama.bake.GrassProbe",
+    "water" to "dev.diorama.bake.WaterProbe",
+    "terrainPreview" to "dev.diorama.bake.TerrainPreviewProbe",
+    "terrainPreviewJob" to "dev.diorama.gtnh.client.TerrainPreviewJobProbe",
+    "previewUpload" to "dev.diorama.gtnh.client.PreviewUploadProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {
