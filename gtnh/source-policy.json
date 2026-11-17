@@ -162,6 +162,10 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/capture/LegacyLeaves.java",
+      "fqn": "dev.diorama.gtnh.capture.LegacyLeaves"
+    },
+    {
       "path": "dev/diorama/gtnh/capture/TintCapture.java",
       "fqn": "dev.diorama.gtnh.capture.TintCapture"
     },
@@ -273,7 +277,7 @@
   "deferred": [
     "native capture/resource and early lifecycle hook game execution",
     "legacy snapshot rotation and spawn rules",
-    "complete legacy block appearance/biome provider beyond explicit vanilla cube subset",
+    "complete legacy block appearance beyond audited vanilla cubes and leaves",
     "map display",
     "tile storage",
     "GPU baking"

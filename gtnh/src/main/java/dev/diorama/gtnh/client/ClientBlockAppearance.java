@@ -8,6 +8,8 @@ import java.util.function.BooleanSupplier;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockAir;
 import net.minecraft.block.BlockDirt;
+import net.minecraft.block.BlockNewLeaf;
+import net.minecraft.block.BlockOldLeaf;
 import net.minecraft.block.BlockStone;
 import net.minecraft.block.BlockWood;
 import net.minecraft.client.Minecraft;
@@ -22,10 +24,11 @@ import net.minecraft.util.ResourceLocation;
 import org.jspecify.annotations.Nullable;
 
 import dev.diorama.bake.PreparedBlockLooks;
+import dev.diorama.gtnh.capture.LegacyLeaves;
 import dev.diorama.gtnh.capture.OpaquePng;
 
 /**
- * Explicit client-thread preparation for a small audited vanilla cube subset. Never called by a
+ * Explicit client-thread preparation for audited vanilla cubes and leaves. Never called by a
  * worker or a tick hook. Unsupported renderers, context, animations and resources stay pending.
  * generationCurrent must cover resource reload/stitch completion, not just manager identity (the
  * vanilla resource manager is reused across reloads). It must also cover the caller's capture epoch.
@@ -89,6 +92,7 @@ public final class ClientBlockAppearance {
         if (existing >= 0) return existing;
         Block block = Block.getBlockById(rawId);
         if (block == null || Block.getIdFromBlock(block) != rawId || !supported(block, metadata)) return -1;
+        if (leaf(block, metadata)) return this.prepareLeaves(rawId, metadata, block);
         float[] top = null;
         float[] side = null;
         try {
@@ -117,10 +121,46 @@ public final class ClientBlockAppearance {
         return (block == Blocks.stone && block.getClass() == BlockStone.class && metadata == 0)
             || (block == Blocks.cobblestone && block.getClass() == Block.class && metadata == 0)
             || (block == Blocks.dirt && block.getClass() == BlockDirt.class && metadata <= 1)
-            || (block == Blocks.planks && block.getClass() == BlockWood.class && metadata <= 5);
+            || (block == Blocks.planks && block.getClass() == BlockWood.class && metadata <= 5)
+            || leaf(block, metadata);
+    }
+
+    private static boolean leaf(Block block, int metadata) {
+        boolean old = block == Blocks.leaves && block.getClass() == BlockOldLeaf.class;
+        boolean newer = block == Blocks.leaves2 && block.getClass() == BlockNewLeaf.class;
+        return (old || newer) && LegacyLeaves.sprite(newer, metadata) != null;
+    }
+
+    private int prepareLeaves(int rawId, int metadata, Block block) {
+        float[] average = null;
+        int fixed = -1;
+        try {
+            if (block.getRenderType() != 0 || !block.renderAsNormalBlock()
+                || block.hasTileEntity(metadata)
+                || block.getLightValue() != 0) return -1;
+            boolean newer = block == Blocks.leaves2;
+            String sprite = LegacyLeaves.sprite(newer, metadata);
+            // Use the registered normal leaf sprite, not the graphics-dependent getIcon result.
+            // This follows canonical leaf averaging without changing the game's graphics flags.
+            average = this.average(this.atlas.getTextureExtry(sprite), true);
+            if (LegacyLeaves.fixedTint(newer, metadata)) {
+                fixed = block.getRenderColor(metadata);
+                if (fixed < 0 || fixed > 0xFFFFFF) average = null;
+            }
+        } catch (IOException | RuntimeException unsupported) {
+            average = null;
+        } finally {
+            this.current();
+        }
+        if (!this.active || average == null || average[3] <= 0) return -1;
+        return this.looks.leaves(rawId, metadata, average, fixed);
     }
 
     private float @Nullable [] average(@Nullable IIcon icon) throws IOException {
+        return this.average(icon, false);
+    }
+
+    private float @Nullable [] average(@Nullable IIcon icon, boolean cutout) throws IOException {
         if (icon == null || icon.getClass() != TextureAtlasSprite.class) return null;
         TextureAtlasSprite sprite = (TextureAtlasSprite) icon;
         String name = sprite.getIconName();
@@ -136,7 +176,8 @@ public final class ClientBlockAppearance {
         IResource resource = this.resources.getResource(location);
         try (InputStream stream = resource.getInputStream()) {
             if (resource.getMetadata("animation") != null) return null;
-            return OpaquePng.average(stream, sprite.getIconWidth(), sprite.getIconHeight());
+            return cutout ? OpaquePng.averageCutout(stream, sprite.getIconWidth(), sprite.getIconHeight())
+                : OpaquePng.average(stream, sprite.getIconWidth(), sprite.getIconHeight());
         }
     }
 }

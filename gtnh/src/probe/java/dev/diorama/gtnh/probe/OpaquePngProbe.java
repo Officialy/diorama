@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.Random;
 import java.util.zip.CRC32;
 
 import javax.imageio.ImageIO;
@@ -27,6 +28,8 @@ public final class OpaquePngProbe {
         boundedHeaders();
         formatsAndTruncation();
         failingStream();
+        cutout();
+        cutoutRestrictions();
         StringBuilder hex = new StringBuilder();
         for (byte value : HASH.digest()) {
             hex.append(Character.forDigit((value >>> 4) & 15, 16));
@@ -208,6 +211,121 @@ public final class OpaquePngProbe {
         }
     }
 
+    private static void cutout() throws IOException {
+        for (int pixel : new int[] { 0xFF123456, 0xFFFFFFFF, 0xFF000000, 0, 0x00123456, 0x00FFFFFF }) {
+            cutoutPixels(1, new int[] { pixel });
+        }
+        int[] holes = { 0xFF102030, 0x00123456, 0xFF80A0E0, 0x00FFFFFF };
+        float[] first = cutoutPixels(2, holes);
+        exact(
+            first,
+            new float[] { 72 / 255.0F, 96 / 255.0F, 136 / 255.0F, 0.5F },
+            "holes use visible colour and total coverage");
+        holes[1] = 0x00FF0000;
+        holes[3] = 0x0000FF00;
+        exact(cutoutPixels(2, holes), first, "hidden RGB cannot affect colour or coverage");
+        cutoutPixels(2, new int[] { 0x00FFFFFF, 0x00123456, 0, 0x00FF0000 });
+        for (int alpha = 1; alpha < 255; alpha++) {
+            // Includes 1/25/26/127/254, after valid visible and hidden pixels.
+            byte[] data = png(
+                2,
+                2,
+                BufferedImage.TYPE_INT_ARGB,
+                new int[] { 0xFF123456, 0x00123456, 0xFFABCDEF, alpha << 24 | 0x654321 });
+            require(attempt(data, 2, 2, false, true) == null, "cutout rejects every intermediate alpha");
+        }
+        Random random = new Random(0x4355544F55544CL);
+        for (int size : new int[] { 1, 2, 3, 7, 16, 31 }) {
+            for (int trial = 0; trial < 12; trial++) {
+                int[] pixels = new int[size * size];
+                for (int i = 0; i < pixels.length; i++) {
+                    pixels[i] = random.nextInt() & 0xFFFFFF | (random.nextBoolean() ? 0xFF000000 : 0);
+                }
+                cutoutPixels(size, pixels);
+            }
+        }
+    }
+
+    private static float[] cutoutPixels(int size, int[] pixels) throws IOException {
+        byte[] data = png(size, size, BufferedImage.TYPE_INT_ARGB, pixels);
+        float[] actual = attempt(data, size, size, false, true);
+        exact(actual, binaryExpected(pixels), "binary PNG matches independent scalar oracle");
+        boolean opaque = true;
+        for (int pixel : pixels) opaque &= (pixel >>> 24) == 255;
+        if (opaque) exact(attempt(data, size, size, false), actual, "opaque and cutout agree for opaque PNG");
+        else unsupported(data, size, size);
+        return actual;
+    }
+
+    // Binary-alpha oracle: integer visible-channel sums, independent of SpriteAverage.
+    private static float[] binaryExpected(int[] pixels) {
+        long red = 0, green = 0, blue = 0;
+        int visible = 0;
+        for (int pixel : pixels) {
+            if ((pixel >>> 24) == 0) continue;
+            require((pixel >>> 24) == 255, "oracle accepts only binary fixtures");
+            red += (pixel >>> 16) & 255;
+            green += (pixel >>> 8) & 255;
+            blue += pixel & 255;
+            visible++;
+        }
+        if (visible == 0) return new float[] { 0, 0, 0, 0 };
+        return new float[] { (float) ((double) red / visible / 255), (float) ((double) green / visible / 255),
+            (float) ((double) blue / visible / 255), (float) visible / pixels.length };
+    }
+
+    private static void cutoutRestrictions() throws IOException {
+        boolean cache = ImageIO.getUseCache();
+        byte[] square = png(2, 2, BufferedImage.TYPE_INT_ARGB, new int[] { 0xFF123456, 0, 0xFFABCDEF, 0x00123456 });
+        for (int[] size : new int[][] { { 1, 1 }, { 3, 3 }, { 0, 0 }, { -1, -1 },
+            { Integer.MIN_VALUE, Integer.MIN_VALUE }, { 2, 1 }, { 1, 2 }, { 2, 0 }, { 0, 2 } }) {
+            require(attempt(square, size[0], size[1], false, true) == null, "cutout dimension mismatch rejected");
+        }
+        for (int[] size : new int[][] { { 2, 1 }, { 1, 2 } }) {
+            byte[] rectangle = png(size[0], size[1], BufferedImage.TYPE_INT_ARGB, new int[] { 0xFF123456, 0 });
+            require(attempt(rectangle, size[0], size[1], false, true) == null, "cutout rejects non-square request");
+            require(attempt(rectangle, 1, 1, false, true) == null, "cutout checks both decoded dimensions");
+        }
+        for (int width : new int[] { 4097, 65536, Integer.MAX_VALUE }) {
+            TrackingInput stream = new TrackingInput(new byte[] { 1 }, 0);
+            require(OpaquePng.averageCutout(stream, width, width) == null, "cutout oversized request rejected");
+            require(stream.position == 0 && !stream.closed, "cutout oversized request never reads or closes input");
+            cases++;
+            put(width);
+        }
+        byte[] tiny = headerOnly(1, 1);
+        attempt(tiny, 1, 1, true, true); // Positive control: matching header reaches missing IDAT.
+        for (int[] size : new int[][] { { 4097, 4097 }, { 65536, 65536 }, { Integer.MAX_VALUE, 1 },
+            { 1, Integer.MAX_VALUE } }) {
+            require(
+                attempt(headerOnly(size[0], size[1]), 1, 1, false, true) == null,
+                "cutout rejects huge header before pixel decoding");
+        }
+        TrackingInput boundary = new TrackingInput(tiny, Integer.MAX_VALUE);
+        require(OpaquePng.averageCutout(boundary, 4096, 4096) == null, "cutout upper boundary inspects header");
+        require(boundary.position > 0 && !boundary.closed, "cutout boundary reads header without taking ownership");
+        require(attempt(new byte[0], 1, 1, false, true) == null, "cutout rejects missing signature");
+        require(
+            attempt(new byte[] { 'n', 'o', 't', '-', 'p', 'n', 'g' }, 1, 1, false, true) == null,
+            "cutout rejects non-PNG signature");
+        attempt(Arrays.copyOf(square, 16), 2, 2, true, true);
+        for (int failAfter : new int[] { 0, 4, 8, 16 }) {
+            TrackingInput stream = new TrackingInput(square, failAfter);
+            boolean failed = false;
+            try {
+                OpaquePng.averageCutout(stream, 2, 2);
+            } catch (IOException expected) {
+                failed = true;
+            } finally {
+                require(!stream.closed, "cutout IO failure preserves stream ownership");
+            }
+            require(failed, "cutout propagates source IOException");
+            put(failAfter);
+            cases++;
+        }
+        require(ImageIO.getUseCache() == cache, "cutout does not change global ImageIO cache policy");
+    }
+
     private static byte[] png(int width, int height, int type, int[] pixels) throws IOException {
         require(pixels.length == width * height, "fixture pixel count");
         BufferedImage image = new BufferedImage(width, height, type);
@@ -232,11 +350,16 @@ public final class OpaquePngProbe {
     }
 
     private static float[] attempt(byte[] data, int width, int height, boolean expectIo) throws IOException {
+        return attempt(data, width, height, expectIo, false);
+    }
+
+    private static float[] attempt(byte[] data, int width, int height, boolean expectIo, boolean cutout)
+        throws IOException {
         TrackingInput stream = new TrackingInput(data, Integer.MAX_VALUE);
         float[] result = null;
         boolean failed = false;
         try {
-            result = OpaquePng.average(stream, width, height);
+            result = cutout ? OpaquePng.averageCutout(stream, width, height) : OpaquePng.average(stream, width, height);
         } catch (IOException expected) {
             if (!expectIo) throw expected;
             failed = true;

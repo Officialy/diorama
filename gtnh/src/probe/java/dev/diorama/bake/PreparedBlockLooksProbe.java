@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import dev.diorama.data.ChunkSnapshot;
 import dev.diorama.gtnh.capture.ChunkCapture;
+import dev.diorama.gtnh.capture.LegacyLeaves;
 
 /** Standalone CPU contract probe; real capture interfaces, never substitute Minecraft classes. */
 public final class PreparedBlockLooksProbe {
@@ -22,6 +23,11 @@ public final class PreparedBlockLooksProbe {
         digest = MessageDigest.getInstance("SHA-256");
         allocation();
         extendedKeys();
+        leaves();
+        leafInputs();
+        leafLifecycle();
+        leafTint();
+        leafSpecies();
         rejectedInputs();
         lifecycle();
         wrongThread();
@@ -36,7 +42,7 @@ public final class PreparedBlockLooksProbe {
         System.out.println("FIXTURE-SHA256=" + hex);
         System.out.println(
             "PASS prepared looks; assertions=" + assertions.get()
-                + "; allocation, rejection atomicity, epochs, owner guard, bounded publication, ChunkCapture"
+                + "; cubes/leaves, rejection atomicity, epochs, owner guard, bounded publication, ChunkCapture, TileBaker tint"
                 + "; MC/GL/texture auditing/result acceptance UNTESTED");
     }
 
@@ -100,6 +106,157 @@ public final class PreparedBlockLooksProbe {
                 require(t.find(raw, meta) == id, "all extended keys survive later insertions without collision");
                 require(t.cube(raw, meta, SIDE, TOP, 0) == id, "extended duplicate retains ID at capacity");
                 fields(t, id, Looks.SOLID, 0xFF8000, 0x0040FF, 5);
+            }
+        }
+    }
+
+    private static void leaves() {
+        PreparedBlockLooks t = new PreparedBlockLooks(new Object(), 41);
+        int next = 1;
+        for (float coverage : new float[] { 1, 0.1F, 1.0F / 256 }) {
+            for (int tint : new int[] { -1, 0, 0xFFFFFF, 0x4080C0 }) {
+                for (boolean black : new boolean[] { false, true }) {
+                    float[] average = black ? new float[] { 0, 0, 0, coverage } : TOP.clone();
+                    average[3] = coverage;
+                    int meta = next * 256;
+                    int id = t.leaves(2, meta, average, tint);
+                    require(id == next++, "leaf IDs append densely");
+                    require(t.find(2, meta) == id, "leaf key lookup");
+                    leafFields(t, id, black ? 0 : 0xFF8000, tint);
+                    Arrays.fill(average, Float.NaN);
+                    leafFields(t, id, black ? 0 : 0xFF8000, tint);
+                    put(payload(t, id));
+                }
+            }
+        }
+        for (int raw : new int[] { 0, 1, 65536, Integer.MAX_VALUE }) {
+            for (int meta : new int[] { 0, 16, 256, 65535 }) {
+                require(t.find(raw, meta) == -1, "leaf extended keys never collide");
+                int id = t.leaves(raw, meta, SIDE, -1);
+                require(id == next++, "leaf extended keys append without collision");
+                leafFields(t, id, 0x0040FF, -1);
+            }
+        }
+        String before = payload(t, 1);
+        require(t.leaves(2, 256, null, -2) == 1, "leaf duplicate at capacity skips validation");
+        require(t.cube(2, 256, null, null, -1) == 1, "cube cannot rewrite a leaf key");
+        require(before.equals(payload(t, 1)), "leaf duplicate payload is immutable");
+        require(t.leaves(9, 0, TOP, -1) == -1 && t.find(9, 0) == -1, "full leaf miss stays pending");
+        PreparedBlockLooks cube = new PreparedBlockLooks(new Object(), 2);
+        cube.cube(7, 0, TOP, SIDE, 15);
+        before = payload(cube, 1);
+        require(cube.leaves(7, 0, null, -2) == 1 && before.equals(payload(cube, 1)), "leaf cannot rewrite cube key");
+        require(new PreparedBlockLooks(new Object(), 1).leaves(1, 0, TOP, -1) == -1, "air-only table rejects leaves");
+    }
+
+    private static void leafFields(PreparedBlockLooks t, int id, int colour, int tint) {
+        require(t.isPrepared(id) && t.kind[id] == Looks.SOLID, "even sparse leaves remain SOLID, never GLASS");
+        require(t.top[id] == 0 && t.side[id] == 0, "leaf colour has no untinted part");
+        require(t.topTinted[id] == colour && t.sideTinted[id] == colour, "shared canonical tinted face colour");
+        require(
+            t.topTintWeight[id] == 1 && t.sideTintWeight[id] == 1,
+            "black and sparse leaves retain full tint weight");
+        require(t.tint[id] == (tint == -1 ? Looks.TINT_FOLIAGE : Looks.TINT_NONE), "foliage or fixed tint selector");
+        require(t.constantTint[id] == tint && t.emission[id] == 0, "fixed colour and zero emission");
+        require(!t.spawnOn[id] && !t.spawnIn[id], "leaves disallow both spawn flags");
+        require(t.shape[id] == 0 && t.wetShape[id] == -1, "leaves retain dry whole-cube shape");
+        require(t.shapes.length == 1 && t.shapes[0].length == 0, "leaves retain no collision geometry");
+    }
+
+    private static void leafInputs() {
+        PreparedBlockLooks t = new PreparedBlockLooks(new Object(), 2);
+        String before = payload(t, 0) + payload(t, 1);
+        for (int[] key : new int[][] { { -1, 0 }, { 1, -1 }, { 1, 65536 } }) {
+            expect(IllegalArgumentException.class, () -> t.leaves(key[0], key[1], TOP, -1));
+            unchanged(t, before);
+        }
+        expect(NullPointerException.class, () -> t.leaves(7, 0, null, -1));
+        unchanged(t, before);
+        for (float[] average : new float[][] { new float[0], new float[3], new float[5] }) {
+            expect(IllegalArgumentException.class, () -> t.leaves(7, 0, average, -1));
+            unchanged(t, before);
+        }
+        for (int channel = 0; channel < 4; channel++) {
+            for (float value : new float[] { Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY, -0.01F,
+                1.01F }) {
+                float[] average = TOP.clone();
+                average[channel] = value;
+                expect(IllegalArgumentException.class, () -> t.leaves(7, 0, average, -1));
+                unchanged(t, before);
+            }
+        }
+        for (float zero : new float[] { 0, -0.0F }) {
+            expect(IllegalArgumentException.class, () -> t.leaves(7, 0, new float[] { 1, 1, 1, zero }, -1));
+            unchanged(t, before);
+        }
+        for (int tint : new int[] { -2, Integer.MIN_VALUE, 0x1000000, Integer.MAX_VALUE }) {
+            expect(IllegalArgumentException.class, () -> t.leaves(7, 0, TOP, tint));
+            unchanged(t, before);
+        }
+        require(t.leaves(7, 0, TOP, -1) == 1, "leaf rejections consume no IDs");
+        leafFields(t, 1, 0xFF8000, -1);
+    }
+
+    private static void leafLifecycle() throws Exception {
+        PreparedBlockLooks t = new PreparedBlockLooks(new Object(), 3);
+        int id = t.leaves(Integer.MAX_VALUE, 65535, TOP, 0);
+        String before = payload(t, 0) + payload(t, 1) + payload(t, 2);
+        runWorker(() -> {
+            expect(IllegalStateException.class, () -> t.leaves(2, 0, TOP, -1));
+            expect(IllegalStateException.class, () -> t.leaves(Integer.MAX_VALUE, 65535, null, -2));
+            leafFields(t, t.ensure(id), 0xFF8000, 0);
+        });
+        require(before.equals(payload(t, 0) + payload(t, 1) + payload(t, 2)), "wrong-thread leaves have no effects");
+        require(t.leaves(2, 0, SIDE, -1) == 2, "wrong-thread leaves consume no IDs");
+        before = payload(t, id);
+        t.invalidate();
+        require(t.find(Integer.MAX_VALUE, 65535) == -1, "invalidated leaf key stays pending");
+        require(t.leaves(Integer.MAX_VALUE, 65535, null, -2) == -1, "invalidated duplicate skips payload");
+        require(t.leaves(3, 0, TOP, -1) == -1, "invalidated leaves cannot allocate");
+        require(t.ensure(id) == id && before.equals(payload(t, id)), "in-flight leaf payload survives invalidation");
+    }
+
+    private static void leafTint() {
+        for (int tint : new int[] { -1, 0, 0xFFFFFF, 0xFF0000 }) {
+            Scene scene = new Scene();
+            scene.foliage = 0x00FF00;
+            int id = scene.table.leaves(scene.raw, scene.meta, new float[] { 1, 1, 1, 1.0F / 256 }, tint);
+            ChunkCapture.Result result = scene.capture();
+            require(result.status() == ChunkCapture.Status.READY, "leaf captures through real resolver");
+            scene.sourceSnapshot = result.snapshot();
+            TileBaker baker = TileBaker.forMeshing(new TileKey(TileKey.SURFACE, 0, 0), scene, scene.table, false, null);
+            int expected = tint == -1 ? scene.foliage : tint;
+            for (boolean top : new boolean[] { true, false }) {
+                baker.albedo(id, 2, 4, top);
+                require(
+                    baker.albedoR == ((expected >> 16) & 255) / 255.0F
+                        && baker.albedoG == ((expected >> 8) & 255) / 255.0F
+                        && baker.albedoB == (expected & 255) / 255.0F,
+                    "actual TileBaker applies biome/fixed/black/white tint to both faces");
+            }
+        }
+    }
+
+    private static void leafSpecies() {
+        String[] old = { "leaves_oak", "leaves_spruce", "leaves_birch", "leaves_jungle" };
+        String[] newer = { "leaves_acacia", "leaves_big_oak" };
+        for (int meta = 0; meta < 16; meta++) {
+            int species = meta & 3;
+            require(old[species].equals(LegacyLeaves.sprite(false, meta)), "old species ignores decay flags");
+            require(
+                species < 2 ? newer[species].equals(LegacyLeaves.sprite(true, meta))
+                    : LegacyLeaves.sprite(true, meta) == null,
+                "new species accepts only acacia and dark oak with decay flags");
+            require(
+                LegacyLeaves.fixedTint(false, meta) == (species == 1 || species == 2),
+                "only old spruce/birch use fixed tint");
+            require(!LegacyLeaves.fixedTint(true, meta), "new leaves always use biome foliage");
+        }
+        for (int meta : new int[] { -1, 16, 65535 }) {
+            for (boolean newerBlock : new boolean[] { false, true }) {
+                require(
+                    LegacyLeaves.sprite(newerBlock, meta) == null && !LegacyLeaves.fixedTint(newerBlock, meta),
+                    "unaudited metadata rejected");
             }
         }
     }
@@ -316,7 +473,8 @@ public final class PreparedBlockLooksProbe {
         }
     }
 
-    private static final class Scene implements ChunkCapture.Chunk, ChunkCapture.Section, ChunkCapture.Inputs {
+    private static final class Scene
+        implements ChunkCapture.Chunk, ChunkCapture.Section, ChunkCapture.Inputs, VoxelReader.Inputs {
 
         static final int CELL = (3 << 8) | (4 << 4) | 2;
         final Thread owner = Thread.currentThread();
@@ -327,6 +485,8 @@ public final class PreparedBlockLooksProbe {
         int raw = 4095, meta = 15;
         int resolvedRaw = -1, resolvedMeta = -1;
         int lookCalls;
+        int foliage = 0xFFFFFF;
+        ChunkSnapshot sourceSnapshot;
         final ChunkCapture.Access access = new ChunkCapture.Access() {
 
             public boolean onThread() {
@@ -352,6 +512,30 @@ public final class PreparedBlockLooksProbe {
 
         public Object session() {
             return table.session();
+        }
+
+        public Object lookDomain() {
+            return table;
+        }
+
+        public ChunkSnapshot chunk(int x, int z) {
+            return x == 0 && z == 0 ? sourceSnapshot : null;
+        }
+
+        public int minY() {
+            return 0;
+        }
+
+        public int maxY() {
+            return 16;
+        }
+
+        public int topY() {
+            return 4;
+        }
+
+        public boolean isSeen(int x, int y, int z) {
+            return true;
         }
 
         public int chunkX() {
@@ -414,7 +598,9 @@ public final class PreparedBlockLooksProbe {
         public ChunkSnapshot.Tints tints(int x, int z, int[] surface) {
             int[] white = new int[256];
             Arrays.fill(white, 0xFFFFFF);
-            return new ChunkSnapshot.Tints(white, white, white, white);
+            int[] leaves = new int[256];
+            Arrays.fill(leaves, foliage);
+            return new ChunkSnapshot.Tints(white, leaves, white, white);
         }
 
         public int fogColor(int x, int z) {
