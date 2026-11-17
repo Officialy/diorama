@@ -14,6 +14,7 @@ import dev.diorama.bake.PreparedBlockLooks;
 import dev.diorama.data.ChunkSnapshot;
 import dev.diorama.gtnh.capture.ChunkCapture;
 import dev.diorama.gtnh.capture.EpochFence;
+import dev.diorama.gtnh.capture.GrassContext;
 import dev.diorama.gtnh.capture.TintCapture;
 
 /**
@@ -229,8 +230,16 @@ public final class ClientCaptureLifecycle {
             return this.appearance.prepare(rawId, metadata);
         }
 
+        public int prepare(int rawId, int metadata, int context) {
+            return this.appearance.prepare(rawId, metadata, context);
+        }
+
         public int find(int rawId, int metadata) {
             return this.appearance.find(rawId, metadata);
+        }
+
+        public int find(int rawId, int metadata, int context) {
+            return this.appearance.find(rawId, metadata, context);
         }
 
         public ClientCaptureAccess access() {
@@ -255,7 +264,10 @@ public final class ClientCaptureLifecycle {
 
         @Override
         public int lookId(int rawId, int metadata, int x, int y, int z) {
-            // The current audited cube whitelist is context-independent; unknowns remain pending.
+            if (this.appearance.isGrass(rawId, metadata)) {
+                int context = GrassContext.resolve(this.access, this.token, x, y, z);
+                return context == GrassContext.UNKNOWN ? -1 : this.appearance.find(rawId, metadata, context);
+            }
             return this.appearance.find(rawId, metadata);
         }
 

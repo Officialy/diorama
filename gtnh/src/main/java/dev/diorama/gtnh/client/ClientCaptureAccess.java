@@ -4,6 +4,7 @@ import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
 import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ChunkProviderClient;
 import net.minecraft.client.multiplayer.WorldClient;
@@ -19,6 +20,7 @@ import org.jspecify.annotations.Nullable;
 
 import cpw.mods.fml.common.Loader;
 import dev.diorama.gtnh.capture.ChunkCapture;
+import dev.diorama.gtnh.capture.GrassContext;
 import dev.diorama.gtnh.capture.SectionBlocks;
 import dev.diorama.gtnh.capture.TintCapture;
 
@@ -27,7 +29,7 @@ import dev.diorama.gtnh.capture.TintCapture;
  * Optional EndlessIDs access is isolated from the vanilla array path. Live wrappers are for
  * immediate ChunkCapture consumption only; they must never be published to a worker or retained.
  */
-public final class ClientCaptureAccess implements ChunkCapture.Access {
+public final class ClientCaptureAccess implements ChunkCapture.Access, GrassContext.Source {
 
     private final Minecraft minecraft;
     private final WorldClient world;
@@ -104,6 +106,36 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         return this.wrap(chunk);
     }
 
+    @Override
+    public int rawBlockId(int x, int y, int z) {
+        this.requireCurrent();
+        if (y < 0 || y > 255) throw new IllegalArgumentException("Raw context height outside legacy world");
+        net.minecraft.world.chunk.Chunk chunk = this.loadedChunk(x >> 4, z >> 4);
+        if (chunk == null) return -1;
+        ExtendedBlockStorage[] sections = chunk.getBlockStorageArray();
+        if (sections == null || sections.length != 16)
+            throw new UnsupportedOperationException("Unsupported context section span");
+        int index = y >> 4;
+        ExtendedBlockStorage section = sections[index];
+        if (section == null) {
+            this.requireCurrent();
+            return this.airBlockId;
+        }
+        SectionBlocks data = this.blockData(section, index);
+        return this.rawId(section, data, ((y & 15) << 8) | ((z & 15) << 4) | (x & 15));
+    }
+
+    @Override
+    public int snowContext(int rawId) {
+        this.requireCurrent();
+        if (rawId < 0) return GrassContext.UNKNOWN;
+        Block block = Block.getBlockById(rawId);
+        if (block == null || Block.getIdFromBlock(block) != rawId) return GrassContext.UNKNOWN;
+        Material material = block.getMaterial();
+        this.requireCurrent();
+        return material == Material.snow || material == Material.craftedSnow ? GrassContext.SNOWY : GrassContext.NORMAL;
+    }
+
     /** Copies only already-received biome columns; never resolves or writes unknown biome cells. */
     public int @Nullable [] biomes(int chunkX, int chunkZ) {
         net.minecraft.world.chunk.Chunk chunk = this.loadedChunk(chunkX, chunkZ);
@@ -141,20 +173,42 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         for (int i = 0; i < sections.length; i++) {
             ExtendedBlockStorage section = sections[i];
             if (section == null) continue;
-            if (section.getClass() != ExtendedBlockStorage.class || section.getYLocation() != (i << 4)) {
-                throw new UnsupportedOperationException("Unsupported client section representation or origin");
-            }
-            if (this.endlessLoaded) EndlessSectionStorage.check(section, this.extended);
-            // Do not call the legacy ID/meta getters when EndlessIDs has replaced them.
-            blocks[i] = this.extended ? EndlessSectionStorage.read(section)
-                : SectionBlocks.vanilla(
-                    section.getBlockLSBArray(),
-                    data(section.getBlockMSBArray()),
-                    data(section.getMetadataArray()));
+            blocks[i] = this.blockData(section, i);
             nibble(section.getBlocklightArray(), true);
             nibble(section.getSkylightArray(), hasSkyLight);
         }
         return new LiveChunk(this, chunk, sections, blocks, hasSkyLight);
+    }
+
+    private SectionBlocks blockData(ExtendedBlockStorage section, int index) {
+        this.requireCurrent();
+        if (section.getClass() != ExtendedBlockStorage.class || section.getYLocation() != (index << 4))
+            throw new UnsupportedOperationException("Unsupported client section representation or origin");
+        if (this.endlessLoaded) EndlessSectionStorage.check(section, this.extended);
+        // Context reads validate only their target section, not an entire chunk per grass voxel.
+        SectionBlocks blocks = this.extended ? EndlessSectionStorage.read(section)
+            : SectionBlocks.vanilla(
+                section.getBlockLSBArray(),
+                data(section.getBlockMSBArray()),
+                data(section.getMetadataArray()));
+        this.requireCurrent();
+        return blocks;
+    }
+
+    private int rawId(ExtendedBlockStorage section, SectionBlocks blocks, int index) {
+        this.requireCurrent();
+        int raw = blocks.blockId(index);
+        if (this.extended) {
+            if (EndlessSectionStorage.blockId(section, index) != raw)
+                throw new UnsupportedOperationException("EndlessIDs raw ID differs from audited storage");
+        } else {
+            int observed = Block.getIdFromBlock(section.getBlockByExtId(index & 15, index >> 8, (index >> 4) & 15));
+            // Preserve unknown raw IDs instead of the registry's air fallback.
+            if (observed < 0 || observed > 4095 || (observed != raw && observed != this.airBlockId))
+                throw new UnsupportedOperationException("Virtual block ID differs from audited vanilla raw storage");
+        }
+        this.requireCurrent();
+        return raw;
     }
 
     private static void nibble(@Nullable NibbleArray values, boolean required) {
@@ -268,20 +322,7 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         @Override
         public int blockId(int index) {
             this.check(index);
-            int raw = this.blocks.blockId(index);
-            if (this.owner.access.extended) {
-                if (EndlessSectionStorage.blockId(this.section, index) != raw)
-                    throw new UnsupportedOperationException("EndlessIDs raw ID differs from audited storage");
-                return raw;
-            }
-            int observed = Block
-                .getIdFromBlock(this.section.getBlockByExtId(index & 15, index >> 8, (index >> 4) & 15));
-            // Never normalize an unregistered raw ID to the air returned by the vanilla registry
-            // fallback. A distinct non-air virtual ID instead reveals incompatible extended storage.
-            if (observed < 0 || observed > 4095 || (observed != raw && observed != this.owner.access.airBlockId)) {
-                throw new UnsupportedOperationException("Virtual block ID differs from audited vanilla raw storage");
-            }
-            return raw;
+            return this.owner.access.rawId(this.section, this.blocks, index);
         }
 
         @Override

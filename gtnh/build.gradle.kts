@@ -11,7 +11,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.13-dev"
+version = "0.8.1-gtnh.14-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -51,7 +51,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/gtnh/capture/ChunkCapture.java", "dev/diorama/bake/PreparedBlockLooks.java",
             "dev/diorama/gtnh/capture/OpaquePng.java", "dev/diorama/gtnh/capture/EpochFence.java",
             "dev/diorama/gtnh/capture/SectionBlocks.java", "dev/diorama/gtnh/capture/TintCapture.java",
-            "dev/diorama/gtnh/capture/LegacyLeaves.java")
+            "dev/diorama/gtnh/capture/LegacyLeaves.java", "dev/diorama/gtnh/capture/GrassContext.java")
     })
     java.source(objects.sourceDirectorySet("offlineFixtures", "Selected offline fixtures").apply {
         srcDir("src/probe/java")
@@ -60,7 +60,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/bake/VoxelReaderProbe.java", "dev/diorama/bake/TerrainProbe.java", "dev/diorama/bake/BakeUtilityProbe.java",
             "dev/diorama/gtnh/probe/CaptureProbe.java", "dev/diorama/bake/SpriteAverageProbe.java",
             "dev/diorama/bake/PreparedBlockLooksProbe.java", "dev/diorama/gtnh/probe/OpaquePngProbe.java",
-            "dev/diorama/gtnh/probe/EpochFenceProbe.java", "dev/diorama/gtnh/probe/SectionBlocksProbe.java", "dev/diorama/gtnh/probe/TintCaptureProbe.java")
+            "dev/diorama/gtnh/probe/EpochFenceProbe.java", "dev/diorama/gtnh/probe/SectionBlocksProbe.java", "dev/diorama/gtnh/probe/TintCaptureProbe.java", "dev/diorama/bake/GrassProbe.java")
     })
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -242,7 +242,8 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             }
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
-            val expectedNested = setOf("dev/diorama/bake/TileImage\$Patch.class",
+            val expectedNested = setOf("dev/diorama/gtnh/capture/GrassContext\$Source.class",
+                "dev/diorama/bake/TileImage\$Patch.class",
                 "dev/diorama/gtnh/capture/TintCapture\$Source.class",
                 "dev/diorama/gtnh/capture/TintCapture\$Prepared.class",
                 "dev/diorama/gtnh/client/ClientCaptureLifecycle\$Session.class",
@@ -265,6 +266,8 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
             val expectedMr = setOf("dev/diorama/MapStyle.class", "dev/diorama/bake/TileKey.class",
+                "dev/diorama/gtnh/capture/GrassContext.class",
+                "dev/diorama/gtnh/capture/GrassContext\$Source.class",
                 "dev/diorama/gtnh/capture/TintCapture.class",
                 "dev/diorama/gtnh/capture/TintCapture\$Source.class",
                 "dev/diorama/gtnh/capture/TintCapture\$Prepared.class",
@@ -390,7 +393,8 @@ for ((prefix, mainName) in listOf(
     "opaquePng" to "dev.diorama.gtnh.probe.OpaquePngProbe",
     "epochFence" to "dev.diorama.gtnh.probe.EpochFenceProbe",
     "sectionBlocks" to "dev.diorama.gtnh.probe.SectionBlocksProbe",
-    "tintCapture" to "dev.diorama.gtnh.probe.TintCaptureProbe"
+    "tintCapture" to "dev.diorama.gtnh.probe.TintCaptureProbe",
+    "grass" to "dev.diorama.bake.GrassProbe"
 )) {
     for (variant in coreProbeVariants) {
         tasks.register<JavaExec>("$prefix$variant") {
