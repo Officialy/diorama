@@ -11,7 +11,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.17-dev"
+version = "0.8.1-gtnh.18-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -53,6 +53,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/gtnh/capture/StaticCubeAppearance.java",
             "dev/diorama/gtnh/capture/PreviewOverview.java", "dev/diorama/gtnh/capture/PreviewTileStore.java",
             "dev/diorama/gtnh/client/TerrainPreviewFrame.java", "dev/diorama/gtnh/client/TerrainPreviewRefresh.java",
+            "dev/diorama/gtnh/client/MinimapViewport.java",
             "dev/diorama/gtnh/capture/SectionBlocks.java", "dev/diorama/gtnh/capture/TintCapture.java",
             "dev/diorama/gtnh/capture/LegacyLeaves.java", "dev/diorama/gtnh/capture/GrassContext.java", "dev/diorama/gtnh/capture/WaterPng.java",
             "dev/diorama/gtnh/capture/TerrainPreview.java", "dev/diorama/gtnh/client/TerrainPreviewJob.java", "dev/diorama/gtnh/client/PreviewUpload.java")
@@ -68,7 +69,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/gtnh/probe/PreviewStorageProbe.java",
             "dev/diorama/gtnh/probe/EpochFenceProbe.java", "dev/diorama/gtnh/probe/SectionBlocksProbe.java", "dev/diorama/gtnh/probe/TintCaptureProbe.java", "dev/diorama/bake/GrassProbe.java", "dev/diorama/bake/WaterProbe.java",
             "dev/diorama/bake/TerrainPreviewProbe.java", "dev/diorama/gtnh/client/TerrainPreviewJobProbe.java", "dev/diorama/gtnh/client/PreviewUploadProbe.java",
-            "dev/diorama/gtnh/client/TerrainPreviewRefreshProbe.java")
+            "dev/diorama/gtnh/client/TerrainPreviewRefreshProbe.java", "dev/diorama/gtnh/client/MinimapViewportProbe.java")
     })
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -256,6 +257,11 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
             val expectedNested = setOf("dev/diorama/gtnh/capture/TerrainPreview\$Work.class",
                 "dev/diorama/gtnh/capture/PreviewTileStore\$PixelStream.class",
+                "dev/diorama/gtnh/client/ClientMinimap\$CachedTile.class",
+                "dev/diorama/gtnh/client/MinimapViewport\$Axis.class",
+                "dev/diorama/gtnh/client/MinimapViewport\$Bounds.class",
+                "dev/diorama/gtnh/client/MinimapViewport\$Heading.class",
+                "dev/diorama/gtnh/client/MinimapViewport\$Tile.class",
                 "dev/diorama/gtnh/capture/StaticCubeAppearance\$Access.class",
                 "dev/diorama/gtnh/client/ClientBlockAppearance\$1.class",
                 "dev/diorama/gtnh/capture/GrassContext\$Source.class",
@@ -285,6 +291,13 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/capture/PreviewTileStore.class",
                 "dev/diorama/gtnh/capture/PreviewTileStore\$PixelStream.class",
                 "dev/diorama/gtnh/client/TerrainPreviewFrame.class",
+                "dev/diorama/gtnh/client/ClientMinimap.class",
+                "dev/diorama/gtnh/client/MinimapViewport.class",
+                "dev/diorama/gtnh/client/ClientMinimap\$CachedTile.class",
+                "dev/diorama/gtnh/client/MinimapViewport\$Axis.class",
+                "dev/diorama/gtnh/client/MinimapViewport\$Bounds.class",
+                "dev/diorama/gtnh/client/MinimapViewport\$Heading.class",
+                "dev/diorama/gtnh/client/MinimapViewport\$Tile.class",
                 "dev/diorama/gtnh/capture/StaticCubeAppearance.class",
                 "dev/diorama/gtnh/capture/StaticCubeAppearance\$Access.class",
                 "dev/diorama/gtnh/client/ClientBlockAppearance\$1.class",
@@ -427,6 +440,7 @@ for ((prefix, mainName) in listOf(
     "terrainPreview" to "dev.diorama.bake.TerrainPreviewProbe",
     "terrainPreviewJob" to "dev.diorama.gtnh.client.TerrainPreviewJobProbe",
     "terrainPreviewRefresh" to "dev.diorama.gtnh.client.TerrainPreviewRefreshProbe",
+    "minimapViewport" to "dev.diorama.gtnh.client.MinimapViewportProbe",
     "previewUpload" to "dev.diorama.gtnh.client.PreviewUploadProbe"
 )) {
     for (variant in coreProbeVariants) {

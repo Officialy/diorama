@@ -56,6 +56,23 @@ public final class TerrainPreviewRefreshProbe {
             queue.takeDue(now + TerrainPreviewRefresh.LOAD, 0) == adjacent && !queue.pending(),
             "full load fires at 750ms");
         check(queue.revision() != bakeRevision, "draining a queue cannot restore acceptance for old work");
+        long loadAgain = now + TerrainPreviewRefresh.LOAD;
+        queue.request(center, loadAgain, TerrainPreviewRefresh.LOAD);
+        TerrainPreviewRefresh moved = new TerrainPreviewRefresh(-3, 8, loadAgain + 1);
+        int carried = moved.slot(-4, 8);
+        int settled = moved.slot(-4, 7);
+        moved.inherit(carried, queue, center);
+        moved.inherit(settled, queue, adjacent);
+        int unrelated = 511 & ~(1 << carried);
+        check(
+            !moved.queued(settled) && moved.queued(carried),
+            "moving reuses settled overlap without dropping pending work");
+        check(
+            moved.takeDue(loadAgain + TerrainPreviewRefresh.LOAD - 1, unrelated) < 0,
+            "moving does not shorten load delay");
+        check(
+            moved.takeDue(loadAgain + TerrainPreviewRefresh.LOAD, unrelated) == carried,
+            "moved request keeps its original deadline");
         StringBuilder hex = new StringBuilder();
         for (byte value : hash.digest()) {
             hex.append(Character.forDigit((value >>> 4) & 15, 16));

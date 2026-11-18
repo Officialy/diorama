@@ -1,33 +1,26 @@
 package dev.diorama.gtnh.client;
 
 import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.function.BooleanSupplier;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockGrass;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.init.Blocks;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldProviderSurface;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 
 import dev.diorama.MapStyle;
 import dev.diorama.Projection;
 import dev.diorama.bake.TileKey;
-import dev.diorama.data.ChunkSnapshot;
-import dev.diorama.gtnh.capture.ChunkCapture;
-import dev.diorama.gtnh.capture.GrassContext;
 import dev.diorama.gtnh.capture.PreviewTileStore;
 import dev.diorama.gtnh.capture.TerrainPreview;
 import dev.diorama.gtnh.diagnostic.ProbePixels;
@@ -36,12 +29,9 @@ import dev.diorama.gtnh.diagnostic.ProbePixels;
 public final class TerrainPreviewScreen extends GuiScreen {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
-    private static final int CAPACITY = 4096;
     private final WorldClient originatingWorld;
-    private final ChunkSnapshot[] snapshots = new ChunkSnapshot[TerrainPreviewRefresh.SLOTS];
-    private final ChunkCapture.Status[] statuses = new ChunkCapture.Status[TerrainPreviewRefresh.SLOTS];
     private ClientCaptureLifecycle.Session session;
-    private TerrainPreviewRefresh refresh;
+    private TerrainWindow window;
     private TileKey key;
     private PreviewTileStore store;
     private float[] sunTint, shadowTint;
@@ -53,7 +43,7 @@ public final class TerrainPreviewScreen extends GuiScreen {
     private ProbeGlState drawingState;
     private boolean started, closed, failed, ticking, invalidated;
     private boolean bakeRequested = true, storeTried, wantOverview, shownOverview;
-    private int discoveryTicks, ready, pending, missing, visible;
+    private int visible;
     private String status = "Preparing bounded terrain";
     private String storageWarning;
 
@@ -74,7 +64,7 @@ public final class TerrainPreviewScreen extends GuiScreen {
                 status = "Unsupported: requires standard Overworld 0..256";
                 return;
             }
-            double x = mc.thePlayer.posX, y = mc.thePlayer.posY, z = mc.thePlayer.posZ;
+            double x = mc.thePlayer.posX, y = mc.thePlayer.boundingBox.minY, z = mc.thePlayer.posZ;
             if (!Double.isFinite(x) || !Double.isFinite(y)
                 || !Double.isFinite(z)
                 || x < -29999984
@@ -91,17 +81,19 @@ public final class TerrainPreviewScreen extends GuiScreen {
                 .clone();
             shadowTint = MapStyle.DEFAULT.shadowTint()
                 .clone();
-            session = ClientCaptureLifecycle.openSession(CAPACITY);
+            session = ClientCaptureLifecycle.openSession(TerrainWindow.CAPACITY);
             if (session == null) {
                 status = "Pending: resource/world epoch not ready; reopen later";
                 return;
             }
             store = ClientPreviewStorage.forWorld(mc, originatingWorld);
             if (!current()) return;
-            refresh = new TerrainPreviewRefresh(
+            window = new TerrainWindow(
+                session,
                 ((int) Math.floor(x)) >> 4,
                 ((int) Math.floor(z)) >> 4,
-                System.nanoTime());
+                this::current,
+                null);
         } catch (RuntimeException error) {
             failed = true;
             stopRefresh();
@@ -117,7 +109,7 @@ public final class TerrainPreviewScreen extends GuiScreen {
             || client.theWorld != world
             || !(client.currentScreen instanceof TerrainPreviewScreen screen)
             || screen.originatingWorld != world
-            || screen.refresh == null
+            || screen.window == null
             || screen.closed
             || screen.failed) return null;
         return screen;
@@ -125,46 +117,20 @@ public final class TerrainPreviewScreen extends GuiScreen {
 
     public static void blockChanged(World world, int cx, int cz, int localX, int localZ) {
         TerrainPreviewScreen screen = eventTarget(world);
-        if (screen == null || screen.refresh.slot(cx, cz) < 0) return;
-        long now = System.nanoTime();
-        screen.refresh.request(screen.refresh.slot(cx, cz), now, TerrainPreviewRefresh.CHANGE);
-        // Actual edits on the border can affect the preview's adjacent shading. This is not
-        // a renderer dirty-range or a neighbour update notification.
-        int dx = localX == 0 ? -1 : localX == 15 ? 1 : 0;
-        int dz = localZ == 0 ? -1 : localZ == 15 ? 1 : 0;
-        if (dx != 0) screen.requestRecorded(cx + dx, cz, now, TerrainPreviewRefresh.CHANGE);
-        if (dz != 0) screen.requestRecorded(cx, cz + dz, now, TerrainPreviewRefresh.CHANGE);
-        if (dx != 0 && dz != 0) screen.requestRecorded(cx + dx, cz + dz, now, TerrainPreviewRefresh.CHANGE);
+        if (screen != null) screen.window.blockChanged(cx, cz, localX, localZ);
+        ClientMinimap.blockChanged(world, cx, cz, localX, localZ);
     }
 
     public static void chunkFilled(World world, int cx, int cz, boolean full) {
         TerrainPreviewScreen screen = eventTarget(world);
-        if (screen == null) return;
-        long now = System.nanoTime();
-        long delay = full ? TerrainPreviewRefresh.LOAD : TerrainPreviewRefresh.CHANGE;
-        screen.refresh.request(screen.refresh.slot(cx, cz), now, delay);
-        // Whole/partial packet writes may also replace light; full packets replace the biome
-        // columns used by already recorded neighbours to blend their one-block tint halo.
-        screen.requestNeighbours(cx, cz, now, delay);
+        if (screen != null) screen.window.chunkFilled(cx, cz, full);
+        ClientMinimap.chunkFilled(world, cx, cz, full);
     }
 
     public static void chunkUnloaded(World world, int cx, int cz) {
         TerrainPreviewScreen screen = eventTarget(world);
-        if (screen == null) return;
-        long now = System.nanoTime();
-        screen.refresh.request(screen.refresh.slot(cx, cz), now, 0);
-        screen.requestNeighbours(cx, cz, now, TerrainPreviewRefresh.CHANGE);
-    }
-
-    private void requestNeighbours(int cx, int cz, long now, long delay) {
-        for (int dz = -1; dz <= 1; dz++) for (int dx = -1; dx <= 1; dx++) {
-            if (dx != 0 || dz != 0) requestRecorded(cx + dx, cz + dz, now, delay);
-        }
-    }
-
-    private void requestRecorded(int cx, int cz, long now, long delay) {
-        int slot = refresh.slot(cx, cz);
-        if (slot >= 0 && statuses[slot] != ChunkCapture.Status.MISSING_CHUNK) refresh.request(slot, now, delay);
+        if (screen != null) screen.window.chunkUnloaded(cx, cz);
+        ClientMinimap.chunkUnloaded(world, cx, cz);
     }
 
     private boolean baseCurrent() {
@@ -188,16 +154,12 @@ public final class TerrainPreviewScreen extends GuiScreen {
     }
 
     private boolean bakeCurrent(long revision) {
-        return current() && refresh != null && revision == refresh.revision();
-    }
-
-    private void requireCurrent() {
-        if (!current()) throw new IllegalStateException("Terrain epoch or screen changed");
+        return current() && window != null && revision == window.revision();
     }
 
     @Override
     public void updateScreen() {
-        if (ticking || failed || refresh == null || !baseCurrent()) return;
+        if (ticking || failed || window == null || !baseCurrent()) return;
         ticking = true;
         try {
             if (current()) tickRefresh();
@@ -213,39 +175,20 @@ public final class TerrainPreviewScreen extends GuiScreen {
     }
 
     private void tickRefresh() {
-        long now = System.nanoTime();
-        if (++discoveryTicks == TerrainPreviewRefresh.DISCOVERY_TICKS) {
-            discoveryTicks = 0;
-            for (int slot = 0; slot < TerrainPreviewRefresh.SLOTS; slot++) {
-                if (statuses[slot] != ChunkCapture.Status.MISSING_CHUNK || refresh.queued(slot)) continue;
-                boolean loaded = session.access()
-                    .loaded(refresh.x(slot), refresh.z(slot)) != null;
-                requireCurrent();
-                if (loaded && !refresh.queued(slot)) refresh.request(slot, now, 0);
-            }
-        }
-        int attempted = 0;
-        for (int budget = TerrainPreviewRefresh.CAPTURES_PER_TICK; budget > 0; budget--) {
-            int slot = refresh.takeDue(now, attempted);
-            if (slot < 0) break;
-            attempted |= 1 << slot;
-            captureSlot(slot);
-            requireCurrent();
-        }
-        if (refresh.pending()) {
+        bakeRequested |= window.tick(TerrainPreviewRefresh.CAPTURES_PER_TICK);
+        if (window.queued()) {
             status = texture == null ? "Waiting for queued terrain" : "Terrain changed; showing last accepted view";
             return;
         }
         if (!bakeRequested || job != null || save != null || TerrainPreviewJob.isBusy()) return;
-        if (ready == 0 && (store == null || storeTried)) {
+        if (window.ready() == 0 && (store == null || storeTried)) {
             bakeRequested = false;
             status = texture == null ? "Pending: no READY chunks; UNKNOWN is not AIR"
                 : "No READY chunks; showing last accepted view";
             return;
         }
-        long revision = refresh.revision();
-        TerrainPreview.Work work = ready > 0 ? TerrainPreview.prepare(session.looks(), session.token(), key, snapshots)
-            : null;
+        long revision = window.revision();
+        TerrainPreview.Work work = window.ready() > 0 ? window.prepare(key) : null;
         if (!bakeCurrent(revision)) return;
         TerrainPreviewJob startedJob = TerrainPreviewJob.start(key, work, store, frame);
         if (startedJob == null) return;
@@ -253,82 +196,6 @@ public final class TerrainPreviewScreen extends GuiScreen {
         jobRevision = revision;
         bakeRequested = false;
         status = work != null ? "Baking bounded detached terrain" : "Checking saved terrain";
-    }
-
-    private void captureSlot(int slot) {
-        long version = refresh.version(slot);
-        ChunkSnapshot snapshot = null;
-        ChunkCapture.Status outcome = ChunkCapture.Status.PENDING_APPEARANCE;
-        int cx = refresh.x(slot), cz = refresh.z(slot);
-        try {
-            ChunkCapture.Chunk chunk = session.access()
-                .loaded(cx, cz);
-            requireCurrent();
-            if (chunk == null) outcome = ChunkCapture.Status.MISSING_CHUNK;
-            else if (preflight(chunk)) {
-                ChunkCapture.Result result = session.capture(cx, cz);
-                requireCurrent();
-                if (result.status() == ChunkCapture.Status.READY && ClientCaptureLifecycle.accepts(result)) {
-                    snapshot = result.snapshot();
-                    outcome = ChunkCapture.Status.READY;
-                } else if (result.status() == ChunkCapture.Status.MISSING_CHUNK) {
-                    outcome = ChunkCapture.Status.MISSING_CHUNK;
-                }
-            }
-        } catch (RuntimeException error) {
-            requireCurrent();
-            LOG.warn("Diorama terrain capture pending at ({}, {})", cx, cz, error);
-        }
-        requireCurrent();
-        if (version != refresh.version(slot)) return; // Reentrant event owns the next attempt.
-        snapshots[slot] = snapshot;
-        statuses[slot] = outcome;
-        bakeRequested = true;
-        ready = pending = missing = 0;
-        for (ChunkCapture.Status state : statuses) {
-            if (state == ChunkCapture.Status.READY) ready++;
-            else if (state == ChunkCapture.Status.MISSING_CHUNK) missing++;
-            else pending++;
-        }
-    }
-
-    private boolean preflight(ChunkCapture.Chunk chunk) {
-        requireCurrent();
-        int minimum = chunk.minSectionY();
-        requireCurrent();
-        int count = chunk.sectionCount();
-        requireCurrent();
-        if (minimum != 0 || count != 16) return false;
-        Set<Long> states = new HashSet<>();
-        for (int index = 0; index < 16; index++) {
-            ChunkCapture.Section section = chunk.section(index);
-            requireCurrent();
-            if (section == null) continue;
-            for (int cell = 0; cell < 4096; cell++) {
-                int raw = section.blockId(cell);
-                requireCurrent();
-                int meta = section.metadata(cell);
-                requireCurrent();
-                if (raw < 0 || raw > 0xFFFFFF || meta < 0 || meta > 65535) return false;
-                states.add(((long) raw << 16) | meta);
-                if (states.size() > CAPACITY) return false;
-            }
-        }
-        for (long state : states) {
-            requireCurrent();
-            int raw = (int) (state >>> 16), meta = (int) (state & 65535);
-            Block block = Block.getBlockById(raw);
-            if (block == null || Block.getIdFromBlock(block) != raw) return false;
-            boolean prepared;
-            if (block == Blocks.grass && block.getClass() == BlockGrass.class && meta == 0) {
-                prepared = session.prepare(raw, meta, GrassContext.NORMAL) >= 0;
-                requireCurrent();
-                prepared &= session.prepare(raw, meta, GrassContext.SNOWY) >= 0;
-            } else prepared = session.prepare(raw, meta) >= 0;
-            requireCurrent();
-            if (!prepared) return false;
-        }
-        return true;
     }
 
     private static void delete(DynamicTexture old, ProbeGlState state) {
@@ -349,14 +216,13 @@ public final class TerrainPreviewScreen extends GuiScreen {
     }
 
     private void stopRefresh() {
-        refresh = null;
+        window = null;
         if (job != null) job.close();
         if (save != null) save.close();
         job = save = null;
         frame = null;
         store = null;
         session = null;
-        Arrays.fill(snapshots, null);
     }
 
     private void stale(ProbeGlState state) {
@@ -414,7 +280,20 @@ public final class TerrainPreviewScreen extends GuiScreen {
     }
 
     @Override
+    protected void keyTyped(char character, int keyCode) {
+        if (ClientProxy.isMapKey(keyCode)) {
+            if (!Keyboard.isRepeatEvent()) mc.displayGuiScreen(null);
+            return;
+        }
+        super.keyTyped(character, keyCode);
+    }
+
+    @Override
     public void handleMouseInput() {
+        if (Mouse.getEventButtonState() && ClientProxy.isMapMouseButton(Mouse.getEventButton())) {
+            mc.displayGuiScreen(null);
+            return;
+        }
         super.handleMouseInput();
         int wheel = Mouse.getEventDWheel();
         if (wheel != 0) wantOverview = wheel < 0;
@@ -538,11 +417,11 @@ public final class TerrainPreviewScreen extends GuiScreen {
                     0xFFFF80);
                 drawCenteredString(
                     fontRendererObj,
-                    "READY " + ready
+                    "READY " + (window == null ? 0 : window.ready())
                         + "/9; pending "
-                        + pending
+                        + (window == null ? 0 : window.pendingCount())
                         + "; missing "
-                        + missing
+                        + (window == null ? 0 : window.missing())
                         + "; visible pixels "
                         + visible,
                     width / 2,

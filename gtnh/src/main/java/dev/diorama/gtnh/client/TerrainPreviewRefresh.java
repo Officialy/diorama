@@ -47,6 +47,11 @@ final class TerrainPreviewRefresh {
         revision++;
     }
 
+    void inherit(int slot, TerrainPreviewRefresh previous, int priorSlot) {
+        if (previous.queued(priorSlot)) deadlines[slot] = previous.deadlines[priorSlot];
+        else queued &= ~(1 << slot);
+    }
+
     boolean queued(int slot) {
         return (queued & (1 << slot)) != 0;
     }

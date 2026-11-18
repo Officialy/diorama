@@ -162,6 +162,22 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/client/LegacyMinimapDraw.java",
+      "fqn": "dev.diorama.gtnh.client.LegacyMinimapDraw"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/MinimapViewport.java",
+      "fqn": "dev.diorama.gtnh.client.MinimapViewport"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/TerrainWindow.java",
+      "fqn": "dev.diorama.gtnh.client.TerrainWindow"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/ClientMinimap.java",
+      "fqn": "dev.diorama.gtnh.client.ClientMinimap"
+    },
+    {
       "path": "dev/diorama/gtnh/mixins/client/ChunkMutationMixin.java",
       "fqn": "dev.diorama.gtnh.mixins.client.ChunkMutationMixin"
     },
@@ -334,7 +350,7 @@
     "native capture/resource and early lifecycle hook game execution",
     "legacy snapshot rotation and spawn rules",
     "complete legacy block appearance beyond static opaque cubes and audited vanilla leaves, contextual grass, grass/fern plants, snow layers and water",
-    "map updates beyond the explicit bounded preview",
+    "unified tile scheduling and patches beyond bounded CPU HUD and map preview",
     "full map storage and multiplayer world identity",
     "GPU baking"
   ],

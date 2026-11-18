@@ -37,6 +37,17 @@ public final class TerrainPreviewJob implements AutoCloseable {
         return startTask(() -> TerrainPreviewFrame.assemble(key, work == null ? null : work.bake(), store, previous));
     }
 
+    /** HUD requests just L0; it does not build/restore an overview or write storage. */
+    static @Nullable TerrainPreviewJob startDetail(TerrainPreview.Work work, int @Nullable [] history) {
+        return startTask(() -> {
+            int[][] mips = Objects.requireNonNull(
+                work.bake()
+                    .mips(),
+                "full tile");
+            return new TerrainPreviewFrame(PreviewTileStore.retain(history, mips[0]), null, null, false);
+        });
+    }
+
     /** Call only after accepting the frame on the client thread under its epoch and refresh revision. */
     static @Nullable TerrainPreviewJob startSave(PreviewTileStore store, TileKey key, TerrainPreviewFrame accepted) {
         Objects.requireNonNull(store, "store");
