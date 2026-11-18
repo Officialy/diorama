@@ -4,7 +4,7 @@ import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.util.ChatComponentText;
 
-/** Independent development-only one-shot terrain diagnostic, not a map/HUD toggle. */
+/** Independent bounded terrain preview, not a map/HUD toggle. */
 public final class TerrainPreviewCommand extends CommandBase {
 
     private final ClientProxy owner;

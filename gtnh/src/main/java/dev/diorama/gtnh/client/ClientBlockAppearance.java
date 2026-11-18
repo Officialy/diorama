@@ -12,7 +12,9 @@ import net.minecraft.block.BlockDynamicLiquid;
 import net.minecraft.block.BlockGrass;
 import net.minecraft.block.BlockNewLeaf;
 import net.minecraft.block.BlockOldLeaf;
+import net.minecraft.block.BlockSnow;
 import net.minecraft.block.BlockStaticLiquid;
+import net.minecraft.block.BlockTallGrass;
 import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -36,7 +38,8 @@ import dev.diorama.gtnh.capture.StaticCubeAppearance;
 import dev.diorama.gtnh.capture.WaterPng;
 
 /**
- * Explicit client-thread preparation for static opaque cubes and audited vanilla leaves, grass and water.
+ * Explicit client-thread preparation for static opaque cubes and audited vanilla leaves, grass, water,
+ * grass plants and snow layers.
  * Never called by a worker or a tick hook. Animations stay pending except the water-only first-frame
  * path; unsupported renderers, contexts, custom loaders and resources stay pending.
  * generationCurrent must cover resource reload/stitch completion, not just manager identity (the
@@ -116,6 +119,10 @@ public final class ClientBlockAppearance {
         if (context != 0) return -1;
         if (leaf(block, metadata)) return this.prepareLeaves(rawId, metadata, block);
         if (water(block, metadata)) return this.prepareWater(rawId, metadata, block);
+        if (block == Blocks.tallgrass && block.getClass() == BlockTallGrass.class)
+            return metadata == 1 || metadata == 2 ? this.prepareOverworld(rawId, metadata, block, false) : -1;
+        if (block == Blocks.snow_layer && block.getClass() == BlockSnow.class)
+            return metadata <= 7 ? this.prepareOverworld(rawId, metadata, block, true) : -1;
         return StaticCubeAppearance.prepare(this.looks, rawId, metadata, new StaticCubeAppearance.Access() {
 
             @Override
@@ -261,6 +268,26 @@ public final class ClientBlockAppearance {
         }
         if (!this.active || average == null || average[3] <= 0) return -1;
         return this.looks.water(rawId, metadata, average);
+    }
+
+    private int prepareOverworld(int rawId, int metadata, Block block, boolean snow) {
+        float[] average = null;
+        try {
+            if (block.getRenderType() != (snow ? 0 : 1) || block.isOpaqueCube()
+                || block.renderAsNormalBlock()
+                || block.hasTileEntity(metadata)
+                || block.getRenderBlockPass() != 0
+                || block.getLightValue() != 0) return -1;
+            // These exact vanilla states use the same sprite for all visible faces (snow) or
+            // for both unculled cross planes (grass/fern). Unsupported sprites remain pending.
+            average = this.average(block.getIcon(1, metadata), !snow);
+        } catch (IOException | RuntimeException unsupported) {
+            average = null;
+        } finally {
+            this.current();
+        }
+        if (!this.active || average == null || average[3] <= 0) return -1;
+        return snow ? this.looks.snowLayer(rawId, metadata, average) : this.looks.grassPlant(rawId, metadata, average);
     }
 
     private float @Nullable [] averageWater(@Nullable IIcon icon) throws IOException {

@@ -162,6 +162,30 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/mixins/client/ChunkMutationMixin.java",
+      "fqn": "dev.diorama.gtnh.mixins.client.ChunkMutationMixin"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/TerrainPreviewRefresh.java",
+      "fqn": "dev.diorama.gtnh.client.TerrainPreviewRefresh"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/ClientPreviewStorage.java",
+      "fqn": "dev.diorama.gtnh.client.ClientPreviewStorage"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/TerrainPreviewFrame.java",
+      "fqn": "dev.diorama.gtnh.client.TerrainPreviewFrame"
+    },
+    {
+      "path": "dev/diorama/gtnh/capture/PreviewTileStore.java",
+      "fqn": "dev.diorama.gtnh.capture.PreviewTileStore"
+    },
+    {
+      "path": "dev/diorama/gtnh/capture/PreviewOverview.java",
+      "fqn": "dev.diorama.gtnh.capture.PreviewOverview"
+    },
+    {
       "path": "dev/diorama/gtnh/client/PreviewUpload.java",
       "fqn": "dev.diorama.gtnh.client.PreviewUpload"
     },
@@ -309,9 +333,9 @@
   "deferred": [
     "native capture/resource and early lifecycle hook game execution",
     "legacy snapshot rotation and spawn rules",
-    "complete legacy block appearance beyond static opaque cubes and audited vanilla leaves, contextual grass and water",
-    "updating map display beyond the explicit bounded L0 diagnostic",
-    "tile storage",
+    "complete legacy block appearance beyond static opaque cubes and audited vanilla leaves, contextual grass, grass/fern plants, snow layers and water",
+    "map updates beyond the explicit bounded preview",
+    "full map storage and multiplayer world identity",
     "GPU baking"
   ],
   "reviewedHashNormalization": "UTF-8 with CRLF normalized to LF"

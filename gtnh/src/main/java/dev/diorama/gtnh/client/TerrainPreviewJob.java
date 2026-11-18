@@ -1,38 +1,67 @@
 package dev.diorama.gtnh.client;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Objects;
 import java.util.function.Supplier;
 
-import dev.diorama.bake.TileImage;
+import org.jspecify.annotations.Nullable;
+
+import dev.diorama.bake.TileKey;
+import dev.diorama.gtnh.capture.PreviewTileStore;
 import dev.diorama.gtnh.capture.TerrainPreview;
 
-/** Pure one-shot worker. Closing discards output; it never pretends an uninterruptible bake stopped. */
+/** Single detached worker slot for bake, restore and separately accepted writes. */
 public final class TerrainPreviewJob implements AutoCloseable {
 
     private static Thread busy;
-    private Supplier<TileImage> task;
+    private Supplier<TerrainPreviewFrame> task;
+    private final boolean acceptedWrite;
     private final Thread thread;
-    private TileImage image;
+    private TerrainPreviewFrame frame;
     private String failure;
     private boolean done;
     private boolean discarded;
 
-    private TerrainPreviewJob(Supplier<TileImage> task) {
+    private TerrainPreviewJob(Supplier<TerrainPreviewFrame> task, boolean acceptedWrite) {
         this.task = task;
+        this.acceptedWrite = acceptedWrite;
         this.thread = new Thread(this::run, "Diorama-terrain-preview");
         this.thread.setDaemon(true);
     }
 
-    public static TerrainPreviewJob start(TerrainPreview.Work work) {
-        Objects.requireNonNull(work, "work");
-        return startTask(work::bake);
+    static @Nullable TerrainPreviewJob start(TileKey key, TerrainPreview.@Nullable Work work,
+        @Nullable PreviewTileStore store, @Nullable TerrainPreviewFrame previous) {
+        Objects.requireNonNull(key, "key");
+        if (work != null && !key.equals(work.key())) throw new IllegalArgumentException("Preview work key mismatch");
+        return startTask(() -> TerrainPreviewFrame.assemble(key, work == null ? null : work.bake(), store, previous));
+    }
+
+    /** Call only after accepting the frame on the client thread under its epoch and refresh revision. */
+    static @Nullable TerrainPreviewJob startSave(PreviewTileStore store, TileKey key, TerrainPreviewFrame accepted) {
+        Objects.requireNonNull(store, "store");
+        Objects.requireNonNull(key, "key");
+        if (!accepted.needsSave()) throw new IllegalArgumentException("No fresh pixels to save");
+        return startTask(() -> {
+            try {
+                accepted.save(store, key);
+            } catch (IOException error) {
+                throw new UncheckedIOException(error);
+            }
+            return null;
+        }, true);
     }
 
     // Package-private injection only for pure latch-based probes, never native callbacks.
-    static synchronized TerrainPreviewJob startTask(Supplier<TileImage> task) {
+    static @Nullable TerrainPreviewJob startTask(Supplier<TerrainPreviewFrame> task) {
+        return startTask(task, false);
+    }
+
+    private static synchronized @Nullable TerrainPreviewJob startTask(Supplier<TerrainPreviewFrame> task,
+        boolean acceptedWrite) {
         Objects.requireNonNull(task, "task");
         if (isBusy()) return null;
-        TerrainPreviewJob job = new TerrainPreviewJob(task);
+        TerrainPreviewJob job = new TerrainPreviewJob(task, acceptedWrite);
         busy = job.thread;
         try {
             job.thread.start();
@@ -51,15 +80,18 @@ public final class TerrainPreviewJob implements AutoCloseable {
     }
 
     private void run() {
-        Supplier<TileImage> input;
+        Supplier<TerrainPreviewFrame> input;
         synchronized (this) {
             input = this.task;
             this.task = null;
         }
-        TileImage output = null;
+        TerrainPreviewFrame output = null;
         String error = null;
         try {
-            if (input != null) output = Objects.requireNonNull(input.get(), "bake result");
+            if (input != null) {
+                output = input.get();
+                if (!this.acceptedWrite) Objects.requireNonNull(output, "preview result");
+            }
         } catch (Throwable failed) {
             error = failed.getClass()
                 .getSimpleName();
@@ -68,7 +100,7 @@ public final class TerrainPreviewJob implements AutoCloseable {
             input = null;
             synchronized (this) {
                 if (!this.discarded) {
-                    this.image = output;
+                    this.frame = output;
                     this.failure = error;
                 }
                 this.task = null;
@@ -78,24 +110,25 @@ public final class TerrainPreviewJob implements AutoCloseable {
     }
 
     public synchronized boolean done() {
-        return this.done;
+        return this.done && !this.thread.isAlive();
     }
 
     public synchronized String failure() {
         return this.failure;
     }
 
-    public synchronized TileImage takeImage() {
-        TileImage result = this.image;
-        this.image = null;
+    public synchronized @Nullable TerrainPreviewFrame takeFrame() {
+        TerrainPreviewFrame result = this.frame;
+        this.frame = null;
         return result;
     }
 
     @Override
     public synchronized void close() {
         this.discarded = true;
-        this.task = null;
-        this.image = null;
+        // Closing a screen cancels a speculative bake, not an already accepted commit.
+        if (!this.acceptedWrite) this.task = null;
+        this.frame = null;
         this.failure = null;
     }
 

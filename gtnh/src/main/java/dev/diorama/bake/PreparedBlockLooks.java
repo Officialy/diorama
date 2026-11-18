@@ -10,9 +10,10 @@ import org.jspecify.annotations.Nullable;
 import dev.diorama.gtnh.capture.GrassContext;
 
 /**
- * Append-only, owner-thread preparation of audited cubes, leaves, grass contexts and water. This
- * is not a classifier: the client producer must prove geometry, texture and the applicable context
- * before preparation. Workers only consume published Looks arrays; no game callbacks are retained here.
+ * Append-only, owner-thread preparation of audited cubes, leaves, grass contexts, water, grass plants
+ * and snow layers. This is not a classifier: the client producer must prove geometry, texture and
+ * the applicable context before preparation. Workers only consume published Looks arrays; no game
+ * callbacks are retained here.
  */
 public final class PreparedBlockLooks extends Looks {
 
@@ -144,6 +145,34 @@ public final class PreparedBlockLooks extends Looks {
         return this.commit(key, face, face, 0, -1, TINT_WATER, WATER);
     }
 
+    /** No-collision crossed plants use the shared PLANT ray treatment, not a solid outline. */
+    public int grassPlant(int rawId, int metadata, float[] average) {
+        this.requireOwner();
+        if (metadata != 1 && metadata != 2) throw new IllegalArgumentException("Invalid grass or fern metadata");
+        long key = key(rawId, metadata);
+        int existing = this.existingId(key);
+        if (existing != 0) return existing;
+        checkAverage(average);
+        FaceColor face = new FaceColor();
+        face.add(average, 0);
+        return this.commit(key, face, face, 0, -1, TINT_GRASS, PLANT);
+    }
+
+    /** Snow remains solid even when its collision is empty: use its outline, not its collision height. */
+    public int snowLayer(int rawId, int metadata, float[] average) {
+        this.requireOwner();
+        if (metadata < 0 || metadata > 7) throw new IllegalArgumentException("Invalid snow layer metadata");
+        long key = key(rawId, metadata);
+        int existing = this.existingId(key);
+        if (existing != 0) return existing;
+        checkFace(average);
+        if (this.next == this.kind.length) return -1;
+        int shapeIndex = metadata == 7 ? 0 : this.internShape(new float[] { 0, 0, 0, 1, (metadata + 1) / 8F, 1 });
+        FaceColor face = new FaceColor();
+        face.add(average, -1);
+        return this.commit(key, face, face, 0, -1, TINT_NONE, SOLID, shapeIndex);
+    }
+
     // Zero is reserved air, so it can signal a new key without allocating or changing payload.
     private int existingId(long key) {
         if (!this.active) return -1;
@@ -155,6 +184,11 @@ public final class PreparedBlockLooks extends Looks {
     }
 
     private int commit(long key, FaceColor top, FaceColor side, int emission, int constantTint, byte tint, byte kind) {
+        return this.commit(key, top, side, emission, constantTint, tint, kind, 0);
+    }
+
+    private int commit(long key, FaceColor top, FaceColor side, int emission, int constantTint, byte tint, byte kind,
+        int shapeIndex) {
         if (this.next == this.kind.length) return -1;
         int id = this.next;
         this.setColours(id, top, side);
@@ -166,6 +200,7 @@ public final class PreparedBlockLooks extends Looks {
         this.emission[id] = (byte) emission;
         this.constantTint[id] = constantTint;
         this.tint[id] = tint;
+        this.shape[id] = shapeIndex;
         // Spawn rules are deliberately not inferred: legacy spawn overlays are not enabled.
         this.publish(id, kind);
         this.ids.put(key, id);
@@ -175,7 +210,7 @@ public final class PreparedBlockLooks extends Looks {
 
     private static void checkFace(float[] average) {
         checkAverage(average);
-        if (average[3] != 1.0F) throw new IllegalArgumentException("Only complete opaque cube faces are supported");
+        if (average[3] != 1.0F) throw new IllegalArgumentException("Only complete opaque faces are supported");
     }
 
     private static void checkAverage(float[] average) {

@@ -7,11 +7,11 @@ import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.SidedProxy;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 
-/** Build/lifecycle scaffold only; no map or game-world access yet. */
+/** Forge entry point; terrain diagnostics are client-only. */
 @Mod(
     modid = "diorama",
     name = "Diorama",
-    version = "0.8.1-gtnh.16-dev",
+    version = "0.8.1-gtnh.17-dev",
     acceptableRemoteVersions = "*",
     dependencies = "required-after:gtnhlib@[0.11.48,);required-after:unimixins@[0.3.1,)")
 public final class DioramaLegacy {
@@ -24,6 +24,7 @@ public final class DioramaLegacy {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         proxy.init();
-        LOG.info("Diorama legacy diagnostic build loaded; client command /dioramaprobe available. No map yet.");
+        LOG.info(
+            "Diorama legacy diagnostic build loaded; client commands /dioramaprobe and /dioramaterrain available.");
     }
 }

@@ -15,7 +15,7 @@ import dev.diorama.bake.TileKey;
 import dev.diorama.bake.VoxelReader;
 import dev.diorama.data.ChunkSnapshot;
 
-/** Bounded one-shot numeric preview. Not a scheduler, loaded-world view or complete lighting halo. */
+/** Bounded numeric preview. Not a scheduler, loaded-world view or complete lighting halo. */
 public final class TerrainPreview {
 
     public static final int MAX_SNAPSHOTS = 9;
@@ -42,7 +42,7 @@ public final class TerrainPreview {
         return new Work(looks, token, key, Objects.requireNonNull(snapshots, "snapshots"));
     }
 
-    private static boolean supported() {
+    public static boolean supported() {
         return MapStyle.get() == MapStyle.DEFAULT && Projection.facing() == Facing.NORTH
             && !TileBaker.fast()
             && Projection.sin() == Math.sin(Math.toRadians(MapStyle.DEFAULT.pitchDegrees()))

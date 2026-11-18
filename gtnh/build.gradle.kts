@@ -11,7 +11,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.16-dev"
+version = "0.8.1-gtnh.17-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -51,6 +51,8 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/gtnh/capture/ChunkCapture.java", "dev/diorama/bake/PreparedBlockLooks.java",
             "dev/diorama/gtnh/capture/OpaquePng.java", "dev/diorama/gtnh/capture/EpochFence.java",
             "dev/diorama/gtnh/capture/StaticCubeAppearance.java",
+            "dev/diorama/gtnh/capture/PreviewOverview.java", "dev/diorama/gtnh/capture/PreviewTileStore.java",
+            "dev/diorama/gtnh/client/TerrainPreviewFrame.java", "dev/diorama/gtnh/client/TerrainPreviewRefresh.java",
             "dev/diorama/gtnh/capture/SectionBlocks.java", "dev/diorama/gtnh/capture/TintCapture.java",
             "dev/diorama/gtnh/capture/LegacyLeaves.java", "dev/diorama/gtnh/capture/GrassContext.java", "dev/diorama/gtnh/capture/WaterPng.java",
             "dev/diorama/gtnh/capture/TerrainPreview.java", "dev/diorama/gtnh/client/TerrainPreviewJob.java", "dev/diorama/gtnh/client/PreviewUpload.java")
@@ -62,9 +64,11 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/bake/VoxelReaderProbe.java", "dev/diorama/bake/TerrainProbe.java", "dev/diorama/bake/BakeUtilityProbe.java",
             "dev/diorama/gtnh/probe/CaptureProbe.java", "dev/diorama/bake/SpriteAverageProbe.java",
             "dev/diorama/bake/PreparedBlockLooksProbe.java", "dev/diorama/gtnh/probe/OpaquePngProbe.java",
-            "dev/diorama/gtnh/probe/StaticCubeAppearanceProbe.java",
+            "dev/diorama/gtnh/probe/StaticCubeAppearanceProbe.java", "dev/diorama/bake/OverworldAppearanceProbe.java",
+            "dev/diorama/gtnh/probe/PreviewStorageProbe.java",
             "dev/diorama/gtnh/probe/EpochFenceProbe.java", "dev/diorama/gtnh/probe/SectionBlocksProbe.java", "dev/diorama/gtnh/probe/TintCaptureProbe.java", "dev/diorama/bake/GrassProbe.java", "dev/diorama/bake/WaterProbe.java",
-            "dev/diorama/bake/TerrainPreviewProbe.java", "dev/diorama/gtnh/client/TerrainPreviewJobProbe.java", "dev/diorama/gtnh/client/PreviewUploadProbe.java")
+            "dev/diorama/bake/TerrainPreviewProbe.java", "dev/diorama/gtnh/client/TerrainPreviewJobProbe.java", "dev/diorama/gtnh/client/PreviewUploadProbe.java",
+            "dev/diorama/gtnh/client/TerrainPreviewRefreshProbe.java")
     })
 }
 tasks.named<JavaCompile>(probe.compileJavaTaskName) {
@@ -223,7 +227,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             require(mixinConfig == mapOf("required" to true, "minVersion" to "0.8.5-GTNH",
                 "package" to "dev.diorama.gtnh.mixins", "refmap" to "mixins.diorama.refmap.json",
                 "compatibilityLevel" to "JAVA_8", "mixins" to emptyList<String>(),
-                "client" to listOf("client.ResourceReloadMixin", "client.BlockAtlasMixin"),
+                "client" to listOf("client.ResourceReloadMixin", "client.BlockAtlasMixin", "client.ChunkMutationMixin"),
                 "server" to emptyList<String>(), "injectors" to mapOf("defaultRequire" to 1))) { "Client hook configuration drift" }
             @Suppress("UNCHECKED_CAST")
             val refmap = JsonSlurper().parse(zip.getInputStream(zip.getEntry("mixins.diorama.refmap.json"))) as Map<String, Any>
@@ -233,7 +237,11 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                     "reloadResourcePack(Lnet/minecraft/client/resources/IResourcePack;)V" to "Lnet/minecraft/client/resources/SimpleReloadableResourceManager;func_110545_a(Lnet/minecraft/client/resources/IResourcePack;)V"),
                 "dev/diorama/gtnh/mixins/client/BlockAtlasMixin" to mapOf(
                     "loadTexture(Lnet/minecraft/client/resources/IResourceManager;)V" to "Lnet/minecraft/client/renderer/texture/TextureMap;func_110551_a(Lnet/minecraft/client/resources/IResourceManager;)V",
-                    "loadTextureAtlas(Lnet/minecraft/client/resources/IResourceManager;)V" to "Lnet/minecraft/client/renderer/texture/TextureMap;func_110571_b(Lnet/minecraft/client/resources/IResourceManager;)V"))
+                    "loadTextureAtlas(Lnet/minecraft/client/resources/IResourceManager;)V" to "Lnet/minecraft/client/renderer/texture/TextureMap;func_110571_b(Lnet/minecraft/client/resources/IResourceManager;)V"),
+                "dev/diorama/gtnh/mixins/client/ChunkMutationMixin" to mapOf(
+                    "setBlockMetadata(IIII)Z" to "Lnet/minecraft/world/chunk/Chunk;func_76589_b(IIII)Z",
+                    "fillChunk([BIIZ)V" to "Lnet/minecraft/world/chunk/Chunk;func_76607_a([BIIZ)V",
+                    "onChunkUnload()V" to "Lnet/minecraft/world/chunk/Chunk;func_76623_d()V"))
             require(refmap == mapOf("mappings" to expectedMappings, "data" to mapOf("searge" to expectedMappings))) {
                 "Production SRG hook target refmap drift"
             }
@@ -247,6 +255,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
             val expectedNested = setOf("dev/diorama/gtnh/capture/TerrainPreview\$Work.class",
+                "dev/diorama/gtnh/capture/PreviewTileStore\$PixelStream.class",
                 "dev/diorama/gtnh/capture/StaticCubeAppearance\$Access.class",
                 "dev/diorama/gtnh/client/ClientBlockAppearance\$1.class",
                 "dev/diorama/gtnh/capture/GrassContext\$Source.class",
@@ -273,6 +282,9 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
             val expectedMr = setOf("dev/diorama/gtnh/capture/TerrainPreview.class",
+                "dev/diorama/gtnh/capture/PreviewTileStore.class",
+                "dev/diorama/gtnh/capture/PreviewTileStore\$PixelStream.class",
+                "dev/diorama/gtnh/client/TerrainPreviewFrame.class",
                 "dev/diorama/gtnh/capture/StaticCubeAppearance.class",
                 "dev/diorama/gtnh/capture/StaticCubeAppearance\$Access.class",
                 "dev/diorama/gtnh/client/ClientBlockAppearance\$1.class",
@@ -410,8 +422,11 @@ for ((prefix, mainName) in listOf(
     "grass" to "dev.diorama.bake.GrassProbe",
     "water" to "dev.diorama.bake.WaterProbe",
     "staticCubeAppearance" to "dev.diorama.gtnh.probe.StaticCubeAppearanceProbe",
+    "overworldAppearance" to "dev.diorama.bake.OverworldAppearanceProbe",
+    "previewStorage" to "dev.diorama.gtnh.probe.PreviewStorageProbe",
     "terrainPreview" to "dev.diorama.bake.TerrainPreviewProbe",
     "terrainPreviewJob" to "dev.diorama.gtnh.client.TerrainPreviewJobProbe",
+    "terrainPreviewRefresh" to "dev.diorama.gtnh.client.TerrainPreviewRefreshProbe",
     "previewUpload" to "dev.diorama.gtnh.client.PreviewUploadProbe"
 )) {
     for (variant in coreProbeVariants) {
