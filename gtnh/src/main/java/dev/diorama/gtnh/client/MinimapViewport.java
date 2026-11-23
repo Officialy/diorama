@@ -13,7 +13,6 @@ final class MinimapViewport {
 
     static final double SPAN = 24;
     static final double HALF = SPAN / 2;
-    static final int DEFAULT_SIZE = 96;
     static final int MARGIN = 6;
     private static final double TILE_UNITS = Projection.TILE_UNITS;
     private static final double NORTH_SIN = Math.sin(Math.toRadians(MapStyle.DEFAULT.pitchDegrees()));
@@ -80,9 +79,9 @@ final class MinimapViewport {
     }
 
     /** Integer GUI bounds; only the inner tile seams may fall between GUI pixels. */
-    static Bounds fit(int width, int height) {
+    static Bounds fit(int width, int height, int preferredSize) {
         if (width <= 2 * MARGIN || height <= 2 * MARGIN) return new Bounds(0, 0, 0);
-        int size = Math.min(DEFAULT_SIZE, Math.min(width - 2 * MARGIN, height - 2 * MARGIN));
+        int size = Math.min(preferredSize, Math.min(width - 2 * MARGIN, height - 2 * MARGIN));
         return new Bounds(width - MARGIN - size, MARGIN, size);
     }
 

@@ -11,7 +11,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.22-dev"
+version = "0.8.1-gtnh.23-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -53,7 +53,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/gtnh/capture/StaticCubeAppearance.java", "dev/diorama/gtnh/capture/TerrainMetrics.java",
             "dev/diorama/gtnh/capture/PreviewOverview.java", "dev/diorama/gtnh/capture/PreviewTileStore.java",
             "dev/diorama/gtnh/client/TerrainPreviewFrame.java", "dev/diorama/gtnh/client/TerrainPreviewRefresh.java",
-            "dev/diorama/gtnh/client/MinimapViewport.java", "dev/diorama/gtnh/client/MapViewportController.java", "dev/diorama/gtnh/client/SharedTileIo.java", "dev/diorama/gtnh/client/DirtyTerrainTiles.java", "dev/diorama/gtnh/client/HudTexturePatchPixels.java",
+            "dev/diorama/gtnh/client/MinimapOptions.java", "dev/diorama/gtnh/client/MinimapViewport.java", "dev/diorama/gtnh/client/MapViewportController.java", "dev/diorama/gtnh/client/SharedTileIo.java", "dev/diorama/gtnh/client/DirtyTerrainTiles.java", "dev/diorama/gtnh/client/HudTexturePatchPixels.java",
             "dev/diorama/gtnh/capture/SectionBlocks.java", "dev/diorama/gtnh/capture/TintCapture.java",
             "dev/diorama/gtnh/capture/LegacyLeaves.java", "dev/diorama/gtnh/capture/GrassContext.java", "dev/diorama/gtnh/capture/WaterPng.java",
             "dev/diorama/gtnh/capture/TerrainPreview.java", "dev/diorama/gtnh/client/TerrainPreviewJob.java", "dev/diorama/gtnh/client/PreviewUpload.java")

@@ -47,7 +47,11 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         ClientRegistry.registerKeyBinding(OPEN_MAP);
         ClientRegistry.registerKeyBinding(TOGGLE_MINIMAP);
         MinecraftForge.EVENT_BUS.register(this);
-        MinecraftForge.EVENT_BUS.register(new ClientMinimap());
+        MinecraftForge.EVENT_BUS.register(
+            new ClientMinimap(
+                Minecraft.getMinecraft().mcDataDir.toPath()
+                    .resolve("config")
+                    .resolve("diorama-minimap.properties")));
         FMLCommonHandler.instance()
             .bus()
             .register(this);

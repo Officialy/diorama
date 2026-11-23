@@ -26,8 +26,8 @@ final class LegacyMinimapDraw {
      * -1, and valid must become false if this draw's ownership is revoked while a callback runs.
      */
     static void draw(Minecraft mc, int width, int height, MinimapViewport viewport, ToIntFunction<TileKey> textureId,
-        float yaw, String coords, BooleanSupplier valid) {
-        MinimapViewport.Bounds bounds = MinimapViewport.fit(width, height);
+        int size, float yaw, String coords, BooleanSupplier valid) {
+        MinimapViewport.Bounds bounds = MinimapViewport.fit(width, height, size);
         if (bounds.size() == 0 || !valid.getAsBoolean()) return;
         Tessellator mesh = spare == null ? new Tessellator() : spare;
         spare = null;

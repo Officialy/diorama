@@ -1,5 +1,7 @@
 package dev.diorama.gtnh.client;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -46,11 +48,11 @@ public final class ClientMinimap {
     private static final int PATCH_FALLBACK = 160;
     private static final int PATCH_SIDE = Projection.TILE_PIXELS / TileImage.BLOCK;
     private static final int CAPTURES_PER_TICK = 2;
-    private static boolean enabled = true;
     private static @Nullable ClientMinimap installed;
 
     private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(CACHE_TILES + 1, 0.75f, true);
     private final Map<TileKey, CachedTile> overviews = new LinkedHashMap<>(OVERVIEW_TILES + 1, 0.75f, true);
+    private final MinimapOptions options;
     private final SharedTileIo io = new SharedTileIo();
     private boolean persistent;
     private @Nullable WorldClient world;
@@ -68,12 +70,34 @@ public final class ClientMinimap {
     private boolean updating;
     private int retryTicks;
 
-    ClientMinimap() {
+    ClientMinimap(Path optionsFile) {
+        options = new MinimapOptions(optionsFile);
+        try {
+            options.load();
+        } catch (IOException | IllegalArgumentException failure) {
+            LOG.warn("Could not read Diorama minimap options; using defaults", failure);
+        }
         installed = this;
     }
 
+    static MinimapOptions options() {
+        return java.util.Objects.requireNonNull(installed).options;
+    }
+
+    static boolean saveOptions() {
+        try {
+            options().save();
+            return true;
+        } catch (IOException failure) {
+            LOG.warn("Could not save Diorama minimap options", failure);
+            return false;
+        }
+    }
+
     static void toggle() {
-        enabled = !enabled;
+        MinimapOptions settings = options();
+        settings.visible = !settings.visible;
+        saveOptions();
     }
 
     static void tick(Minecraft mc) {
@@ -130,8 +154,8 @@ public final class ClientMinimap {
             .invalidate(DirtyTerrainTiles.chunk(entry.getKey(), cx, cz));
     }
 
-    private static boolean canShow(Minecraft mc) {
-        return enabled && !mc.gameSettings.hideGUI
+    private boolean canShow(Minecraft mc) {
+        return options.visible && !mc.gameSettings.hideGUI
             && !mc.gameSettings.showDebugInfo
             && (mc.currentScreen == null || mc.currentScreen instanceof GuiChat);
     }
@@ -453,8 +477,14 @@ public final class ClientMinimap {
                     CachedTile tile = tiles.get(key);
                     return tile == null ? -1 : tile.id;
                 },
+                    options.size(),
                     yaw,
-                    MathHelper.floor_double(x) + ", " + MathHelper.floor_double(y) + ", " + MathHelper.floor_double(z),
+                    options.coordinates
+                        ? MathHelper.floor_double(x) + ", "
+                            + MathHelper.floor_double(y)
+                            + ", "
+                            + MathHelper.floor_double(z)
+                        : "",
                     () -> current(mc) && canShow(mc) && session == shown && textureGeneration == shownTextures);
         } catch (RuntimeException failure) {
             drawing = null; // The try-with-resources state has already been restored.

@@ -1,6 +1,8 @@
 package dev.diorama.gtnh.client;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.List;
@@ -90,6 +92,19 @@ public final class MinimapViewportProbe {
         checkFit(13, 13, 6, 6, 1);
         checkFit(12, 240, 0, 0, 0);
         checkFit(320, 0, 0, 0, 0);
+        require(
+            MinimapViewport.fit(320, 240, 64)
+                .equals(new Bounds(250, 6, 64)),
+            "smaller HUD");
+        require(
+            MinimapViewport.fit(320, 240, 128)
+                .equals(new Bounds(186, 6, 128)),
+            "larger HUD");
+        require(
+            MinimapViewport.fit(108, 70, 128)
+                .equals(new Bounds(44, 6, 58)),
+            "larger HUD clipped to window");
+        checkOptions();
         checkHeading(0, 0, 1);
         checkHeading(90, -1, 0);
         checkHeading(180, 0, -1);
@@ -108,6 +123,41 @@ public final class MinimapViewportProbe {
         System.out.println("FIXTURE-SHA256=" + hex);
         System.out
             .println("PASS minimap viewport: " + assertions + " assertions; tile seams, crops, GUI fit and north yaw");
+    }
+
+    private static void checkOptions() throws Exception {
+        Path dir = Files.createTempDirectory("diorama-minimap-options");
+        Path file = dir.resolve("config")
+            .resolve("diorama-minimap.properties");
+        try {
+            MinimapOptions first = new MinimapOptions(file);
+            first.load();
+            require(first.visible && first.coordinates && first.size() == 96, "missing file uses defaults");
+            require(!Files.exists(file), "loading defaults does not write");
+            first.visible = false;
+            first.coordinates = false;
+            first.cycleSize();
+            first.save();
+            MinimapOptions second = new MinimapOptions(file);
+            second.load();
+            require(!second.visible && !second.coordinates && second.size() == 128, "preferences survive reopen");
+            second.visible = true;
+            second.cycleSize();
+            second.save();
+            first.load();
+            require(first.visible && !first.coordinates && first.size() == 64, "replacement and size wrap");
+            first.cycleSize();
+            require(first.size() == 96, "size returns to default");
+            Files.write(file, "visible=nope\nsize=99999999999999999999\n".getBytes(StandardCharsets.UTF_8));
+            first.load();
+            require(first.visible && first.coordinates && first.size() == 96, "invalid or absent values use defaults");
+            hash.update(
+                (first.visible + ":" + first.coordinates + ":" + first.size()).getBytes(StandardCharsets.UTF_8));
+        } finally {
+            Files.deleteIfExists(file);
+            Files.deleteIfExists(file.getParent());
+            Files.deleteIfExists(dir);
+        }
     }
 
     private static void checkOne(double u, double v, int column, int row) {
@@ -172,7 +222,7 @@ public final class MinimapViewportProbe {
 
     private static void checkFit(int width, int height, int x, int y, int size) {
         require(
-            MinimapViewport.fit(width, height)
+            MinimapViewport.fit(width, height, MinimapOptions.DEFAULT_SIZE)
                 .equals(new Bounds(x, y, size)),
             "integer top-right HUD bounds");
     }

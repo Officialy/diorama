@@ -13,6 +13,11 @@ import dev.diorama.Projection;
 /** Fullscreen view of the same resident surface tiles used by the HUD. */
 final class SharedTerrainMapScreen extends GuiScreen {
 
+    private static final int BUTTON_X = 6;
+    private static final int BUTTON_Y = 6;
+    private static final int BUTTON_WIDTH = 114;
+    private static final int BUTTON_HEIGHT = 20;
+    private static final int OPTIONS_X = BUTTON_X + BUTTON_WIDTH + 4;
     private final WorldClient world;
     private final MapViewportController view = new MapViewportController(0, 0, 4, 0.25, 16);
     private boolean initialized, dragging;
@@ -33,7 +38,10 @@ final class SharedTerrainMapScreen extends GuiScreen {
     @Override
     public void initGui() {
         view.resize(0, 0, width, height);
-        buttonList.add(new GuiButton(0, 6, 6, 114, 20, I18n.format("diorama.map.recenter")));
+        buttonList.add(
+            new GuiButton(0, BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, I18n.format("diorama.map.recenter")));
+        buttonList.add(
+            new GuiButton(1, OPTIONS_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, I18n.format("diorama.minimap.options")));
         dragging = false;
         if (!initialized) {
             recenter();
@@ -50,7 +58,9 @@ final class SharedTerrainMapScreen extends GuiScreen {
 
     @Override
     protected void actionPerformed(GuiButton button) {
+        if (!belongsTo(mc.theWorld)) return;
         if (button.id == 0) recenter();
+        if (button.id == 1) mc.displayGuiScreen(new MinimapOptionsScreen(this));
     }
 
     @Override
@@ -80,7 +90,9 @@ final class SharedTerrainMapScreen extends GuiScreen {
     @Override
     protected void mouseClicked(int x, int y, int button) {
         super.mouseClicked(x, y, button);
-        if (button == 0 && !(x >= 6 && x < 120 && y >= 6 && y < 26)) {
+        boolean controls = y >= BUTTON_Y && y < BUTTON_Y + BUTTON_HEIGHT
+            && ((x >= BUTTON_X && x < BUTTON_X + BUTTON_WIDTH) || (x >= OPTIONS_X && x < OPTIONS_X + BUTTON_WIDTH));
+        if (button == 0 && !controls) {
             dragging = true;
             lastX = x;
             lastY = y;

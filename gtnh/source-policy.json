@@ -162,6 +162,14 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/client/MinimapOptions.java",
+      "fqn": "dev.diorama.gtnh.client.MinimapOptions"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/MinimapOptionsScreen.java",
+      "fqn": "dev.diorama.gtnh.client.MinimapOptionsScreen"
+    },
+    {
       "path": "dev/diorama/gtnh/client/SharedTileIo.java",
       "fqn": "dev.diorama.gtnh.client.SharedTileIo"
     },
