@@ -1,6 +1,7 @@
 package dev.diorama.gtnh.client;
 
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import org.jspecify.annotations.Nullable;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import dev.diorama.MapStyle;
 import dev.diorama.Projection;
+import dev.diorama.bake.TileImage;
 import dev.diorama.bake.TileKey;
 import dev.diorama.gtnh.capture.TerrainMetrics;
 import dev.diorama.gtnh.capture.TerrainPreview;
@@ -32,6 +34,8 @@ public final class ClientMinimap {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
     private static final int CACHE_TILES = 8;
+    private static final int PATCH_FALLBACK = 160;
+    private static final int PATCH_SIDE = Projection.TILE_PIXELS / TileImage.BLOCK;
     private static final int CAPTURES_PER_TICK = 2;
     private static boolean enabled = true;
     private static @Nullable ClientMinimap installed;
@@ -42,10 +46,12 @@ public final class ClientMinimap {
     private @Nullable TerrainWindow window;
     private float[] sunTint, shadowTint;
     private int centerX, centerZ;
-    private long captureGeneration, textureGeneration;
+    private long textureGeneration;
     private @Nullable TerrainPreviewJob job;
     private @Nullable TileKey jobKey;
-    private long jobRevision, jobGeneration;
+    private long jobRevision;
+    private int jobTop;
+    private @Nullable BitSet jobPatches;
     private @Nullable ProbeGlState drawing;
     private boolean updating;
     private int retryTicks;
@@ -73,19 +79,44 @@ public final class ClientMinimap {
         return hud != null && hud.world == source && mc.theWorld == source && mc.func_152345_ab() ? hud.window : null;
     }
 
-    static void blockChanged(World world, int cx, int cz, int x, int z) {
+    static void blockChanged(World world, int cx, int cz, int x, int y, int z) {
         TerrainWindow input = eventWindow(world);
-        if (input != null) input.blockChanged(cx, cz, x, z);
+        if (input == null || !input.contains(cx, cz)) return;
+        input.blockChanged(cx, cz, x, z);
+        for (var entry : installed.tiles.entrySet()) {
+            entry.getValue()
+                .invalidate(DirtyTerrainTiles.block(entry.getKey(), cx * 16 + x, y, cz * 16 + z));
+        }
     }
 
     static void chunkFilled(World world, int cx, int cz, boolean full) {
         TerrainWindow input = eventWindow(world);
-        if (input != null) input.chunkFilled(cx, cz, full);
+        if (input == null) return;
+        input.chunkFilled(cx, cz, full);
+        if (input.near(cx, cz)) installed.dirtyHalo(cx, cz);
     }
 
     static void chunkUnloaded(World world, int cx, int cz) {
         TerrainWindow input = eventWindow(world);
-        if (input != null) input.chunkUnloaded(cx, cz);
+        if (input == null) return;
+        input.chunkUnloaded(cx, cz);
+        if (input.near(cx, cz)) installed.dirtyHalo(cx, cz);
+    }
+
+    private void dirtyHalo(int cx, int cz) {
+        // Fill and unload may affect adjacent biome samples and light. Unlike a single block
+        // update, neither supplies a safe height bound.
+        for (var entry : tiles.entrySet()) {
+            entry.getValue()
+                .invalidate(
+                    DirtyTerrainTiles
+                        .range(entry.getKey(), cx * 16 - 16, 0, cz * 16 - 16, cx * 16 + 31, 255, cz * 16 + 31));
+        }
+    }
+
+    private void dirtyChunk(int cx, int cz) {
+        for (var entry : tiles.entrySet()) entry.getValue()
+            .invalidate(DirtyTerrainTiles.chunk(entry.getKey(), cx, cz));
     }
 
     private static boolean canShow(Minecraft mc) {
@@ -149,30 +180,44 @@ public final class ClientMinimap {
             if (!current(mc)) return;
             int cx = MathHelper.floor_double(player.posX) >> 4, cz = MathHelper.floor_double(player.posZ) >> 4;
             if (window == null || cx != centerX || cz != centerZ) {
-                discardJob();
+                if (window != null) {
+                    for (int z = centerZ - 1; z <= centerZ + 1; z++) for (int x = centerX - 1; x <= centerX + 1; x++)
+                        if (Math.abs(x - cx) > 1 || Math.abs(z - cz) > 1) dirtyChunk(x, z);
+                    for (int z = cz - 1; z <= cz + 1; z++)
+                        for (int x = cx - 1; x <= cx + 1; x++) if (!window.contains(x, z)) dirtyChunk(x, z);
+                }
                 centerX = cx;
                 centerZ = cz;
-                window = new TerrainWindow(session, cx, cz, () -> current(mc), window);
-                captureGeneration++;
+                window = new TerrainWindow(session, cx, cz, () -> current(mc), window, this::dirtyChunk);
             }
-            if (window.tick(CAPTURES_PER_TICK)) captureGeneration++;
+            window.tick(CAPTURES_PER_TICK);
             if (!current(mc)) return;
             finish(mc);
             if (retryTicks > 0 || job != null || TerrainPreviewJob.isBusy() || window.queued() || window.ready() == 0)
                 return;
             MinimapViewport view = view(player.posX, player.boundingBox.minY, player.posZ);
-            // Fill a newly exposed tile first, then replace older coverage. Only one worker slot.
-            TileKey selected = choose(view);
+            TileKey selected = choose(view, window.topY());
             if (selected == null) return;
-            CachedTile prior = tiles.get(selected);
-            long revision = window.revision();
+            CachedTile entry = tiles.get(selected);
+            if (entry == null) {
+                if (tiles.size() == CACHE_TILES) evict();
+                if (!current(mc)) return;
+                entry = new CachedTile();
+                tiles.put(selected, entry);
+            }
+            long revision = entry.revision;
             TerrainPreview.Work work = window.prepare(selected);
-            if (!current(mc) || window.revision() != revision) return;
-            job = TerrainPreviewJob.startDetail(work, prior == null ? null : prior.pixels);
+            if (!current(mc) || entry.revision != revision) return;
+            BitSet patches = entry.pixels != null && !entry.needsFull
+                && entry.top == work.topY()
+                && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
+            job = patches == null ? TerrainPreviewJob.startDetail(work, entry.pixels)
+                : TerrainPreviewJob.startDetailPatches(work, entry.pixels, patches);
             if (job != null) {
                 jobKey = selected;
-                jobGeneration = captureGeneration;
                 jobRevision = revision;
+                jobTop = work.topY();
+                jobPatches = patches;
             }
         } catch (RuntimeException failure) {
             backoff(failure);
@@ -181,12 +226,12 @@ public final class ClientMinimap {
         }
     }
 
-    private @Nullable TileKey choose(MinimapViewport view) {
+    private @Nullable TileKey choose(MinimapViewport view, int top) {
         TileKey stale = null;
         for (MinimapViewport.Tile part : view.tiles()) {
             CachedTile entry = tiles.get(part.key());
             if (entry == null) return part.key();
-            if (stale == null && entry.generation != captureGeneration) stale = part.key();
+            if (stale == null && (entry.needsFull || entry.top != top || !entry.dirty.isEmpty())) stale = part.key();
         }
         return stale;
     }
@@ -197,29 +242,32 @@ public final class ClientMinimap {
         if (finished == null || key == null || !finished.done()) return;
         TerrainPreviewFrame frame = finished.takeFrame();
         String failure = finished.failure();
+        BitSet patches = jobPatches;
         discardJob();
-        if (!current(mc) || window == null || jobGeneration != captureGeneration || jobRevision != window.revision())
-            return;
+        if (!current(mc)) return;
+        CachedTile entry = tiles.get(key);
+        if (entry == null || jobRevision != entry.revision || window.topY() != jobTop) return;
         if (failure != null || frame == null) {
             retryTicks = 100;
+            entry.needsFull = true;
             LOG.warn("Diorama minimap tile bake failed: {}", failure == null ? "missing result" : failure);
             return;
         }
-        CachedTile entry = tiles.get(key);
-        if (entry == null) {
-            if (tiles.size() == CACHE_TILES) evict();
-            if (!current(mc)) return;
-            entry = new CachedTile();
-            tiles.put(key, entry);
+        entry.dirty.clear();
+        entry.needsFull = false;
+        entry.top = jobTop;
+        if (frame.detail() != null && frame.detail() != entry.pixels) {
+            entry.pixels = frame.detail();
+            if (patches == null) entry.pendingUpload = null;
+            else if (entry.pendingUpload != null) entry.pendingUpload.or(patches);
         }
-        entry.generation = captureGeneration;
-        if (frame.detail() != null) entry.pixels = frame.detail();
     }
 
     private void discardJob() {
         if (job != null) job.close();
         job = null;
         jobKey = null;
+        jobPatches = null;
     }
 
     private void evict() {
@@ -283,8 +331,9 @@ public final class ClientMinimap {
             drawing = state;
             for (MinimapViewport.Tile part : view.tiles()) {
                 CachedTile tile = tiles.get(part.key());
-                if (tile != null && tile.pixels != null && tile.pixels != tile.uploaded) {
-                    upload(mc, part.key(), tile, state);
+                if (tile != null && tile.pixels != null
+                    && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
+                    if (!uploadPatch(mc, part.key(), tile, state)) upload(mc, part.key(), tile, state);
                     break; // Never queue multiple full texture uploads on one render frame.
                 }
             }
@@ -307,8 +356,69 @@ public final class ClientMinimap {
         }
     }
 
+    private boolean uploadPatch(Minecraft mc, TileKey key, CachedTile tile, ProbeGlState state) {
+        BitSet mask = tile.pendingUpload;
+        if (tile.texture == null || mask == null || mask.isEmpty() || tile.anaglyph != mc.gameSettings.anaglyph)
+            return false;
+        int left = PATCH_SIDE, top = PATCH_SIDE, right = 0, bottom = 0;
+        for (int bit = mask.nextSetBit(0); bit >= 0; bit = mask.nextSetBit(bit + 1)) {
+            int x = bit % PATCH_SIDE, y = bit / PATCH_SIDE;
+            left = Math.min(left, x);
+            top = Math.min(top, y);
+            right = Math.max(right, x + 1);
+            bottom = Math.max(bottom, y + 1);
+        }
+        int width = (right - left) * TileImage.BLOCK, height = (bottom - top) * TileImage.BLOCK;
+        if (width * height > Projection.TILE_PIXELS * Projection.TILE_PIXELS / 4) return false;
+        int[] pixels = tile.pixels;
+        DynamicTexture texture = tile.texture;
+        int id = tile.id;
+        long revision = tile.revision;
+        boolean anaglyph = tile.anaglyph;
+        long started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
+        boolean ok = false;
+        try {
+            ok = HudTexturePatchUpload.upload(
+                id,
+                Projection.TILE_PIXELS,
+                Projection.TILE_PIXELS,
+                pixels,
+                left * TileImage.BLOCK,
+                top * TileImage.BLOCK,
+                width,
+                height,
+                anaglyph,
+                () -> current(mc) && mc.gameSettings.anaglyph == anaglyph
+                    && tiles.get(key) == tile
+                    && tile.texture == texture
+                    && tile.pixels == pixels
+                    && tile.pendingUpload == mask
+                    && tile.revision == revision);
+            if (ok) {
+                tile.uploaded = pixels;
+                tile.pendingUpload = new BitSet();
+                textureGeneration++;
+            }
+        } catch (RuntimeException failure) {
+            LOG.warn("Diorama HUD partial upload failed; reverting to full texture", failure);
+        } finally {
+            if (!ok && tile.texture == texture) {
+                textureGeneration++;
+                tile.release(state);
+            }
+            if (TerrainMetrics.ENABLED) {
+                TerrainMetrics.record(TerrainMetrics.Phase.HUD_UPLOAD, System.nanoTime() - started);
+                TerrainMetrics.add(
+                    ok ? TerrainMetrics.Counter.HUD_UPLOAD_PUBLISHED : TerrainMetrics.Counter.HUD_UPLOAD_FAILED,
+                    1);
+            }
+        }
+        return true; // One attempted upload per frame. A tainted texture falls back next frame.
+    }
+
     private void upload(Minecraft mc, TileKey key, CachedTile tile, ProbeGlState state) {
         int[] scratch = tile.pixels;
+        boolean anaglyph = mc.gameSettings.anaglyph;
         DynamicTexture old = tile.texture;
         int oldId = tile.id;
         int edge = Projection.TILE_PIXELS;
@@ -321,11 +431,16 @@ public final class ClientMinimap {
                 ProbePixels.copyToArgb(scratch, texture.getTextureData());
                 if (current(mc) && tiles.get(key) == tile && tile.pixels == scratch) texture.updateDynamicTexture();
             },
-                () -> current(mc) && tiles.get(key) == tile && tile.pixels == scratch && tile.texture == old,
+                () -> current(mc) && mc.gameSettings.anaglyph == anaglyph
+                    && tiles.get(key) == tile
+                    && tile.pixels == scratch
+                    && tile.texture == old,
                 texture -> {
                     tile.texture = texture;
                     tile.id = raw[0];
                     tile.uploaded = scratch;
+                    tile.anaglyph = anaglyph;
+                    tile.pendingUpload = new BitSet();
                     textureGeneration++;
                 },
                 texture -> {
@@ -351,7 +466,18 @@ public final class ClientMinimap {
 
     private static final class CachedTile {
 
-        private long generation;
+        private final BitSet dirty = new BitSet();
+        private long revision;
+        private int top;
+        private boolean needsFull = true, anaglyph;
+        private @Nullable BitSet pendingUpload;
+
+        private void invalidate(BitSet patches) {
+            if (patches.isEmpty()) return;
+            dirty.or(patches);
+            revision++;
+        }
+
         private int[] pixels, uploaded;
         private DynamicTexture texture;
         private int id = -1;

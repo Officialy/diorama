@@ -1,6 +1,7 @@
 package dev.diorama.gtnh.capture;
 
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Objects;
 
 import org.jspecify.annotations.Nullable;
@@ -168,10 +169,80 @@ public final class TerrainPreview {
 
         /** Full canonical ABGR tile; missing chunks remain unknown/transparent, never invented air. */
         public TileImage bake() {
+            return this.bake(null);
+        }
+
+        /** Full HUD L0 refresh. An existing raster can become explicitly transparent, not absent. */
+        public int @Nullable [] bakeDetail(int @Nullable [] history) {
+            if (history != null) checkRaster(history);
+            int[] fresh = Objects.requireNonNull(
+                this.bake()
+                    .mips(),
+                "full tile")[0];
+            if (history == null || this.top != this.minY()) return PreviewTileStore.retain(history, fresh);
+            int[] merged = history.clone();
+            this.mergeDetail(merged, fresh, 0, 0, Projection.TILE_PIXELS);
+            return merged;
+        }
+
+        /**
+         * Updates only the requested 32px blocks (row-major tile coordinates). The returned full
+         * L0 raster is detached from read-only history; it can be paired with the same mask.
+         */
+        public int[] bakeDetailPatches(int[] history, BitSet patches) {
+            checkRaster(history);
+            int perRow = Projection.TILE_PIXELS / TileImage.BLOCK;
+            if (patches.isEmpty() || patches.length() > perRow * perRow)
+                throw new IllegalArgumentException("Expected nonempty preview patch mask within the tile");
+            TileImage image = this.bake(patches);
+            int[] merged = history.clone();
+            for (TileImage.Patch patch : image.patches()) {
+                this.mergeDetail(
+                    merged,
+                    patch.mips()[0],
+                    patch.blockX() * TileImage.BLOCK,
+                    patch.blockY() * TileImage.BLOCK,
+                    TileImage.BLOCK);
+            }
+            return merged;
+        }
+
+        private TileImage bake(@Nullable BitSet patches) {
             if (!this.stillCurrent()) throw new IllegalStateException("Stale preview projection/style");
-            TileImage image = TileBaker.bake(this.key, this, this.looks, null, false);
+            TileImage image = TileBaker.bake(this.key, this, this.looks, patches, false);
             if (!this.stillCurrent()) throw new IllegalStateException("Preview projection/style changed while baking");
             return image;
+        }
+
+        private static void checkRaster(int[] history) {
+            if (history.length != Projection.TILE_PIXELS * Projection.TILE_PIXELS)
+                throw new IllegalArgumentException("Expected full preview history raster");
+        }
+
+        private void mergeDetail(int[] merged, int[] fresh, int x0, int y0, int edge) {
+            for (int y = 0; y < edge; y++) {
+                int dst = (y0 + y) * Projection.TILE_PIXELS + x0;
+                for (int x = 0; x < edge; x++) {
+                    int pixel = fresh[y * edge + x];
+                    if ((pixel >>> 24) != 0 || ((merged[dst + x] >>> 24) != 0 && this.knownEmpty(x0 + x, y0 + y)))
+                        merged[dst + x] = pixel;
+                }
+            }
+        }
+
+        private boolean knownEmpty(int x, int y) {
+            // Zero normally means no ray was known. If all ready chunks are empty, TileBaker
+            // exits before tracing. Clear only where the entire pixel footprint at the start
+            // plane (world bottom) belongs to ready chunks; missing edges still retain history.
+            if (this.top != this.minY()) return false;
+            double step = 1.0 / Projection.PIXELS_PER_UNIT;
+            int cx = (int) Math.floor(this.key.minU() + x * step) >> 4;
+            double v = this.key.minV() + y * step;
+            // Use the supported pitch, not a global projection that can change after bake().
+            double invSin = 1.0 / Math.sin(Math.toRadians(MapStyle.DEFAULT.pitchDegrees()));
+            int north = (int) Math.floor(v * invSin) >> 4;
+            int south = (int) Math.floor((v + step) * invSin) >> 4;
+            return this.chunk(cx, north) != null && (north == south || this.chunk(cx, south) != null);
         }
 
         @Override

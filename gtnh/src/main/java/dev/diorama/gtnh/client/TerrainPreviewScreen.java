@@ -116,10 +116,10 @@ public final class TerrainPreviewScreen extends GuiScreen {
         return screen;
     }
 
-    public static void blockChanged(World world, int cx, int cz, int localX, int localZ) {
+    public static void blockChanged(World world, int cx, int cz, int localX, int y, int localZ) {
         TerrainPreviewScreen screen = eventTarget(world);
         if (screen != null) screen.window.blockChanged(cx, cz, localX, localZ);
-        ClientMinimap.blockChanged(world, cx, cz, localX, localZ);
+        ClientMinimap.blockChanged(world, cx, cz, localX, y, localZ);
     }
 
     public static void chunkFilled(World world, int cx, int cz, boolean full) {

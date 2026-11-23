@@ -1,5 +1,6 @@
 package dev.diorama.gtnh.client;
 
+import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 
 import org.apache.logging.log4j.LogManager;
@@ -20,12 +21,19 @@ final class TerrainWindow {
     private final ClientCaptureLifecycle.Session session;
     private final BooleanSupplier accepts;
     private final TerrainPreviewRefresh refresh;
+    private final @Nullable BiConsumer<Integer, Integer> availabilityChanged;
     private final ChunkSnapshot[] snapshots = new ChunkSnapshot[TerrainPreviewRefresh.SLOTS];
     private final ChunkCapture.Status[] statuses = new ChunkCapture.Status[TerrainPreviewRefresh.SLOTS];
     private int discoveryTicks, ready, pending, missing;
 
     TerrainWindow(ClientCaptureLifecycle.Session session, int cx, int cz, BooleanSupplier accepts,
         @Nullable TerrainWindow from) {
+        this(session, cx, cz, accepts, from, null);
+    }
+
+    TerrainWindow(ClientCaptureLifecycle.Session session, int cx, int cz, BooleanSupplier accepts,
+        @Nullable TerrainWindow from, @Nullable BiConsumer<Integer, Integer> availabilityChanged) {
+        this.availabilityChanged = availabilityChanged;
         this.session = session;
         this.accepts = accepts;
         this.refresh = new TerrainPreviewRefresh(cx, cz, System.nanoTime());
@@ -40,6 +48,21 @@ final class TerrainWindow {
             }
         }
         count();
+    }
+
+    boolean contains(int cx, int cz) {
+        return refresh.slot(cx, cz) >= 0;
+    }
+
+    boolean near(int cx, int cz) {
+        for (int z = cz - 1; z <= cz + 1; z++) for (int x = cx - 1; x <= cx + 1; x++) if (contains(x, z)) return true;
+        return false;
+    }
+
+    int topY() {
+        int top = Integer.MIN_VALUE;
+        for (ChunkSnapshot snapshot : snapshots) if (snapshot != null) top = Math.max(top, snapshot.maxY);
+        return top == Integer.MIN_VALUE ? 0 : top + 1;
     }
 
     int ready() {
@@ -166,6 +189,8 @@ final class TerrainWindow {
             case PENDING_APPEARANCE -> TerrainMetrics.Counter.CAPTURE_PENDING;
             case STALE_SESSION -> TerrainMetrics.Counter.CAPTURE_STALE;
         }, 1);
+        if (availabilityChanged != null && (snapshots[slot] == null) != (snapshot == null))
+            availabilityChanged.accept(cx, cz);
         snapshots[slot] = snapshot;
         statuses[slot] = outcome;
         count();

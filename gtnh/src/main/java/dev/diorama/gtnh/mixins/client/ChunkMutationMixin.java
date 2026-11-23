@@ -20,7 +20,7 @@ public abstract class ChunkMutationMixin {
     private void diorama$block(int x, int y, int z, Block block, int meta, CallbackInfoReturnable<Boolean> cir) {
         Chunk chunk = (Chunk) (Object) this;
         if (chunk.worldObj.isRemote && cir.getReturnValueZ()) {
-            TerrainPreviewScreen.blockChanged(chunk.worldObj, chunk.xPosition, chunk.zPosition, x, z);
+            TerrainPreviewScreen.blockChanged(chunk.worldObj, chunk.xPosition, chunk.zPosition, x, y, z);
         }
     }
 
@@ -28,7 +28,7 @@ public abstract class ChunkMutationMixin {
     private void diorama$metadata(int x, int y, int z, int meta, CallbackInfoReturnable<Boolean> cir) {
         Chunk chunk = (Chunk) (Object) this;
         if (chunk.worldObj.isRemote && cir.getReturnValueZ()) {
-            TerrainPreviewScreen.blockChanged(chunk.worldObj, chunk.xPosition, chunk.zPosition, x, z);
+            TerrainPreviewScreen.blockChanged(chunk.worldObj, chunk.xPosition, chunk.zPosition, x, y, z);
         }
     }
 

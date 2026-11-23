@@ -2,6 +2,7 @@ package dev.diorama.bake;
 
 import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.BitSet;
 
 import dev.diorama.Facing;
 import dev.diorama.MapStyle;
@@ -29,6 +30,7 @@ public final class TerrainPreviewProbe {
             inputs();
             styles();
             realBake();
+            patchBake();
         } finally {
             MapStyle.set(oldStyle);
             Projection.setFacing(oldFacing);
@@ -42,7 +44,7 @@ public final class TerrainPreviewProbe {
         System.out.println("FIXTURE-SHA256=" + hex);
         System.out.println(
             "PASS bounded terrain preview: " + assertions
-                + " assertions; numeric identity/bounds/detachment, fail-closed style, full canonical ABGR bake; native capture/screen/epoch acceptance UNTESTED");
+                + " assertions; numeric identity/bounds/detachment, fail-closed style, full/patch canonical ABGR bake; native capture/screen/epoch acceptance UNTESTED");
     }
 
     private static void keys() {
@@ -246,6 +248,77 @@ public final class TerrainPreviewProbe {
         }
         require(visible > 0 && visible < image.mips()[0].length, "bounded capture produces partial visible coverage");
         require(floor.stillCurrent(), "bake does not alter global projection/style");
+    }
+
+    private static void patchBake() {
+        PreparedBlockLooks looks = table();
+        ChunkSnapshot floor = snapshot(looks, 0, 0, true);
+        TerrainPreview.Work old = TerrainPreview.prepare(looks, looks.session(), KEY, new ChunkSnapshot[] { floor });
+        TerrainPreview.Work next = TerrainPreview
+            .prepare(looks, looks.session(), KEY, new ChunkSnapshot[] { floor, snapshot(looks, 0, 1, true) });
+        int edge = Projection.TILE_PIXELS;
+        int block = TileImage.BLOCK;
+        int stride = edge / block;
+        int[] previous = old.bakeDetail(null);
+        int[] saved = previous.clone();
+        int[] full = next.bakeDetail(previous);
+        BitSet patches = new BitSet();
+        patches.set(stride);
+        patches.set(stride + 1);
+        patches.set(stride * stride - 1);
+        int[] partial = next.bakeDetailPatches(previous, patches);
+        int changed = 0, pending = 0;
+        for (int y = 0; y < edge; y++) for (int x = 0; x < edge; x++) {
+            int i = y * edge + x;
+            boolean selected = patches.get((y / block) * stride + x / block);
+            if (full[i] != previous[i]) {
+                if (selected) changed++;
+                else pending++;
+            }
+            require(
+                partial[i] == (selected ? full[i] : previous[i]),
+                "patch interior matches full; exterior unchanged");
+        }
+        require(changed > 0 && pending > 0, "fixture changes terrain inside and outside the selected blocks");
+        require(partial != previous && Arrays.equals(previous, saved), "patch never mutates previous pixels");
+        patches.flip(0, stride * stride);
+        require(
+            Arrays.equals(next.bakeDetailPatches(partial, patches), full),
+            "assembled patches equal full HUD raster");
+
+        // A floor at the capture edge yields 1..3 known samples. Fresh partial coverage must
+        // replace opaque history, while a canonical zero outside the capture retains history.
+        int[] synthetic = new int[edge * edge];
+        Arrays.fill(synthetic, 0xFF465768);
+        int[] canonical = next.bake()
+            .mips()[0];
+        patches.set(0, stride * stride);
+        int[] merged = next.bakeDetailPatches(synthetic, patches);
+        int fractional = 0;
+        for (int i = 0; i < merged.length; i++) {
+            int alpha = canonical[i] >>> 24;
+            if (alpha > 0 && alpha < 255) fractional++;
+            require(merged[i] == (alpha == 0 ? synthetic[i] : canonical[i]), "HUD prefers all known fresh samples");
+        }
+        require(fractional > 0, "fixture exercises a partial-coverage overwrite");
+
+        TerrainPreview.Work empty = TerrainPreview
+            .prepare(looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, false) });
+        BitSet first = new BitSet();
+        first.set(0);
+        int[] cleared = empty.bakeDetailPatches(synthetic, first);
+        int[] emptyFull = empty.bakeDetail(synthetic);
+        require(cleared[24 * edge + 20] == 0, "last terrain removed: ready empty footprint now transparent");
+        require(emptyFull[24 * edge + 20] == 0, "full refresh also makes ready empty footprint transparent");
+        require(cleared[24 * edge + 32] == synthetic[24 * edge + 32], "empty refresh respects the patch boundary");
+        require(emptyFull[24 * edge + 400] == synthetic[24 * edge + 400], "missing footprint still retains history");
+        require(empty.bakeDetail(null) == null, "uninitialized empty raster stays absent");
+        expect(IllegalArgumentException.class, () -> next.bakeDetailPatches(synthetic, new BitSet()));
+        expect(IllegalArgumentException.class, () -> next.bakeDetailPatches(new int[1], first));
+        first.set(stride * stride);
+        expect(IllegalArgumentException.class, () -> next.bakeDetailPatches(synthetic, first));
+        for (int pixel : full) put(pixel);
+        for (int pixel : cleared) put(pixel);
     }
 
     private static PreparedBlockLooks table() {

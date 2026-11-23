@@ -2,6 +2,7 @@ package dev.diorama.gtnh.client;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.BitSet;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -37,27 +38,34 @@ public final class TerrainPreviewJob implements AutoCloseable {
         @Nullable PreviewTileStore store, @Nullable TerrainPreviewFrame previous) {
         Objects.requireNonNull(key, "key");
         if (work != null && !key.equals(work.key())) throw new IllegalArgumentException("Preview work key mismatch");
-        return startTask(
-            () -> TerrainPreviewFrame.assemble(key, work == null ? null : bake(work, false), store, previous));
+        return startTask(() -> {
+            TileImage image = work == null ? null : measured(TerrainMetrics.Phase.MAP_BAKE, work::bake);
+            return TerrainPreviewFrame.assemble(key, image, store, previous);
+        });
     }
 
     /** HUD requests just L0; it does not build/restore an overview or write storage. */
     static @Nullable TerrainPreviewJob startDetail(TerrainPreview.Work work, int @Nullable [] history) {
-        return startTask(() -> {
-            int[][] mips = Objects.requireNonNull(bake(work, true).mips(), "full tile");
-            return new TerrainPreviewFrame(PreviewTileStore.retain(history, mips[0]), null, null, false);
-        });
+        return startTask(() -> detailFrame(() -> work.bakeDetail(history)));
     }
 
-    private static TileImage bake(TerrainPreview.Work work, boolean hud) {
-        if (!TerrainMetrics.ENABLED) return work.bake();
+    /** The client retains its own mask for upload; the worker gets an independent copy. */
+    static @Nullable TerrainPreviewJob startDetailPatches(TerrainPreview.Work work, int[] history, BitSet patches) {
+        BitSet detached = (BitSet) patches.clone();
+        return startTask(() -> detailFrame(() -> work.bakeDetailPatches(history, detached)));
+    }
+
+    private static TerrainPreviewFrame detailFrame(Supplier<int @Nullable []> bake) {
+        return new TerrainPreviewFrame(measured(TerrainMetrics.Phase.HUD_BAKE, bake), null, null, false);
+    }
+
+    private static <T> T measured(TerrainMetrics.Phase phase, Supplier<T> bake) {
+        if (!TerrainMetrics.ENABLED) return bake.get();
         long started = System.nanoTime();
         try {
-            return work.bake();
+            return bake.get();
         } finally {
-            TerrainMetrics.record(
-                hud ? TerrainMetrics.Phase.HUD_BAKE : TerrainMetrics.Phase.MAP_BAKE,
-                System.nanoTime() - started);
+            TerrainMetrics.record(phase, System.nanoTime() - started);
         }
     }
 

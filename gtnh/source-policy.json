@@ -162,6 +162,18 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/client/HudTexturePatchUpload.java",
+      "fqn": "dev.diorama.gtnh.client.HudTexturePatchUpload"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/HudTexturePatchPixels.java",
+      "fqn": "dev.diorama.gtnh.client.HudTexturePatchPixels"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/DirtyTerrainTiles.java",
+      "fqn": "dev.diorama.gtnh.client.DirtyTerrainTiles"
+    },
+    {
       "path": "dev/diorama/gtnh/capture/TerrainMetrics.java",
       "fqn": "dev.diorama.gtnh.capture.TerrainMetrics"
     },
