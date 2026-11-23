@@ -263,12 +263,12 @@ public final class GrassProbe {
                 baker = TileBaker.forMeshing(new TileKey(TileKey.SURFACE, 0, 0), scene, scene.table, false, null);
                 checkAlbedo(baker, snowy, true, 0x8040FF, tint, 1, 0);
                 checkAlbedo(baker, snowy, false, 0, tint, 0, 0x4080FF);
-                scene.contextMissing = true;
+                scene.fail = true; // Any attempt to use the old live above-block reader throws.
                 require(
                     ChunkCapture.capture(scene, scene, 0, 0)
-                        .status() == ChunkCapture.Status.PENDING_APPEARANCE,
-                    "missing upper raw keeps whole result pending");
-                scene.contextMissing = false;
+                        .status() == ChunkCapture.Status.READY,
+                    "grass capture resolves from detached state, never rereads the live neighbor");
+                eq(scene.reads, 0, "all grass context came from copied section data");
                 scene.set(3, 16, 5, 42);
                 require(
                     ChunkCapture.capture(scene, scene, 0, 0)
@@ -423,10 +423,14 @@ public final class GrassProbe {
             return table;
         }
 
-        public int lookId(int raw, int meta, int x, int y, int z) {
+        public int rawAirId() {
+            return 0;
+        }
+
+        public int lookId(int raw, int meta, int x, int y, int z, int aboveRawId) {
             if (raw == 0) return table.airId();
             if (raw == GRASS) {
-                int context = GrassContext.resolve(this, token, x, y, z);
+                int context = y == 255 ? GrassContext.NORMAL : snowContext(aboveRawId);
                 return context == GrassContext.UNKNOWN ? -1 : table.find(raw, meta, context);
             }
             return table.find(raw, meta);

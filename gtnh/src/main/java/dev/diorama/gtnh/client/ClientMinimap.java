@@ -23,6 +23,7 @@ import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import dev.diorama.MapStyle;
 import dev.diorama.Projection;
 import dev.diorama.bake.TileKey;
+import dev.diorama.gtnh.capture.TerrainMetrics;
 import dev.diorama.gtnh.capture.TerrainPreview;
 import dev.diorama.gtnh.diagnostic.ProbePixels;
 
@@ -60,6 +61,10 @@ public final class ClientMinimap {
 
     static void tick(Minecraft mc) {
         if (installed != null) installed.update(mc);
+        if (TerrainMetrics.ENABLED) {
+            String report = TerrainMetrics.reportIfDue();
+            if (report != null) LOG.info("Diorama terrain metrics {}", report);
+        }
     }
 
     private static @Nullable TerrainWindow eventWindow(World source) {
@@ -308,19 +313,36 @@ public final class ClientMinimap {
         int oldId = tile.id;
         int edge = Projection.TILE_PIXELS;
         int[] raw = { -1 };
-        boolean published = PreviewUpload.transfer(() -> new DynamicTexture(edge, edge), texture -> {
-            raw[0] = texture.getGlTextureId();
-            ProbePixels.copyToArgb(scratch, texture.getTextureData());
-            if (current(mc) && tiles.get(key) == tile && tile.pixels == scratch) texture.updateDynamicTexture();
-        }, () -> current(mc) && tiles.get(key) == tile && tile.pixels == scratch && tile.texture == old, texture -> {
-            tile.texture = texture;
-            tile.id = raw[0];
-            tile.uploaded = scratch;
-            textureGeneration++;
-        }, texture -> {
-            if (raw[0] >= 0) state.forgetDeletedTexture(raw[0]);
-            texture.deleteGlTexture();
-        });
+        long started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
+        boolean published = false, failed = true;
+        try {
+            published = PreviewUpload.transfer(() -> new DynamicTexture(edge, edge), texture -> {
+                raw[0] = texture.getGlTextureId();
+                ProbePixels.copyToArgb(scratch, texture.getTextureData());
+                if (current(mc) && tiles.get(key) == tile && tile.pixels == scratch) texture.updateDynamicTexture();
+            },
+                () -> current(mc) && tiles.get(key) == tile && tile.pixels == scratch && tile.texture == old,
+                texture -> {
+                    tile.texture = texture;
+                    tile.id = raw[0];
+                    tile.uploaded = scratch;
+                    textureGeneration++;
+                },
+                texture -> {
+                    if (raw[0] >= 0) state.forgetDeletedTexture(raw[0]);
+                    texture.deleteGlTexture();
+                });
+            failed = false;
+        } finally {
+            if (TerrainMetrics.ENABLED) {
+                TerrainMetrics.record(TerrainMetrics.Phase.HUD_UPLOAD, System.nanoTime() - started);
+                TerrainMetrics.add(
+                    failed ? TerrainMetrics.Counter.HUD_UPLOAD_FAILED
+                        : published ? TerrainMetrics.Counter.HUD_UPLOAD_PUBLISHED
+                            : TerrainMetrics.Counter.HUD_UPLOAD_REJECTED,
+                    1);
+            }
+        }
         if (published && old != null) {
             state.forgetDeletedTexture(oldId);
             old.deleteGlTexture();

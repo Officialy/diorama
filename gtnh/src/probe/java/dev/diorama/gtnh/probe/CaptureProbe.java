@@ -24,6 +24,7 @@ public final class CaptureProbe {
         guards();
         completeCapture(true);
         completeCapture(false);
+        preparation();
         extendedMetadata();
         knownEmpty();
         surfaceInputs();
@@ -206,6 +207,32 @@ public final class CaptureProbe {
         put(maximum);
     }
 
+    private static void preparation() {
+        Fixture f = new Fixture(1, true);
+        Arrays.fill(f.raw[0], 0xFFFFFF);
+        Arrays.fill(f.meta[0], 65535);
+        f.overrideLook = 0;
+        status(f.capture(), ChunkCapture.Status.READY, f.epoch);
+        require(
+            f.count("loaded") == 1 && f.count("section") == 1
+                && f.count("blockId") == 4096
+                && f.count("metadata") == 4096
+                && f.count("prepare") == 1,
+            "one borrow, one raw read per cell, one prepare for repeated extended key");
+        Fixture capped = new Fixture(1, true);
+        capped.stateLimit = 1;
+        status(capped.capture(), ChunkCapture.Status.PENDING_APPEARANCE, capped.epoch);
+        require(
+            capped.count("prepare") == 0 && capped.count("look") == 0 && capped.count("blockLight") == 0,
+            "limit stops before publishing any appearance or reading lighting");
+        Fixture rejected = new Fixture(1, true);
+        rejected.prepared = false;
+        status(rejected.capture(), ChunkCapture.Status.PENDING_APPEARANCE, rejected.epoch);
+        require(
+            rejected.count("prepare") == 1 && rejected.count("look") == 0 && rejected.count("tints") == 0,
+            "unresolved state stops before emitting a snapshot");
+    }
+
     private static void knownEmpty() {
         Fixture empty = new Fixture(16, false);
         Arrays.fill(empty.nullSections, true);
@@ -319,7 +346,8 @@ public final class CaptureProbe {
 
     private static void stale() {
         String[] stages = { "accessSession", "loaded", "chunkX", "chunkZ", "minSection", "sectionCount", "hasSky",
-            "looks", "air", "section", "blockId", "metadata", "look", "blockLight", "skyLight", "tints", "fog" };
+            "looks", "air", "section", "blockId", "metadata", "prepare", "look", "blockLight", "skyLight", "tints",
+            "fog" };
         for (String stage : stages) {
             Fixture disconnected = new Fixture(1, true);
             disconnected.trigger = stage;
@@ -616,7 +644,23 @@ public final class CaptureProbe {
                 return missing ? null : Fixture.this;
             }
         };
+        private int stateLimit = 65536;
+        private boolean prepared = true;
         private final ChunkCapture.Inputs inputs = new ChunkCapture.Inputs() {
+
+            @Override
+            public int stateLimit() {
+                return stateLimit;
+            }
+
+            @Override
+            public boolean prepareState(int id, int metadata) {
+                touch("prepare");
+                require(
+                    count("section") == reportedCount && count("look") == 0,
+                    "appearance preparation starts after copying source states and before resolving looks");
+                return prepared;
+            }
 
             @Override
             public Object session() {
@@ -637,7 +681,7 @@ public final class CaptureProbe {
             }
 
             @Override
-            public int lookId(int id, int metadata, int x, int y, int z) {
+            public int lookId(int id, int metadata, int x, int y, int z, int aboveRawId) {
                 touch("look");
                 int si = (y >> 4) - minSection;
                 int cell = ((y & 15) << 8) | ((z & 15) << 4) | (x & 15);

@@ -29,7 +29,7 @@ import dev.diorama.gtnh.capture.TintCapture;
  * Optional EndlessIDs access is isolated from the vanilla array path. Live wrappers are for
  * immediate ChunkCapture consumption only; they must never be published to a worker or retained.
  */
-public final class ClientCaptureAccess implements ChunkCapture.Access, GrassContext.Source {
+public final class ClientCaptureAccess implements ChunkCapture.Access {
 
     private final Minecraft minecraft;
     private final WorldClient world;
@@ -106,27 +106,12 @@ public final class ClientCaptureAccess implements ChunkCapture.Access, GrassCont
         return this.wrap(chunk);
     }
 
-    @Override
-    public int rawBlockId(int x, int y, int z) {
+    int rawAirId() {
         this.requireCurrent();
-        if (y < 0 || y > 255) throw new IllegalArgumentException("Raw context height outside legacy world");
-        net.minecraft.world.chunk.Chunk chunk = this.loadedChunk(x >> 4, z >> 4);
-        if (chunk == null) return -1;
-        ExtendedBlockStorage[] sections = chunk.getBlockStorageArray();
-        if (sections == null || sections.length != 16)
-            throw new UnsupportedOperationException("Unsupported context section span");
-        int index = y >> 4;
-        ExtendedBlockStorage section = sections[index];
-        if (section == null) {
-            this.requireCurrent();
-            return this.airBlockId;
-        }
-        SectionBlocks data = this.blockData(section, index);
-        return this.rawId(section, data, ((y & 15) << 8) | ((z & 15) << 4) | (x & 15));
+        return this.airBlockId;
     }
 
-    @Override
-    public int snowContext(int rawId) {
+    int snowContext(int rawId) {
         this.requireCurrent();
         if (rawId < 0) return GrassContext.UNKNOWN;
         Block block = Block.getBlockById(rawId);
@@ -185,7 +170,6 @@ public final class ClientCaptureAccess implements ChunkCapture.Access, GrassCont
         if (section.getClass() != ExtendedBlockStorage.class || section.getYLocation() != (index << 4))
             throw new UnsupportedOperationException("Unsupported client section representation or origin");
         if (this.endlessLoaded) EndlessSectionStorage.check(section, this.extended);
-        // Context reads validate only their target section, not an entire chunk per grass voxel.
         SectionBlocks blocks = this.extended ? EndlessSectionStorage.read(section)
             : SectionBlocks.vanilla(
                 section.getBlockLSBArray(),

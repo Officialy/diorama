@@ -455,7 +455,7 @@ public final class EpochFenceProbe {
             return table.airId();
         }
 
-        public int lookId(int raw, int meta, int x, int y, int z) {
+        public int lookId(int raw, int meta, int x, int y, int z, int aboveRawId) {
             return table.find(raw, meta);
         }
 

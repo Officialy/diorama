@@ -1,12 +1,6 @@
 package dev.diorama.gtnh.client;
 
-import java.util.HashSet;
-import java.util.Set;
 import java.util.function.BooleanSupplier;
-
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockGrass;
-import net.minecraft.init.Blocks;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -15,7 +9,7 @@ import org.jspecify.annotations.Nullable;
 import dev.diorama.bake.TileKey;
 import dev.diorama.data.ChunkSnapshot;
 import dev.diorama.gtnh.capture.ChunkCapture;
-import dev.diorama.gtnh.capture.GrassContext;
+import dev.diorama.gtnh.capture.TerrainMetrics;
 import dev.diorama.gtnh.capture.TerrainPreview;
 
 /** Main-thread capture and change coalescing shared by the map and HUD. */
@@ -144,27 +138,34 @@ final class TerrainWindow {
         ChunkSnapshot snapshot = null;
         ChunkCapture.Status outcome = ChunkCapture.Status.PENDING_APPEARANCE;
         int cx = refresh.x(slot), cz = refresh.z(slot);
+        long start = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
         try {
-            ChunkCapture.Chunk chunk = session.access()
-                .loaded(cx, cz);
+            ChunkCapture.Result result = session.capture(cx, cz);
             requireCurrent();
-            if (chunk == null) outcome = ChunkCapture.Status.MISSING_CHUNK;
-            else if (preflight(chunk)) {
-                ChunkCapture.Result result = session.capture(cx, cz);
-                requireCurrent();
-                if (result.status() == ChunkCapture.Status.READY && ClientCaptureLifecycle.accepts(result)) {
-                    snapshot = result.snapshot();
-                    outcome = ChunkCapture.Status.READY;
-                } else if (result.status() == ChunkCapture.Status.MISSING_CHUNK) {
-                    outcome = ChunkCapture.Status.MISSING_CHUNK;
-                }
+            outcome = result.status();
+            if (outcome == ChunkCapture.Status.READY) {
+                if (ClientCaptureLifecycle.accepts(result)) snapshot = result.snapshot();
+                else outcome = ChunkCapture.Status.STALE_SESSION;
             }
         } catch (RuntimeException error) {
             requireCurrent();
+            if (TerrainMetrics.ENABLED) TerrainMetrics.add(TerrainMetrics.Counter.CAPTURE_FAILED, 1);
             LOG.warn("Diorama terrain capture pending at ({}, {})", cx, cz, error);
+        } finally {
+            if (TerrainMetrics.ENABLED)
+                TerrainMetrics.record(TerrainMetrics.Phase.CAPTURE_SLOT, System.nanoTime() - start);
         }
         requireCurrent();
-        if (version != refresh.version(slot)) return false; // Reentrant event owns the next attempt.
+        if (version != refresh.version(slot)) {
+            if (TerrainMetrics.ENABLED) TerrainMetrics.add(TerrainMetrics.Counter.CAPTURE_STALE, 1);
+            return false; // Reentrant event owns the next attempt.
+        }
+        if (TerrainMetrics.ENABLED) TerrainMetrics.add(switch (outcome) {
+            case READY -> TerrainMetrics.Counter.CAPTURE_READY;
+            case MISSING_CHUNK -> TerrainMetrics.Counter.CAPTURE_MISSING;
+            case PENDING_APPEARANCE -> TerrainMetrics.Counter.CAPTURE_PENDING;
+            case STALE_SESSION -> TerrainMetrics.Counter.CAPTURE_STALE;
+        }, 1);
         snapshots[slot] = snapshot;
         statuses[slot] = outcome;
         count();
@@ -178,45 +179,6 @@ final class TerrainWindow {
             else if (state == ChunkCapture.Status.MISSING_CHUNK) missing++;
             else pending++;
         }
-    }
-
-    private boolean preflight(ChunkCapture.Chunk chunk) {
-        requireCurrent();
-        int minimum = chunk.minSectionY();
-        requireCurrent();
-        int count = chunk.sectionCount();
-        requireCurrent();
-        if (minimum != 0 || count != 16) return false;
-        Set<Long> states = new HashSet<>();
-        for (int index = 0; index < 16; index++) {
-            ChunkCapture.Section section = chunk.section(index);
-            requireCurrent();
-            if (section == null) continue;
-            for (int cell = 0; cell < 4096; cell++) {
-                int raw = section.blockId(cell);
-                requireCurrent();
-                int meta = section.metadata(cell);
-                requireCurrent();
-                if (raw < 0 || raw > 0xFFFFFF || meta < 0 || meta > 65535) return false;
-                states.add(((long) raw << 16) | meta);
-                if (states.size() > CAPACITY) return false;
-            }
-        }
-        for (long state : states) {
-            requireCurrent();
-            int raw = (int) (state >>> 16), meta = (int) (state & 65535);
-            Block block = Block.getBlockById(raw);
-            if (block == null || Block.getIdFromBlock(block) != raw) return false;
-            boolean prepared;
-            if (block == Blocks.grass && block.getClass() == BlockGrass.class && meta == 0) {
-                prepared = session.prepare(raw, meta, GrassContext.NORMAL) >= 0;
-                requireCurrent();
-                prepared &= session.prepare(raw, meta, GrassContext.SNOWY) >= 0;
-            } else prepared = session.prepare(raw, meta) >= 0;
-            requireCurrent();
-            if (!prepared) return false;
-        }
-        return true;
     }
 
 }

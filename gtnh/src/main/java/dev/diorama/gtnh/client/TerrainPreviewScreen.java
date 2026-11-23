@@ -22,6 +22,7 @@ import dev.diorama.MapStyle;
 import dev.diorama.Projection;
 import dev.diorama.bake.TileKey;
 import dev.diorama.gtnh.capture.PreviewTileStore;
+import dev.diorama.gtnh.capture.TerrainMetrics;
 import dev.diorama.gtnh.capture.TerrainPreview;
 import dev.diorama.gtnh.diagnostic.ProbePixels;
 
@@ -318,6 +319,7 @@ public final class TerrainPreviewScreen extends GuiScreen {
         int[] preparedId = { -1 };
         DynamicTexture previous = texture;
         int previousId = textureId;
+        long started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
         boolean published;
         try {
             published = PreviewUpload.transfer(() -> new DynamicTexture(edge, edge), created -> {
@@ -334,8 +336,18 @@ public final class TerrainPreviewScreen extends GuiScreen {
                 shownOverview = overview;
             }, created -> delete(created, state));
         } catch (RuntimeException error) {
+            if (TerrainMetrics.ENABLED) {
+                TerrainMetrics.record(TerrainMetrics.Phase.MAP_UPLOAD, System.nanoTime() - started);
+                TerrainMetrics.add(TerrainMetrics.Counter.MAP_UPLOAD_FAILED, 1);
+            }
             LOG.warn("Diorama terrain texture replacement failed", error);
             return false;
+        }
+        if (TerrainMetrics.ENABLED) {
+            TerrainMetrics.record(TerrainMetrics.Phase.MAP_UPLOAD, System.nanoTime() - started);
+            TerrainMetrics.add(
+                published ? TerrainMetrics.Counter.MAP_UPLOAD_PUBLISHED : TerrainMetrics.Counter.MAP_UPLOAD_REJECTED,
+                1);
         }
         if (published && previous != null) {
             state.forgetDeletedTexture(previousId);

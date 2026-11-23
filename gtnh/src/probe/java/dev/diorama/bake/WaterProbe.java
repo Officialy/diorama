@@ -362,7 +362,7 @@ public final class WaterProbe {
             return table;
         }
 
-        public int lookId(int raw, int meta, int x, int y, int z) {
+        public int lookId(int raw, int meta, int x, int y, int z, int aboveRawId) {
             return raw == AIR ? table.airId() : table.find(raw, meta);
         }
 

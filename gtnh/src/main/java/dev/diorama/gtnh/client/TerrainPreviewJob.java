@@ -7,8 +7,10 @@ import java.util.function.Supplier;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.diorama.bake.TileImage;
 import dev.diorama.bake.TileKey;
 import dev.diorama.gtnh.capture.PreviewTileStore;
+import dev.diorama.gtnh.capture.TerrainMetrics;
 import dev.diorama.gtnh.capture.TerrainPreview;
 
 /** Single detached worker slot for bake, restore and separately accepted writes. */
@@ -18,6 +20,7 @@ public final class TerrainPreviewJob implements AutoCloseable {
     private Supplier<TerrainPreviewFrame> task;
     private final boolean acceptedWrite;
     private final Thread thread;
+    private long submittedAt;
     private TerrainPreviewFrame frame;
     private String failure;
     private boolean done;
@@ -34,18 +37,28 @@ public final class TerrainPreviewJob implements AutoCloseable {
         @Nullable PreviewTileStore store, @Nullable TerrainPreviewFrame previous) {
         Objects.requireNonNull(key, "key");
         if (work != null && !key.equals(work.key())) throw new IllegalArgumentException("Preview work key mismatch");
-        return startTask(() -> TerrainPreviewFrame.assemble(key, work == null ? null : work.bake(), store, previous));
+        return startTask(
+            () -> TerrainPreviewFrame.assemble(key, work == null ? null : bake(work, false), store, previous));
     }
 
     /** HUD requests just L0; it does not build/restore an overview or write storage. */
     static @Nullable TerrainPreviewJob startDetail(TerrainPreview.Work work, int @Nullable [] history) {
         return startTask(() -> {
-            int[][] mips = Objects.requireNonNull(
-                work.bake()
-                    .mips(),
-                "full tile");
+            int[][] mips = Objects.requireNonNull(bake(work, true).mips(), "full tile");
             return new TerrainPreviewFrame(PreviewTileStore.retain(history, mips[0]), null, null, false);
         });
+    }
+
+    private static TileImage bake(TerrainPreview.Work work, boolean hud) {
+        if (!TerrainMetrics.ENABLED) return work.bake();
+        long started = System.nanoTime();
+        try {
+            return work.bake();
+        } finally {
+            TerrainMetrics.record(
+                hud ? TerrainMetrics.Phase.HUD_BAKE : TerrainMetrics.Phase.MAP_BAKE,
+                System.nanoTime() - started);
+        }
     }
 
     /** Call only after accepting the frame on the client thread under its epoch and refresh revision. */
@@ -75,6 +88,7 @@ public final class TerrainPreviewJob implements AutoCloseable {
         TerrainPreviewJob job = new TerrainPreviewJob(task, acceptedWrite);
         busy = job.thread;
         try {
+            if (TerrainMetrics.ENABLED) job.submittedAt = System.nanoTime();
             job.thread.start();
         } catch (RuntimeException | Error error) {
             job.task = null;
@@ -91,6 +105,8 @@ public final class TerrainPreviewJob implements AutoCloseable {
     }
 
     private void run() {
+        if (TerrainMetrics.ENABLED)
+            TerrainMetrics.record(TerrainMetrics.Phase.WORKER_QUEUE_WAIT, System.nanoTime() - this.submittedAt);
         Supplier<TerrainPreviewFrame> input;
         synchronized (this) {
             input = this.task;

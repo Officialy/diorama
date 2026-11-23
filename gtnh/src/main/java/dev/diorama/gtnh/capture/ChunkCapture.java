@@ -7,6 +7,7 @@ import org.jspecify.annotations.Nullable;
 
 import dev.diorama.bake.Looks;
 import dev.diorama.data.ChunkSnapshot;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
 /** Copies a borrowed client-thread chunk into prepared CPU inputs, without retaining world views. */
 public final class ChunkCapture {
@@ -69,8 +70,23 @@ public final class ChunkCapture {
 
         int airId();
 
+        /** Limit the distinct source states encountered before any appearance is prepared. */
+        default int stateLimit() {
+            return 65536;
+        }
+
+        /** Register a distinct raw state using only its detached values. False keeps the chunk pending. */
+        default boolean prepareState(int blockId, int metadata) {
+            return true;
+        }
+
+        /** Registry air ID used as context above a known-null section. */
+        default int rawAirId() {
+            return -1;
+        }
+
         /** A published valid look ID, or negative if appearance is not ready/supported. */
-        int lookId(int blockId, int metadata, int worldX, int worldY, int worldZ);
+        int lookId(int blockId, int metadata, int worldX, int worldY, int worldZ, int aboveRawId);
 
         /**
          * Receives a detached resolved-non-air height array in (localZ << 4) | localX order; empty
@@ -148,62 +164,130 @@ public final class ChunkCapture {
                 throw new IllegalArgumentException("Prepared air ID does not identify air");
             current(access, session);
 
+            int rawAirId = inputs.rawAirId();
+            current(access, session);
+            int stateLimit = inputs.stateLimit();
+            current(access, session);
+            if (stateLimit <= 0) throw new IllegalArgumentException("Invalid capture state limit");
+
+            long started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
+            LongOpenHashSet unique = new LongOpenHashSet();
+            long[][] raw = new long[count][];
+            int readStates = 0;
+            try {
+                for (int sectionIndex = 0; sectionIndex < count; sectionIndex++) {
+                    Section section = chunk.section(sectionIndex);
+                    current(access, session);
+                    if (section == null) continue;
+                    long[] states = raw[sectionIndex] = new long[4096];
+                    for (int cell = 0; cell < states.length; cell++) {
+                        int blockId = section.blockId(cell);
+                        current(access, session);
+                        int metadata = section.metadata(cell);
+                        readStates++;
+                        current(access, session);
+                        if (blockId < 0 || metadata < 0 || metadata > 65535)
+                            throw new IllegalArgumentException("Invalid captured block ID or metadata");
+                        long packed = ((long) blockId << 16) | metadata;
+                        states[cell] = packed;
+                        if (unique.add(packed) && unique.size() > stateLimit) throw new Pending();
+                    }
+                }
+            } finally {
+                if (TerrainMetrics.ENABLED) {
+                    TerrainMetrics.record(TerrainMetrics.Phase.CAPTURE_COPY, System.nanoTime() - started);
+                    TerrainMetrics.add(TerrainMetrics.Counter.CAPTURE_STATE_CELLS, readStates);
+                }
+            }
+            started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
+            try {
+                var states = unique.iterator();
+                while (states.hasNext()) {
+                    long state = states.nextLong();
+                    boolean prepared = inputs.prepareState((int) (state >>> 16), (int) state & 65535);
+                    current(access, session);
+                    if (inputs.session() != session) throw new Stale();
+                    current(access, session);
+                    if (!prepared) throw new Pending();
+                }
+            } finally {
+                if (TerrainMetrics.ENABLED)
+                    TerrainMetrics.record(TerrainMetrics.Phase.CAPTURE_APPEARANCE, System.nanoTime() - started);
+            }
+
             int[][] sections = new int[count][];
             byte[][] blockLight = new byte[count][];
             byte[][] skyLight = new byte[count][];
             int[] surface = new int[256];
             Arrays.fill(surface, Integer.MIN_VALUE);
             int maxY = Integer.MIN_VALUE;
-            for (int sectionIndex = 0; sectionIndex < count; sectionIndex++) {
-                current(access, session);
-                Section section = chunk.section(sectionIndex);
-                current(access, session);
-                int[] ids = section == null ? null : new int[4096];
-                byte[] blocks = new byte[4096];
-                byte[] sky = new byte[4096];
-                int first = -1;
-                boolean uniform = true;
-                for (int cell = 0; cell < 4096; cell++) {
-                    current(access, session);
-                    int y = (minSectionY + sectionIndex) * 16 + (cell >>> 8);
-                    if (section != null) {
-                        int blockId = section.blockId(cell);
+            int readLights = 0;
+            started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
+            try {
+                for (int sectionIndex = 0; sectionIndex < count; sectionIndex++) {
+                    long[] source = raw[sectionIndex];
+                    int[] ids = source == null ? null : new int[4096];
+                    byte[] blocks = new byte[4096];
+                    byte[] sky = new byte[4096];
+                    int first = -1;
+                    boolean uniform = true;
+                    for (int cell = 0; cell < 4096; cell++) {
                         current(access, session);
-                        int metadata = section.metadata(cell);
+                        int y = (minSectionY + sectionIndex) * 16 + (cell >>> 8);
+                        if (source != null) {
+                            long state = source[cell];
+                            int above = above(raw, sectionIndex, cell, rawAirId);
+                            int id = inputs.lookId(
+                                (int) (state >>> 16),
+                                (int) state & 65535,
+                                worldX0 + (cell & 15),
+                                y,
+                                worldZ0 + ((cell >>> 4) & 15),
+                                above);
+                            current(access, session);
+                            if (id < 0) throw new Pending();
+                            byte material = kind(looks, id);
+                            current(access, session);
+                            ids[cell] = id;
+                            if (cell == 0) first = id;
+                            else uniform &= id == first;
+                            if (material != Looks.AIR) {
+                                int column = cell & 255;
+                                surface[column] = Math.max(surface[column], y);
+                                maxY = Math.max(maxY, y);
+                            }
+                        }
+                        int blockValue = chunk.blockLight(sectionIndex, cell);
+                        readLights++;
                         current(access, session);
-                        if (blockId < 0 || metadata < 0 || metadata > 65535)
-                            throw new IllegalArgumentException("Invalid captured block ID or metadata");
-                        int id = inputs
-                            .lookId(blockId, metadata, worldX0 + (cell & 15), y, worldZ0 + ((cell >>> 4) & 15));
-                        current(access, session);
-                        if (id < 0) throw new Pending();
-                        byte material = kind(looks, id);
-                        current(access, session);
-                        ids[cell] = id;
-                        if (cell == 0) first = id;
-                        else uniform &= id == first;
-                        if (material != Looks.AIR) {
-                            int column = cell & 255;
-                            surface[column] = Math.max(surface[column], y);
-                            maxY = Math.max(maxY, y);
+                        blocks[cell] = light(blockValue);
+                        if (hasSkyLight) {
+                            int skyValue = chunk.skyLight(sectionIndex, cell);
+                            readLights++;
+                            current(access, session);
+                            sky[cell] = light(skyValue);
                         }
                     }
-                    int blockValue = chunk.blockLight(sectionIndex, cell);
-                    current(access, session);
-                    blocks[cell] = light(blockValue);
-                    if (hasSkyLight) {
-                        int skyValue = chunk.skyLight(sectionIndex, cell);
-                        current(access, session);
-                        sky[cell] = light(skyValue);
-                    }
+                    sections[sectionIndex] = ids == null ? null : uniform ? new int[] { first } : ids;
+                    // Even known-air sections retain their captured 1.7.10 height-map light values.
+                    blockLight[sectionIndex] = blocks;
+                    skyLight[sectionIndex] = sky;
                 }
-                sections[sectionIndex] = ids == null ? null : uniform ? new int[] { first } : ids;
-                // Even known-air sections retain their captured 1.7.10 height-map light values.
-                blockLight[sectionIndex] = blocks;
-                skyLight[sectionIndex] = sky;
+            } finally {
+                if (TerrainMetrics.ENABLED) {
+                    TerrainMetrics.record(TerrainMetrics.Phase.CAPTURE_RESOLVE, System.nanoTime() - started);
+                    TerrainMetrics.add(TerrainMetrics.Counter.CAPTURE_LIGHT_CELLS, readLights);
+                }
             }
             current(access, session);
-            ChunkSnapshot.Tints tints = inputs.tints(chunkX, chunkZ, surface.clone());
+            started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
+            ChunkSnapshot.Tints tints;
+            try {
+                tints = inputs.tints(chunkX, chunkZ, surface.clone());
+            } finally {
+                if (TerrainMetrics.ENABLED)
+                    TerrainMetrics.record(TerrainMetrics.Phase.CAPTURE_TINT, System.nanoTime() - started);
+            }
             current(access, session);
             if (tints == null) throw new Pending();
             int fog = inputs.fogColor(chunkX, chunkZ);
@@ -239,6 +323,13 @@ public final class ChunkCapture {
         } catch (Stale stale) {
             return result(Status.STALE_SESSION, session);
         }
+    }
+
+    private static int above(long[][] raw, int section, int cell, int rawAirId) {
+        if (cell < 3840) return (int) (raw[section][cell + 256] >>> 16);
+        if (++section == raw.length) return rawAirId;
+        long[] next = raw[section];
+        return next == null ? rawAirId : (int) (next[cell & 255] >>> 16);
     }
 
     private static int origin(int chunk) {

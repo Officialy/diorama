@@ -2,6 +2,8 @@ package dev.diorama.gtnh.client;
 
 import java.util.Arrays;
 
+import dev.diorama.gtnh.capture.TerrainMetrics;
+
 /** Owner-thread queue for one fixed 3x3 preview, using monotonic nanosecond deadlines. */
 final class TerrainPreviewRefresh {
 
@@ -41,7 +43,10 @@ final class TerrainPreviewRefresh {
         if (slot < 0) return;
         long due = now + delay;
         int bit = 1 << slot;
-        if ((queued & bit) == 0 || due - deadlines[slot] < 0) deadlines[slot] = due;
+        boolean already = (queued & bit) != 0;
+        if (TerrainMetrics.ENABLED) TerrainMetrics
+            .add(already ? TerrainMetrics.Counter.REFRESH_COALESCED : TerrainMetrics.Counter.REFRESH_ENQUEUED, 1);
+        if (!already || due - deadlines[slot] < 0) deadlines[slot] = due;
         queued |= bit;
         versions[slot]++;
         revision++;
@@ -75,6 +80,10 @@ final class TerrainPreviewRefresh {
             int bit = 1 << slot;
             if ((candidates & bit) != 0 && now - deadlines[slot] >= 0) {
                 queued &= ~bit;
+                if (TerrainMetrics.ENABLED) {
+                    TerrainMetrics.record(TerrainMetrics.Phase.REFRESH_QUEUE_WAIT, now - deadlines[slot]);
+                    TerrainMetrics.add(TerrainMetrics.Counter.REFRESH_DEQUEUED, 1);
+                }
                 return slot;
             }
         }

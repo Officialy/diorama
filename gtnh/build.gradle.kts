@@ -11,7 +11,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.18-dev"
+version = "0.8.1-gtnh.19-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -50,7 +50,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/bake/BakeDiagnostics.java", "dev/diorama/bake/SlimeChunks.java",
             "dev/diorama/gtnh/capture/ChunkCapture.java", "dev/diorama/bake/PreparedBlockLooks.java",
             "dev/diorama/gtnh/capture/OpaquePng.java", "dev/diorama/gtnh/capture/EpochFence.java",
-            "dev/diorama/gtnh/capture/StaticCubeAppearance.java",
+            "dev/diorama/gtnh/capture/StaticCubeAppearance.java", "dev/diorama/gtnh/capture/TerrainMetrics.java",
             "dev/diorama/gtnh/capture/PreviewOverview.java", "dev/diorama/gtnh/capture/PreviewTileStore.java",
             "dev/diorama/gtnh/client/TerrainPreviewFrame.java", "dev/diorama/gtnh/client/TerrainPreviewRefresh.java",
             "dev/diorama/gtnh/client/MinimapViewport.java",
@@ -256,6 +256,10 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
             val expectedNested = setOf("dev/diorama/gtnh/capture/TerrainPreview\$Work.class",
+                "dev/diorama/gtnh/capture/TerrainMetrics\$Aggregate.class",
+                "dev/diorama/gtnh/capture/TerrainMetrics\$Counter.class",
+                "dev/diorama/gtnh/capture/TerrainMetrics\$Phase.class",
+                "dev/diorama/gtnh/client/TerrainWindow\$1.class",
                 "dev/diorama/gtnh/capture/PreviewTileStore\$PixelStream.class",
                 "dev/diorama/gtnh/client/ClientMinimap\$CachedTile.class",
                 "dev/diorama/gtnh/client/MinimapViewport\$Axis.class",
@@ -288,6 +292,12 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
             val expectedMr = setOf("dev/diorama/gtnh/capture/TerrainPreview.class",
+                "dev/diorama/gtnh/capture/TerrainMetrics\$Aggregate.class",
+                "dev/diorama/gtnh/capture/TerrainMetrics\$Counter.class",
+                "dev/diorama/gtnh/capture/TerrainMetrics\$Phase.class",
+                "dev/diorama/gtnh/client/TerrainWindow\$1.class",
+                "dev/diorama/gtnh/capture/TerrainMetrics.class",
+                "dev/diorama/gtnh/client/TerrainWindow.class",
                 "dev/diorama/gtnh/capture/PreviewTileStore.class",
                 "dev/diorama/gtnh/capture/PreviewTileStore\$PixelStream.class",
                 "dev/diorama/gtnh/client/TerrainPreviewFrame.class",

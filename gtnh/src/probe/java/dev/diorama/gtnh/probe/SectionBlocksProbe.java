@@ -348,7 +348,7 @@ public final class SectionBlocksProbe {
         }
 
         @Override
-        public int lookId(int id, int metadata, int x, int y, int z) {
+        public int lookId(int id, int metadata, int x, int y, int z, int aboveRawId) {
             int cell = calls++;
             require(
                 x == -48 + cell % 16 && y == -32 + cell / 256 && z == 80 + (cell / 16) % 16,

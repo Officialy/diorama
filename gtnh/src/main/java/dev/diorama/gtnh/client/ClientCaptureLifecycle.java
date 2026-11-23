@@ -226,27 +226,32 @@ public final class ClientCaptureLifecycle {
             return this.appearance.looks();
         }
 
-        public int prepare(int rawId, int metadata) {
-            return this.appearance.prepare(rawId, metadata);
+        @Override
+        public int stateLimit() {
+            return this.appearance.looks().kind.length;
         }
 
-        public int prepare(int rawId, int metadata, int context) {
-            return this.appearance.prepare(rawId, metadata, context);
+        @Override
+        public boolean prepareState(int rawId, int metadata) {
+            if (rawId > 0xFFFFFF) return false;
+            if (this.appearance.isGrass(rawId, metadata)) {
+                boolean normal = this.appearance.prepare(rawId, metadata, GrassContext.NORMAL) >= 0;
+                boolean snowy = this.appearance.prepare(rawId, metadata, GrassContext.SNOWY) >= 0;
+                return normal && snowy;
+            }
+            return this.appearance.prepare(rawId, metadata) >= 0;
         }
 
-        public int find(int rawId, int metadata) {
-            return this.appearance.find(rawId, metadata);
-        }
-
-        public int find(int rawId, int metadata, int context) {
-            return this.appearance.find(rawId, metadata, context);
+        @Override
+        public int rawAirId() {
+            return this.access.rawAirId();
         }
 
         public ClientCaptureAccess access() {
             return this.access;
         }
 
-        /** Explicit one-shot capture; callers prepare supported looks first. Nothing is scheduled here. */
+        /** Explicit capture; preparation and snapshot production share one raw-state read. */
         public ChunkCapture.Result capture(int chunkX, int chunkZ) {
             return ChunkCapture.capture(this.access, this, chunkX, chunkZ);
         }
@@ -263,9 +268,9 @@ public final class ClientCaptureLifecycle {
         }
 
         @Override
-        public int lookId(int rawId, int metadata, int x, int y, int z) {
+        public int lookId(int rawId, int metadata, int x, int y, int z, int aboveRawId) {
             if (this.appearance.isGrass(rawId, metadata)) {
-                int context = GrassContext.resolve(this.access, this.token, x, y, z);
+                int context = y == 255 ? GrassContext.NORMAL : this.access.snowContext(aboveRawId);
                 return context == GrassContext.UNKNOWN ? -1 : this.appearance.find(rawId, metadata, context);
             }
             return this.appearance.find(rawId, metadata);

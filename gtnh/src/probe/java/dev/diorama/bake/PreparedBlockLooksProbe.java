@@ -586,7 +586,7 @@ public final class PreparedBlockLooksProbe {
             return table.airId();
         }
 
-        public int lookId(int raw, int meta, int x, int y, int z) {
+        public int lookId(int raw, int meta, int x, int y, int z, int aboveRawId) {
             lookCalls++;
             if (raw != 0) {
                 resolvedRaw = raw;

@@ -162,6 +162,10 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/capture/TerrainMetrics.java",
+      "fqn": "dev.diorama.gtnh.capture.TerrainMetrics"
+    },
+    {
       "path": "dev/diorama/gtnh/client/LegacyMinimapDraw.java",
       "fqn": "dev.diorama.gtnh.client.LegacyMinimapDraw"
     },
