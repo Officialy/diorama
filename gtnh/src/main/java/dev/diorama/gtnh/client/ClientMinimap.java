@@ -477,6 +477,7 @@ public final class ClientMinimap {
                     CachedTile tile = tiles.get(key);
                     return tile == null ? -1 : tile.id;
                 },
+                    ClientWaypoints.visibleBook(mc),
                     options.size(),
                     yaw,
                     options.coordinates

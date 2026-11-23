@@ -9,6 +9,7 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 import dev.diorama.Projection;
+import dev.diorama.gtnh.client.LegacyWaypointBook.Point;
 
 /** Fullscreen view of the same resident surface tiles used by the HUD. */
 final class SharedTerrainMapScreen extends GuiScreen {
@@ -18,6 +19,8 @@ final class SharedTerrainMapScreen extends GuiScreen {
     private static final int BUTTON_WIDTH = 114;
     private static final int BUTTON_HEIGHT = 20;
     private static final int OPTIONS_X = BUTTON_X + BUTTON_WIDTH + 4;
+    private static final int WAYPOINT_X = OPTIONS_X + BUTTON_WIDTH + 4;
+    private static final int WAYPOINT_WIDTH = 72;
     private final WorldClient world;
     private final MapViewportController view = new MapViewportController(0, 0, 4, 0.25, 16);
     private boolean initialized, dragging;
@@ -42,6 +45,10 @@ final class SharedTerrainMapScreen extends GuiScreen {
             new GuiButton(0, BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, I18n.format("diorama.map.recenter")));
         buttonList.add(
             new GuiButton(1, OPTIONS_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, I18n.format("diorama.minimap.options")));
+        if (ClientWaypoints.supported(world)) {
+            buttonList.add(
+                new GuiButton(2, WAYPOINT_X, BUTTON_Y, WAYPOINT_WIDTH, BUTTON_HEIGHT, WaypointEditScreen.text("list")));
+        }
         dragging = false;
         if (!initialized) {
             recenter();
@@ -61,6 +68,10 @@ final class SharedTerrainMapScreen extends GuiScreen {
         if (!belongsTo(mc.theWorld)) return;
         if (button.id == 0) recenter();
         if (button.id == 1) mc.displayGuiScreen(new MinimapOptionsScreen(this));
+        if (button.id == 2) {
+            ClientWaypoints session = ClientWaypoints.active(mc);
+            if (session != null) mc.displayGuiScreen(new WaypointListScreen(session, this));
+        }
     }
 
     @Override
@@ -91,7 +102,8 @@ final class SharedTerrainMapScreen extends GuiScreen {
     protected void mouseClicked(int x, int y, int button) {
         super.mouseClicked(x, y, button);
         boolean controls = y >= BUTTON_Y && y < BUTTON_Y + BUTTON_HEIGHT
-            && ((x >= BUTTON_X && x < BUTTON_X + BUTTON_WIDTH) || (x >= OPTIONS_X && x < OPTIONS_X + BUTTON_WIDTH));
+            && ((x >= BUTTON_X && x < BUTTON_X + BUTTON_WIDTH) || (x >= OPTIONS_X && x < OPTIONS_X + BUTTON_WIDTH)
+                || (x >= WAYPOINT_X && x < WAYPOINT_X + WAYPOINT_WIDTH && ClientWaypoints.supported(world)));
         if (button == 0 && !controls) {
             dragging = true;
             lastX = x;
@@ -117,7 +129,34 @@ final class SharedTerrainMapScreen extends GuiScreen {
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         drawRect(0, 0, width, height, 0xFF111820);
         ClientMinimap.drawMap(mc, this);
+        drawWaypoints(mouseX, mouseY);
         super.drawScreen(mouseX, mouseY, partialTicks);
+    }
+
+    private void drawWaypoints(int mouseX, int mouseY) {
+        if (!belongsTo(mc.theWorld)) return;
+        Point hovered = null;
+        double closest = 64;
+        for (Point point : ClientWaypoints.visibleBook(mc)) {
+            if (!point.enabled()) continue;
+            double px = view.screenX(Projection.u(point.x() + .5, point.z() + .5));
+            double py = view.screenY(Projection.v(point.x() + .5, point.y(), point.z() + .5));
+            if (px < 4 || px > width - 4 || py < 4 || py > height - 4) continue;
+            int x = (int) Math.round(px), y = (int) Math.round(py);
+            drawRect(x - 4, y - 4, x + 4, y + 4, 0xFF211909);
+            drawRect(x - 2, y - 2, x + 2, y + 2, 0xFFFFC53D);
+            double distance = (px - mouseX) * (px - mouseX) + (py - mouseY) * (py - mouseY);
+            if (distance < closest) {
+                closest = distance;
+                hovered = point;
+            }
+        }
+        if (hovered != null
+            && !(mouseY >= BUTTON_Y && mouseY < BUTTON_Y + BUTTON_HEIGHT && mouseX < WAYPOINT_X + WAYPOINT_WIDTH)) {
+            String name = fontRendererObj.trimStringToWidth(hovered.name(), Math.max(0, width - 8));
+            int x = Math.max(3, Math.min(mouseX + 9, width - fontRendererObj.getStringWidth(name) - 3));
+            drawString(fontRendererObj, name, x, Math.max(2, mouseY - 11), 0xFFFFC53D);
+        }
     }
 
     @Override

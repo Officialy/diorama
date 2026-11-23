@@ -105,6 +105,12 @@ public final class MinimapViewportProbe {
                 .equals(new Bounds(44, 6, 58)),
             "larger HUD clipped to window");
         checkOptions();
+        double u = Projection.u(-15.5, 29.5), v = Projection.v(-15.5, 64, 29.5);
+        var markerView = new MinimapViewport(u, v);
+        close(markerView.normalizedX(u), 0.5, "waypoint center X");
+        close(markerView.normalizedY(v), 0.5, "waypoint center Y");
+        close(markerView.normalizedX(u - 12), 0, "waypoint at west crop edge");
+        close(markerView.normalizedY(v + 12), 1, "waypoint at bottom crop edge");
         checkHeading(0, 0, 1);
         checkHeading(90, -1, 0);
         checkHeading(180, 0, -1);

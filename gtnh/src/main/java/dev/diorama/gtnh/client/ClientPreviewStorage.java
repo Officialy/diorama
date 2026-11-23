@@ -19,6 +19,16 @@ final class ClientPreviewStorage {
     private ClientPreviewStorage() {}
 
     static @Nullable PreviewTileStore forWorld(Minecraft minecraft, WorldClient world) {
+        Path save = savePath(minecraft, world);
+        if (save == null) return null;
+        try {
+            return PreviewTileStore.forSave(save);
+        } catch (IOException invalid) {
+            return null;
+        }
+    }
+
+    static @Nullable Path savePath(Minecraft minecraft, WorldClient world) {
         if (minecraft.theWorld != world || world.provider == null
             || world.provider.dimensionId != 0
             || !minecraft.isIntegratedServerRunning()) return null;
@@ -36,11 +46,10 @@ final class ClientPreviewStorage {
                 || folder.indexOf('/') >= 0
                 || folder.indexOf('\\') >= 0) return null;
             // A deleted/recreated save does not inherit a cache from a global name-based directory.
-            Path save = minecraft.mcDataDir.toPath()
+            return minecraft.mcDataDir.toPath()
                 .resolve("saves")
                 .resolve(name);
-            return PreviewTileStore.forSave(save);
-        } catch (IOException | InvalidPathException invalid) {
+        } catch (InvalidPathException invalid) {
             return null;
         }
     }

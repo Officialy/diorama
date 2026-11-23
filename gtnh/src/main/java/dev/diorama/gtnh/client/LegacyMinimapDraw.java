@@ -1,5 +1,6 @@
 package dev.diorama.gtnh.client;
 
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.ToIntFunction;
 
@@ -10,7 +11,9 @@ import net.minecraft.client.renderer.Tessellator;
 
 import org.lwjgl.opengl.GL11;
 
+import dev.diorama.Projection;
 import dev.diorama.bake.TileKey;
+import dev.diorama.gtnh.client.LegacyWaypointBook.Point;
 
 /** Draws the crop in Forge's existing scaled GUI projection. */
 final class LegacyMinimapDraw {
@@ -26,17 +29,18 @@ final class LegacyMinimapDraw {
      * -1, and valid must become false if this draw's ownership is revoked while a callback runs.
      */
     static void draw(Minecraft mc, int width, int height, MinimapViewport viewport, ToIntFunction<TileKey> textureId,
-        int size, float yaw, String coords, BooleanSupplier valid) {
+        List<Point> points, int size, float yaw, String coords, BooleanSupplier valid) {
         MinimapViewport.Bounds bounds = MinimapViewport.fit(width, height, size);
         if (bounds.size() == 0 || !valid.getAsBoolean()) return;
         Tessellator mesh = spare == null ? new Tessellator() : spare;
         spare = null;
-        if (drawContents(mc.fontRenderer, height, bounds, viewport, textureId, yaw, coords, valid, mesh)) spare = mesh;
+        if (drawContents(mc.fontRenderer, height, bounds, viewport, textureId, points, yaw, coords, valid, mesh))
+            spare = mesh;
     }
 
     private static boolean drawContents(FontRenderer font, int height, MinimapViewport.Bounds bounds,
-        MinimapViewport viewport, ToIntFunction<TileKey> textureId, float yaw, String coords, BooleanSupplier valid,
-        Tessellator mesh) {
+        MinimapViewport viewport, ToIntFunction<TileKey> textureId, List<Point> points, float yaw, String coords,
+        BooleanSupplier valid, Tessellator mesh) {
         int x = bounds.x(), y = bounds.y(), size = bounds.size(), right = x + size, bottom = y + size;
         OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
         GL11.glDisable(GL11.GL_DEPTH_TEST);
@@ -69,6 +73,9 @@ final class LegacyMinimapDraw {
         if (!valid.getAsBoolean()) return false;
         OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
         GL11.glDisable(GL11.GL_TEXTURE_2D);
+        if (size >= 8 && !points.isEmpty()) {
+            drawWaypoints(mesh, viewport, bounds, points);
+        }
         if (size >= 8 && Float.isFinite(yaw)) {
             if (!valid.getAsBoolean()) return false;
             arrow(mesh, x + size / 2.0, y + size / 2.0, yaw, Math.min(5, size * 0.25));
@@ -93,6 +100,34 @@ final class LegacyMinimapDraw {
             }
         }
         return true;
+    }
+
+    private static void drawWaypoints(Tessellator mesh, MinimapViewport viewport, MinimapViewport.Bounds bounds,
+        List<Point> points) {
+        boolean started = false;
+        int size = bounds.size();
+        for (Point point : points) {
+            if (!point.enabled()) continue;
+            double sx = viewport.normalizedX(Projection.u(point.x() + .5, point.z() + .5)) * size;
+            double sy = viewport.normalizedY(Projection.v(point.x() + .5, point.y(), point.z() + .5)) * size;
+            if (sx < 3 || sx > size - 3 || sy < 3 || sy > size - 3) continue;
+            if (!started) {
+                mesh.startDrawingQuads();
+                started = true;
+            }
+            int x = bounds.x() + (int) Math.round(sx), y = bounds.y() + (int) Math.round(sy);
+            waypointQuad(mesh, x, y, 3, 0x211909);
+            waypointQuad(mesh, x, y, 2, 0xFFC53D);
+        }
+        if (started) mesh.draw();
+    }
+
+    private static void waypointQuad(Tessellator mesh, int x, int y, int radius, int rgb) {
+        mesh.setColorRGBA_I(rgb, 255);
+        mesh.addVertex(x - radius, y + radius, 0);
+        mesh.addVertex(x + radius, y + radius, 0);
+        mesh.addVertex(x + radius, y - radius, 0);
+        mesh.addVertex(x - radius, y - radius, 0);
     }
 
     private static void clippedQuad(Tessellator mesh, MinimapViewport.Bounds bounds, MinimapViewport.Tile tile) {

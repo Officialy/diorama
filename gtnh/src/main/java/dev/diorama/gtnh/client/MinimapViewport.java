@@ -17,9 +17,12 @@ final class MinimapViewport {
     private static final double TILE_UNITS = Projection.TILE_UNITS;
     private static final double NORTH_SIN = Math.sin(Math.toRadians(MapStyle.DEFAULT.pitchDegrees()));
     private final List<Tile> tiles;
+    private final double centerU, centerV;
 
     /** The player position already projected with the canonical default pitch and north facing. */
     MinimapViewport(double u, double v) {
+        this.centerU = u;
+        this.centerV = v;
         List<Axis> columns = axis(u), rows = axis(v);
         List<Tile> visible = new ArrayList<>(columns.size() * rows.size());
         for (Axis row : rows) {
@@ -43,6 +46,14 @@ final class MinimapViewport {
     /** Positive-area tile intersections in row-major order. Edges and UVs are normalized to [0, 1]. */
     List<Tile> tiles() {
         return tiles;
+    }
+
+    double normalizedX(double u) {
+        return .5 + (u - centerU) / SPAN;
+    }
+
+    double normalizedY(double v) {
+        return .5 + (v - centerV) / SPAN;
     }
 
     private static List<Axis> axis(double center) {

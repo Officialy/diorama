@@ -162,6 +162,22 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/client/LegacyWaypointBook.java",
+      "fqn": "dev.diorama.gtnh.client.LegacyWaypointBook"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/ClientWaypoints.java",
+      "fqn": "dev.diorama.gtnh.client.ClientWaypoints"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/WaypointListScreen.java",
+      "fqn": "dev.diorama.gtnh.client.WaypointListScreen"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/WaypointEditScreen.java",
+      "fqn": "dev.diorama.gtnh.client.WaypointEditScreen"
+    },
+    {
       "path": "dev/diorama/gtnh/client/MinimapOptions.java",
       "fqn": "dev.diorama.gtnh.client.MinimapOptions"
     },

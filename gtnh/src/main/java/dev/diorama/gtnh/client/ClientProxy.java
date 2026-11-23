@@ -33,9 +33,18 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         Keyboard.KEY_NONE,
         KEY_CATEGORY);
 
+    private static final KeyBinding NEW_WAYPOINT = new KeyBinding(
+        "key.diorama.new_waypoint",
+        Keyboard.KEY_B,
+        KEY_CATEGORY);
+    private static final KeyBinding WAYPOINT_LIST = new KeyBinding(
+        "key.diorama.waypoint_list",
+        Keyboard.KEY_U,
+        KEY_CATEGORY);
+
     private volatile int resourceGeneration;
     private WorldClient inputWorld;
-    private boolean openMap, toggleMinimap;
+    private boolean openMap, toggleMinimap, newWaypoint, waypointList;
     private WorldClient requestedWorld;
     private GuiChat terrainChat;
     private WorldClient terrainWorld;
@@ -46,6 +55,8 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         ClientCommandHandler.instance.registerCommand(new TerrainPreviewCommand(this));
         ClientRegistry.registerKeyBinding(OPEN_MAP);
         ClientRegistry.registerKeyBinding(TOGGLE_MINIMAP);
+        ClientRegistry.registerKeyBinding(NEW_WAYPOINT);
+        ClientRegistry.registerKeyBinding(WAYPOINT_LIST);
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(
             new ClientMinimap(
@@ -109,6 +120,8 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         if (!acceptsInput(minecraft)) return;
         if (isMapKey(eventCode)) openMap = true;
         else if (matches(TOGGLE_MINIMAP, eventCode)) toggleMinimap = !toggleMinimap;
+        else if (matches(NEW_WAYPOINT, eventCode)) newWaypoint = true;
+        else if (matches(WAYPOINT_LIST, eventCode)) waypointList = true;
     }
 
     private static boolean inGameplay(Minecraft minecraft) {
@@ -142,10 +155,11 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         if (event.phase == TickEvent.Phase.START) {
             // A GUI or the first focus click must not fall through into a gameplay hotkey.
             inputWorld = inGameplay(minecraft) ? minecraft.theWorld : null;
-            openMap = toggleMinimap = false;
+            openMap = toggleMinimap = newWaypoint = waypointList = false;
             return;
         }
         ClientCaptureLifecycle.observeWorld();
+        ClientWaypoints.observe(minecraft);
         finishBindingInput(minecraft);
         ClientMinimap.tick(minecraft);
         if (requestedWorld == null) return;
@@ -165,12 +179,23 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         // Vanilla still queues these registrations; dispatch only from the actual input events.
         while (OPEN_MAP.isPressed()) {}
         while (TOGGLE_MINIMAP.isPressed()) {}
+        while (NEW_WAYPOINT.isPressed()) {}
+        while (WAYPOINT_LIST.isPressed()) {}
         boolean accepted = acceptsInput(minecraft);
         inputWorld = null;
         if (!accepted) return;
         if (toggleMinimap) ClientMinimap.toggle();
-        if (openMap && requestedWorld == null)
-            minecraft.displayGuiScreen(new SharedTerrainMapScreen(minecraft.theWorld));
+        if (requestedWorld != null) return;
+        if (openMap) minecraft.displayGuiScreen(new SharedTerrainMapScreen(minecraft.theWorld));
+        else if (newWaypoint || waypointList) {
+            ClientWaypoints session = ClientWaypoints.active(minecraft);
+            if (session == null) return;
+            if (newWaypoint && session.writable()
+                && session.points()
+                    .size() < LegacyWaypointBook.MAX_POINTS)
+                WaypointEditScreen.openNew(minecraft, session, null);
+            else minecraft.displayGuiScreen(new WaypointListScreen(session, null));
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
