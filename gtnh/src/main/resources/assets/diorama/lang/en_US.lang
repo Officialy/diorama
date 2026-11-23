@@ -1,3 +1,4 @@
 key.category.diorama.map=Diorama
 key.diorama.open_map=Open map
 key.diorama.toggle_minimap=Show or hide minimap
+diorama.map.recenter=Center on player

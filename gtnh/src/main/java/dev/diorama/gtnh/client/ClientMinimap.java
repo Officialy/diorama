@@ -2,6 +2,7 @@ package dev.diorama.gtnh.client;
 
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +11,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityClientPlayerMP;
 import net.minecraft.client.gui.GuiChat;
 import net.minecraft.client.multiplayer.WorldClient;
+import net.minecraft.client.renderer.OpenGlHelper;
+import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.util.MathHelper;
 import net.minecraft.world.World;
@@ -19,6 +22,7 @@ import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jspecify.annotations.Nullable;
+import org.lwjgl.opengl.GL11;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import dev.diorama.MapStyle;
@@ -29,7 +33,7 @@ import dev.diorama.gtnh.capture.TerrainMetrics;
 import dev.diorama.gtnh.capture.TerrainPreview;
 import dev.diorama.gtnh.diagnostic.ProbePixels;
 
-/** Legacy HUD owner. CPU-baked tiles are reused across frames; GL work is limited to uploads and drawing. */
+/** Shared bounded terrain session; fullscreen map and HUD consume the same resident raster and texture. */
 public final class ClientMinimap {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
@@ -62,7 +66,6 @@ public final class ClientMinimap {
 
     static void toggle() {
         enabled = !enabled;
-        if (!enabled && installed != null) installed.reset();
     }
 
     static void tick(Minecraft mc) {
@@ -137,8 +140,7 @@ public final class ClientMinimap {
 
     private boolean current(Minecraft mc) {
         ClientCaptureLifecycle.Session opened = session;
-        return opened != null && enabled
-            && world == mc.theWorld
+        return opened != null && world == mc.theWorld
             && TerrainPreview.supported()
             && Arrays.equals(sunTint, MapStyle.DEFAULT.sunTint())
             && Arrays.equals(shadowTint, MapStyle.DEFAULT.shadowTint())
@@ -156,7 +158,9 @@ public final class ClientMinimap {
                 retryTicks--;
                 return;
             }
-            if (!canShow(mc)) {
+            SharedTerrainMapScreen map = mc.currentScreen instanceof SharedTerrainMapScreen screen
+                && screen.belongsTo(mc.theWorld) ? screen : null;
+            if (map == null && !canShow(mc)) {
                 // Let the already running job finish or discard it; never schedule under another GUI.
                 if (mc.currentScreen instanceof TerrainPreviewScreen) discardJob();
                 return;
@@ -195,8 +199,11 @@ public final class ClientMinimap {
             finish(mc);
             if (retryTicks > 0 || job != null || TerrainPreviewJob.isBusy() || window.queued() || window.ready() == 0)
                 return;
-            MinimapViewport view = view(player.posX, player.boundingBox.minY, player.posZ);
-            TileKey selected = choose(view, window.topY());
+            List<TileKey> wanted = map == null ? view(player.posX, player.boundingBox.minY, player.posZ).tiles()
+                .stream()
+                .map(MinimapViewport.Tile::key)
+                .collect(java.util.stream.Collectors.toList()) : mapWanted(map.viewport());
+            TileKey selected = choose(wanted, window.topY());
             if (selected == null) return;
             CachedTile entry = tiles.get(selected);
             if (entry == null) {
@@ -226,12 +233,12 @@ public final class ClientMinimap {
         }
     }
 
-    private @Nullable TileKey choose(MinimapViewport view, int top) {
+    private @Nullable TileKey choose(List<TileKey> wanted, int top) {
         TileKey stale = null;
-        for (MinimapViewport.Tile part : view.tiles()) {
-            CachedTile entry = tiles.get(part.key());
-            if (entry == null) return part.key();
-            if (stale == null && (entry.needsFull || entry.top != top || !entry.dirty.isEmpty())) stale = part.key();
+        for (TileKey key : wanted) {
+            CachedTile entry = tiles.get(key);
+            if (entry == null) return key;
+            if (stale == null && (entry.needsFull || entry.top != top || !entry.dirty.isEmpty())) stale = key;
         }
         return stale;
     }
@@ -354,6 +361,94 @@ public final class ClientMinimap {
         } finally {
             drawing = null;
         }
+    }
+
+    private List<TileKey> mapWanted(MapViewportController view) {
+        // Ranking is stable for a view. Never rotate visible misses through a smaller cache.
+        // Remote panning reads explored resident tiles, but cannot cause new world/chunk loads.
+        return view.tiles()
+            .stream()
+            .map(MapViewportController.Tile::key)
+            .filter(
+                key -> !DirtyTerrainTiles
+                    .range(
+                        key,
+                        (centerX - 1) * 16,
+                        0,
+                        (centerZ - 1) * 16,
+                        (centerX + 2) * 16 - 1,
+                        255,
+                        (centerZ + 2) * 16 - 1)
+                    .isEmpty())
+            .sorted(
+                Comparator.comparingDouble(
+                    key -> Math.hypot(
+                        key.minU() + Projection.TILE_UNITS * .5 - view.centerU(),
+                        key.minV() + Projection.TILE_UNITS * .5 - view.centerV())))
+            .limit(CACHE_TILES)
+            .collect(java.util.stream.Collectors.toList());
+    }
+
+    static void drawMap(Minecraft mc, SharedTerrainMapScreen screen) {
+        ClientMinimap owner = installed;
+        if (owner != null) owner.drawSharedMap(mc, screen);
+    }
+
+    private void drawSharedMap(Minecraft mc, SharedTerrainMapScreen screen) {
+        if (drawing != null || !screen.belongsTo(mc.theWorld) || !current(mc)) return;
+        ClientCaptureLifecycle.Session shown = session;
+        MapViewportController view = screen.viewport();
+        try (ProbeGlState state = new ProbeGlState()) {
+            drawing = state;
+            for (TileKey key : mapWanted(view)) {
+                CachedTile tile = tiles.get(key);
+                if (tile != null && tile.pixels != null
+                    && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
+                    if (!uploadPatch(mc, key, tile, state)) upload(mc, key, tile, state);
+                    break;
+                }
+            }
+            var keys = List.copyOf(tiles.keySet());
+            long shownTextures = textureGeneration;
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glDisable(GL11.GL_ALPHA_TEST);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
+            OpenGlHelper.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+            GL11.glColor4f(1, 1, 1, 1);
+            Tessellator mesh = null;
+            for (TileKey key : keys) {
+                MapViewportController.Tile part = view.clip(key);
+                if (part == null) continue;
+                CachedTile tile = tiles.get(key);
+                if (tile == null || tile.id <= 0) continue;
+                if (!mapCurrent(mc, screen, shown, shownTextures)) return;
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, tile.id);
+                if (!mapCurrent(mc, screen, shown, shownTextures)) return;
+                if (mesh == null) mesh = new Tessellator();
+                mesh.startDrawingQuads();
+                mesh.addVertexWithUV(part.x0(), part.y1(), 0, part.u0(), part.v1());
+                mesh.addVertexWithUV(part.x1(), part.y1(), 0, part.u1(), part.v1());
+                mesh.addVertexWithUV(part.x1(), part.y0(), 0, part.u1(), part.v0());
+                mesh.addVertexWithUV(part.x0(), part.y0(), 0, part.u0(), part.v0());
+                if (!mapCurrent(mc, screen, shown, shownTextures)) return;
+                mesh.draw();
+            }
+        } catch (RuntimeException failure) {
+            drawing = null;
+            backoff(failure);
+        } finally {
+            drawing = null;
+        }
+    }
+
+    private boolean mapCurrent(Minecraft mc, SharedTerrainMapScreen screen, ClientCaptureLifecycle.Session shown,
+        long shownTextures) {
+        return current(mc) && mc.currentScreen == screen
+            && screen.belongsTo(mc.theWorld)
+            && session == shown
+            && textureGeneration == shownTextures;
     }
 
     private boolean uploadPatch(Minecraft mc, TileKey key, CachedTile tile, ProbeGlState state) {

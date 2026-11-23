@@ -1,3 +1,4 @@
 key.category.diorama.map=Diorama
 key.diorama.open_map=開啟地圖
 key.diorama.toggle_minimap=顯示或隱藏小地圖
+diorama.map.recenter=回到玩家位置

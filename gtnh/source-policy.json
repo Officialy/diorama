@@ -162,6 +162,14 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/client/MapViewportController.java",
+      "fqn": "dev.diorama.gtnh.client.MapViewportController"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/SharedTerrainMapScreen.java",
+      "fqn": "dev.diorama.gtnh.client.SharedTerrainMapScreen"
+    },
+    {
       "path": "dev/diorama/gtnh/client/HudTexturePatchUpload.java",
       "fqn": "dev.diorama.gtnh.client.HudTexturePatchUpload"
     },

@@ -165,7 +165,8 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         inputWorld = null;
         if (!accepted) return;
         if (toggleMinimap) ClientMinimap.toggle();
-        if (openMap && requestedWorld == null) requestTerrainPreview();
+        if (openMap && requestedWorld == null)
+            minecraft.displayGuiScreen(new SharedTerrainMapScreen(minecraft.theWorld));
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
