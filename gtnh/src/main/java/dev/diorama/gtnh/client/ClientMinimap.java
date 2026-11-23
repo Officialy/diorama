@@ -54,6 +54,9 @@ public final class ClientMinimap {
     private final MinimapOptions options;
     private final SharedTileIo io = new SharedTileIo();
     private boolean persistent;
+    private @Nullable WorldClient layerWorld;
+    private boolean manualCave;
+    private int layer = TileKey.SURFACE;
     private @Nullable WorldClient world;
     private ClientCaptureLifecycle.@Nullable Session session;
     private @Nullable TerrainWindow window;
@@ -99,6 +102,40 @@ public final class ClientMinimap {
         saveOptions();
     }
 
+    static int layer(Minecraft mc) {
+        ClientMinimap hud = installed;
+        return hud != null && hud.layerWorld == mc.theWorld ? hud.layer : TileKey.SURFACE;
+    }
+
+    static void toggleLayer(Minecraft mc) {
+        ClientMinimap hud = installed;
+        ClientMapDimension dimension = ClientMapDimension.of(mc.theWorld);
+        if (hud != null && dimension != null && dimension.surfaceTerrain()) {
+            hud.observeLayer(mc);
+            hud.manualCave = !hud.manualCave;
+            hud.observeLayer(mc);
+        }
+    }
+
+    private void observeLayer(Minecraft mc) {
+        if (layerWorld != mc.theWorld) {
+            layerWorld = mc.theWorld;
+            manualCave = false;
+            layer = TileKey.SURFACE;
+        }
+        ClientMapDimension dimension = ClientMapDimension.of(mc.theWorld);
+        EntityClientPlayerMP player = mc.thePlayer;
+        int next = TileKey.SURFACE;
+        if (player != null && dimension != null && (!dimension.surfaceTerrain() || manualCave)) {
+            double feet = player.boundingBox.minY;
+            if (feet >= 0 && feet < 256) next = MinimapViewport.caveLayer(MathHelper.floor_double(feet), layer);
+        }
+        if (next != layer) {
+            layer = next;
+            discardJob();
+        }
+    }
+
     static void tick(Minecraft mc) {
         if (installed != null) installed.update(mc);
         if (TerrainMetrics.ENABLED) {
@@ -119,7 +156,10 @@ public final class ClientMinimap {
         input.blockChanged(cx, cz, x, z);
         for (var entry : installed.tiles.entrySet()) {
             entry.getValue()
-                .invalidate(DirtyTerrainTiles.block(entry.getKey(), cx * 16 + x, y, cz * 16 + z));
+                .invalidate(
+                    DirtyTerrainTiles.block(entry.getKey(), cx * 16 + x, y, cz * 16 + z),
+                    entry.getKey()
+                        .isCave());
         }
     }
 
@@ -144,13 +184,18 @@ public final class ClientMinimap {
             entry.getValue()
                 .invalidate(
                     DirtyTerrainTiles
-                        .range(entry.getKey(), cx * 16 - 16, 0, cz * 16 - 16, cx * 16 + 31, 255, cz * 16 + 31));
+                        .range(entry.getKey(), cx * 16 - 16, 0, cz * 16 - 16, cx * 16 + 31, 255, cz * 16 + 31),
+                    entry.getKey()
+                        .isCave());
         }
     }
 
     private void dirtyChunk(int cx, int cz) {
         for (var entry : tiles.entrySet()) entry.getValue()
-            .invalidate(DirtyTerrainTiles.chunk(entry.getKey(), cx, cz));
+            .invalidate(
+                DirtyTerrainTiles.chunk(entry.getKey(), cx, cz),
+                entry.getKey()
+                    .isCave());
     }
 
     private boolean canShow(Minecraft mc) {
@@ -179,6 +224,7 @@ public final class ClientMinimap {
         updating = true;
         try {
             if (world != null && !current(mc)) reset();
+            observeLayer(mc);
             if (retryTicks > 0) {
                 retryTicks--;
                 return;
@@ -193,7 +239,6 @@ public final class ClientMinimap {
             ClientMapDimension dimension = ClientMapDimension.of(active);
             if (active == null || player == null
                 || dimension == null
-                || !dimension.surfaceTerrain()
                 || !bounded(player.posX, player.boundingBox.minY, player.posZ)
                 || !TerrainPreview.supported()) return;
             if (session == null) {
@@ -205,7 +250,7 @@ public final class ClientMinimap {
                     .clone();
                 shadowTint = MapStyle.DEFAULT.shadowTint()
                     .clone();
-                PreviewTileStore store = ClientPreviewStorage.forWorld(mc, active);
+                PreviewTileStore store = dimension.surfaceTerrain() ? ClientPreviewStorage.forWorld(mc, active) : null;
                 if (!current(mc)) return;
                 io.reset(store);
                 persistent = store != null;
@@ -229,10 +274,10 @@ public final class ClientMinimap {
             if (!current(mc)) return;
             io.drain(this::restore);
             flushWrites();
-            List<TileKey> visible = map == null ? view(player.posX, player.boundingBox.minY, player.posZ).tiles()
+            List<TileKey> visible = map == null ? view(player.posX, player.boundingBox.minY, player.posZ, layer).tiles()
                 .stream()
                 .map(MinimapViewport.Tile::key)
-                .collect(java.util.stream.Collectors.toList()) : mapWanted(map.viewport());
+                .collect(java.util.stream.Collectors.toList()) : mapWanted(map.viewport(), layer);
             List<TileKey> wanted = new ArrayList<>();
             for (TileKey key : visible) {
                 if (key.lod() == 0) wanted.add(key);
@@ -242,23 +287,25 @@ public final class ClientMinimap {
             for (TileKey key : wanted) {
                 boolean local = local(key);
                 if (local) live.add(key);
-                if (persistent || local) {
+                boolean onDisk = persistent && !key.isCave();
+                if (onDisk || local) {
                     CachedTile tile = detail(key);
-                    if (persistent && tile != null && !tile.readRequested) tile.readRequested = io.read(key);
+                    if (onDisk && tile != null && !tile.readRequested) tile.readRequested = io.read(key);
                 }
             }
             if (map != null && map.viewport()
                 .preferredLod() == 1) buildOverview(visible);
             if (retryTicks > 0 || job != null || TerrainPreviewJob.isBusy() || window.queued() || window.ready() == 0)
                 return;
-            TileKey selected = choose(live, window.topY());
+            TileKey selected = choose(live, window);
             if (selected == null) return;
             CachedTile entry = detail(selected);
             if (entry == null || !current(mc)) return;
             long revision = entry.revision;
             TerrainPreview.Work work = window.prepare(selected);
             if (!current(mc) || entry.revision != revision) return;
-            BitSet patches = entry.pixels != null && !entry.needsFull
+            BitSet patches = !selected.isCave() && entry.pixels != null
+                && !entry.needsFull
                 && entry.top == work.topY()
                 && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
             job = patches == null ? TerrainPreviewJob.startDetail(work, entry.pixels)
@@ -276,12 +323,13 @@ public final class ClientMinimap {
         }
     }
 
-    private @Nullable TileKey choose(List<TileKey> wanted, int top) {
+    private @Nullable TileKey choose(List<TileKey> wanted, TerrainWindow input) {
         TileKey stale = null;
         for (TileKey key : wanted) {
             CachedTile entry = tiles.get(key);
             if (entry == null) return key;
-            if (stale == null && (entry.needsFull || entry.top != top || !entry.dirty.isEmpty())) stale = key;
+            if (stale == null && (entry.needsFull || entry.top != input.topY(key) || !entry.dirty.isEmpty()))
+                stale = key;
         }
         return stale;
     }
@@ -296,7 +344,8 @@ public final class ClientMinimap {
         discardJob();
         if (!current(mc)) return;
         CachedTile entry = tiles.get(key);
-        if (entry == null || jobRevision != entry.revision || window.topY() != jobTop) return;
+        if (entry == null || jobRevision != entry.revision || key.layer() != layer || window.topY(key) != jobTop)
+            return;
         if (failure != null || frame == null) {
             retryTicks = 100;
             entry.needsFull = true;
@@ -308,7 +357,7 @@ public final class ClientMinimap {
         entry.top = jobTop;
         if (frame.detail() != null && frame.detail() != entry.pixels) {
             entry.pixels = frame.detail();
-            entry.savePending = persistent;
+            entry.savePending = persistent && !key.isCave();
             if (patches == null) entry.pendingUpload = null;
             else if (entry.pendingUpload != null) entry.pendingUpload.or(patches);
         }
@@ -349,6 +398,8 @@ public final class ClientMinimap {
     }
 
     private void restore(SharedTileIo.Read result) {
+        if (result.key()
+            .isCave()) return;
         CachedTile tile = tiles.get(result.key());
         if (tile == null) return;
         if (result.failure() != null) {
@@ -432,8 +483,8 @@ public final class ClientMinimap {
         reset();
     }
 
-    private static MinimapViewport view(double x, double y, double z) {
-        return new MinimapViewport(Projection.u(x, z), Projection.v(x, y, z));
+    private static MinimapViewport view(double x, double y, double z, int layer) {
+        return new MinimapViewport(Projection.u(x, z), Projection.v(x, y, z), layer);
     }
 
     private static double lerp(double old, double now, float fraction) {
@@ -452,7 +503,8 @@ public final class ClientMinimap {
             y = player.boundingBox.minY + (player.lastTickPosY - player.posY) * (1 - delta),
             z = lerp(player.lastTickPosZ, player.posZ, delta);
         if (!bounded(x, y, z)) return;
-        MinimapViewport view = view(x, y, z);
+        int drawnLayer = layer;
+        MinimapViewport view = view(x, y, z, drawnLayer);
         ClientCaptureLifecycle.Session shown = session;
         try (ProbeGlState state = new ProbeGlState()) {
             drawing = state;
@@ -481,7 +533,10 @@ public final class ClientMinimap {
                             + ", "
                             + MathHelper.floor_double(z)
                         : "",
-                    () -> current(mc) && canShow(mc) && session == shown && textureGeneration == shownTextures);
+                    () -> current(mc) && canShow(mc)
+                        && layer == drawnLayer
+                        && session == shown
+                        && textureGeneration == shownTextures);
         } catch (RuntimeException failure) {
             drawing = null; // The try-with-resources state has already been restored.
             backoff(failure);
@@ -491,14 +546,16 @@ public final class ClientMinimap {
     }
 
     private boolean local(TileKey key) {
+        // The conservative 0..255 surface projection also bounds every cave slice.
+        if (key.isCave()) key = new TileKey(TileKey.SURFACE, key.tileU(), key.tileV());
         return !DirtyTerrainTiles
             .range(key, (centerX - 1) * 16, 0, (centerZ - 1) * 16, (centerX + 2) * 16 - 1, 255, (centerZ + 2) * 16 - 1)
             .isEmpty();
     }
 
-    private static List<TileKey> mapWanted(MapViewportController view) {
+    private static List<TileKey> mapWanted(MapViewportController view, int layer) {
         int lod = view.preferredLod();
-        return view.tiles(lod)
+        return view.tiles(layer, lod)
             .stream()
             .map(MapViewportController.Tile::key)
             .sorted(
@@ -519,10 +576,11 @@ public final class ClientMinimap {
         if (drawing != null || !screen.belongsTo(mc.theWorld) || !current(mc)) return;
         ClientCaptureLifecycle.Session shown = session;
         MapViewportController view = screen.viewport();
+        int drawnLayer = layer;
         try (ProbeGlState state = new ProbeGlState()) {
             drawing = state;
             Map<TileKey, CachedTile> cache = view.preferredLod() == 0 ? tiles : overviews;
-            for (TileKey key : mapWanted(view)) {
+            for (TileKey key : mapWanted(view, drawnLayer)) {
                 CachedTile tile = cache.get(key);
                 if (tile != null && tile.pixels != null
                     && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
@@ -541,20 +599,21 @@ public final class ClientMinimap {
             GL11.glColor4f(1, 1, 1, 1);
             Tessellator mesh = null;
             for (TileKey key : keys) {
+                if (key.layer() != drawnLayer) continue;
                 MapViewportController.Tile part = view.clip(key);
                 if (part == null) continue;
                 CachedTile tile = cache.get(key);
                 if (tile == null || tile.id <= 0) continue;
-                if (!mapCurrent(mc, screen, shown, shownTextures)) return;
+                if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, tile.id);
-                if (!mapCurrent(mc, screen, shown, shownTextures)) return;
+                if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 if (mesh == null) mesh = new Tessellator();
                 mesh.startDrawingQuads();
                 mesh.addVertexWithUV(part.x0(), part.y1(), 0, part.u0(), part.v1());
                 mesh.addVertexWithUV(part.x1(), part.y1(), 0, part.u1(), part.v1());
                 mesh.addVertexWithUV(part.x1(), part.y0(), 0, part.u1(), part.v0());
                 mesh.addVertexWithUV(part.x0(), part.y0(), 0, part.u0(), part.v0());
-                if (!mapCurrent(mc, screen, shown, shownTextures)) return;
+                if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 mesh.draw();
             }
         } catch (RuntimeException failure) {
@@ -566,8 +625,9 @@ public final class ClientMinimap {
     }
 
     private boolean mapCurrent(Minecraft mc, SharedTerrainMapScreen screen, ClientCaptureLifecycle.Session shown,
-        long shownTextures) {
-        return current(mc) && mc.currentScreen == screen
+        long shownTextures, int drawnLayer) {
+        return layer == drawnLayer && current(mc)
+            && mc.currentScreen == screen
             && screen.belongsTo(mc.theWorld)
             && session == shown
             && textureGeneration == shownTextures;
@@ -695,7 +755,12 @@ public final class ClientMinimap {
         private boolean needsFull = true, anaglyph;
         private @Nullable BitSet pendingUpload;
 
-        private void invalidate(BitSet patches) {
+        private void invalidate(BitSet patches, boolean full) {
+            if (full) {
+                needsFull = true;
+                revision++;
+                return;
+            }
             if (patches.isEmpty()) return;
             dirty.or(patches);
             revision++;

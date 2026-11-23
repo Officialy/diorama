@@ -103,6 +103,22 @@ public final class MapViewportControllerProbe {
             "shared seams exact");
         for (Tile tile : tiles) require(tile.equals(view.clip(tile.key())), "sparse clipping equals enumeration");
         require(view.clip(key(-2, 0)) == null, "off-screen tile rejected");
+        List<Tile> cave = view.tiles(68, 1);
+        require(
+            !cave.isEmpty() && cave.stream()
+                .allMatch(
+                    tile -> tile.key()
+                        .layer() == 68
+                        && tile.key()
+                            .lod() == 1),
+            "cave overview enumeration");
+        TileKey caveParent = cave.get(0)
+            .key();
+        require(
+            dev.diorama.gtnh.capture.PreviewOverview.childKey(caveParent, 3)
+                .parent()
+                .equals(caveParent),
+            "overview children keep their cave layer");
         TileKey overview = key(-1, -1).parent();
         Tile coarse = view.clip(overview);
         require(

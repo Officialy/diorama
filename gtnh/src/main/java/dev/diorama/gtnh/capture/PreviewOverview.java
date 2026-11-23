@@ -6,7 +6,7 @@ import dev.diorama.Projection;
 import dev.diorama.bake.Mipmaps;
 import dev.diorama.bake.TileKey;
 
-/** One canonical surface overview step, without modern chunk, spot or block-light sidecars. */
+/** One canonical overview step, without modern chunk, spot or block-light sidecars. */
 public final class PreviewOverview {
 
     private static final int EDGE = Projection.TILE_PIXELS;
@@ -15,8 +15,7 @@ public final class PreviewOverview {
 
     /** Index into build's child array. Negative tile coordinates use floor division. */
     public static int childIndex(TileKey child) {
-        if (child.layer() != TileKey.SURFACE || child.lod() != 0)
-            throw new IllegalArgumentException("Expected surface LOD0 child");
+        if (child.lod() != 0) throw new IllegalArgumentException("Expected LOD0 child");
         return (child.tileV() & 1) * 2 + (child.tileU() & 1);
     }
 
@@ -54,11 +53,10 @@ public final class PreviewOverview {
     }
 
     private static void requireParent(TileKey parent) {
-        if (parent.layer() != TileKey.SURFACE || parent.lod() != 1
-            || parent.tileU() < Integer.MIN_VALUE / 2
+        if (parent.lod() != 1 || parent.tileU() < Integer.MIN_VALUE / 2
             || parent.tileU() > Integer.MAX_VALUE / 2
             || parent.tileV() < Integer.MIN_VALUE / 2
             || parent.tileV() > Integer.MAX_VALUE / 2)
-            throw new IllegalArgumentException("Expected surface LOD1 parent with representable children");
+            throw new IllegalArgumentException("Expected LOD1 parent with representable children");
     }
 }

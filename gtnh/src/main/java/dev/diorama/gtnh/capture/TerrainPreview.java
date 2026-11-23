@@ -20,6 +20,9 @@ import dev.diorama.data.ChunkSnapshot;
 public final class TerrainPreview {
 
     public static final int MAX_SNAPSHOTS = 9;
+    private static final int WORLD_TOP = 256;
+    // The canonical player-follow cut can round up just beyond the world storage span.
+    private static final int MAX_CAVE_LAYER = WORLD_TOP + 4;
 
     private TerrainPreview() {}
 
@@ -55,10 +58,17 @@ public final class TerrainPreview {
             throw new IllegalStateException("Preview requires unchanged default style, north facing and full quality");
     }
 
+    /** Exclusive cave ray ceiling; the raw layer remains part of the cache key. */
+    public static int caveCeiling(TileKey key) {
+        if (key.layer() <= 0 || key.layer() > MAX_CAVE_LAYER)
+            throw new IllegalArgumentException("Expected a cave cut in 1.." + MAX_CAVE_LAYER);
+        return Math.min(key.layer(), WORLD_TOP);
+    }
+
     private static void checkKey(TileKey key) {
         Objects.requireNonNull(key, "key");
-        if (key.layer() != TileKey.SURFACE || key.lod() != 0)
-            throw new IllegalArgumentException("Preview requires surface LOD0");
+        if (key.lod() != 0) throw new IllegalArgumentException("Preview requires LOD0");
+        if (key.isCave()) caveCeiling(key);
         // Canonical baker pixel origins are ints and include a neighbouring-pixel outline halo.
         for (int tile : new int[] { key.tileU(), key.tileV() }) {
             long origin = (long) tile * Projection.TILE_PIXELS;
@@ -110,7 +120,7 @@ public final class TerrainPreview {
             }
             if (n == 0) throw new IllegalArgumentException("Preview requires at least one ready snapshot");
             this.count = n;
-            this.top = highest == Integer.MIN_VALUE ? 0 : highest + 1;
+            this.top = key.isCave() ? caveCeiling(key) : highest == Integer.MIN_VALUE ? 0 : highest + 1;
             if (!this.stillCurrent()) throw new IllegalStateException("Preview style changed during preparation");
         }
 
@@ -190,6 +200,7 @@ public final class TerrainPreview {
          * L0 raster is detached from read-only history; it can be paired with the same mask.
          */
         public int[] bakeDetailPatches(int[] history, BitSet patches) {
+            if (this.key.isCave()) throw new IllegalArgumentException("Cave previews require a full tile refresh");
             checkRaster(history);
             int perRow = Projection.TILE_PIXELS / TileImage.BLOCK;
             if (patches.isEmpty() || patches.length() > perRow * perRow)
@@ -209,6 +220,8 @@ public final class TerrainPreview {
 
         private TileImage bake(@Nullable BitSet patches) {
             if (!this.stillCurrent()) throw new IllegalStateException("Stale preview projection/style");
+            // Cave keys take the canonical fixed cut path. There is no visited-voxel mask or
+            // artificial roof/lift here; missing chunks remain unknown to the baker.
             TileImage image = TileBaker.bake(this.key, this, this.looks, patches, false);
             if (!this.stillCurrent()) throw new IllegalStateException("Preview projection/style changed while baking");
             return image;
@@ -269,7 +282,7 @@ public final class TerrainPreview {
 
         @Override
         public int maxY() {
-            return 256;
+            return WORLD_TOP;
         }
 
         @Override

@@ -31,6 +31,7 @@ public final class TerrainPreviewProbe {
             styles();
             realBake();
             patchBake();
+            caveBake();
         } finally {
             MapStyle.set(oldStyle);
             Projection.setFacing(oldFacing);
@@ -44,7 +45,7 @@ public final class TerrainPreviewProbe {
         System.out.println("FIXTURE-SHA256=" + hex);
         System.out.println(
             "PASS bounded terrain preview: " + assertions
-                + " assertions; numeric identity/bounds/detachment, fail-closed style, full/patch canonical ABGR bake; native capture/screen/epoch acceptance UNTESTED");
+                + " assertions; numeric identity/bounds/detachment, fail-closed style, full/patch surface and fixed-cut cave canonical ABGR bake; native capture/screen/epoch acceptance UNTESTED");
     }
 
     private static void keys() {
@@ -147,7 +148,8 @@ public final class TerrainPreviewProbe {
         expect(IllegalArgumentException.class, () -> prepareBad(looks, 0, 0, 16, 256, 256, -1));
         expect(IllegalArgumentException.class, () -> prepareBad(looks, 0, 0, 16, 2, 1, -1));
         expect(IllegalArgumentException.class, () -> prepareBad(looks, 0, 0, 16, 0, 0, 3));
-        for (TileKey bad : new TileKey[] { new TileKey(0, 0, 0), new TileKey(TileKey.SURFACE, 0, 0, 1),
+        for (TileKey bad : new TileKey[] { new TileKey(0, 0, 0), new TileKey(-1, 0, 0), new TileKey(261, 0, 0),
+            new TileKey(16, 0, 0, 1), new TileKey(TileKey.SURFACE, 0, 0, 1),
             new TileKey(TileKey.SURFACE, Integer.MAX_VALUE, 0), new TileKey(TileKey.SURFACE, 0, Integer.MIN_VALUE) })
             expect(
                 IllegalArgumentException.class,
@@ -319,6 +321,81 @@ public final class TerrainPreviewProbe {
         expect(IllegalArgumentException.class, () -> next.bakeDetailPatches(synthetic, first));
         for (int pixel : full) put(pixel);
         for (int pixel : cleared) put(pixel);
+    }
+
+    private static void caveBake() {
+        PreparedBlockLooks looks = table();
+        looks.cube(2, 0, new float[] { 0, 0, 1, 1 }, new float[] { 0, 0, 1, 1 }, 0);
+        ChunkSnapshot[] chamber = { caveChamber(looks, true) };
+        TileKey low = new TileKey(8, 0, 0);
+        TerrainPreview.Work cut = TerrainPreview.prepare(looks, looks.session(), low, chamber);
+        TerrainPreview.Work over = TerrainPreview.prepare(looks, looks.session(), new TileKey(10, 0, 0), chamber);
+        TileKey high = new TileKey(260, 0, 0);
+        TerrainPreview.Work clamped = TerrainPreview.prepare(looks, looks.session(), high, chamber);
+        eq(cut.topY(), 8, "exclusive cave ceiling is independent of captured surface top");
+        eq(over.topY(), 10, "higher cave cut has its own ceiling");
+        require(clamped.key() == high, "clamping the ray ceiling does not alias the requested key");
+        eq(clamped.topY(), 256, "player-follow cut above the world clamps to the exclusive storage top");
+        eq(TerrainPreview.caveCeiling(new TileKey(256, 0, 0)), 256, "section span end is a valid cut");
+
+        int edge = Projection.TILE_PIXELS;
+        int[] pixels = cut.bakeDetail(null);
+        require(pixels != null && pixels.length == edge * edge, "cave bake returns a canonical full raster");
+        // The center of this pixel lands inside the red floor at y=0 with the blue slab
+        // excluded at y=8; the higher cut reaches the same slab through open space from above.
+        int probe = 16 * edge + 32;
+        int floor = pixels[probe];
+        int roof = over.bake()
+            .mips()[0][probe];
+        eq(floor >>> 24, 255, "cave interior floor opaque at the cut");
+        eq(roof >>> 24, 255, "cave interior roof opaque above the cut");
+        require((floor & 255) > (floor >>> 16 & 255), "exclusive cut reveals red floor below blue roof");
+        require((roof >>> 16 & 255) > (roof & 255), "higher cut hits blue roof");
+        TerrainPreview.Work open = TerrainPreview
+            .prepare(looks, looks.session(), low, new ChunkSnapshot[] { caveChamber(looks, false) });
+        eq(
+            open.bake()
+                .mips()[0][probe],
+            floor,
+            "roof at the ceiling does not affect detached floor sample");
+        int distant = 16 * edge + 400;
+        eq(pixels[distant], 0, "unloaded cave footprint remains transparent, not air or rock");
+        int[] history = new int[pixels.length];
+        Arrays.fill(history, 0xFF465768);
+        int[] merged = cut.bakeDetail(history);
+        eq(merged[probe], floor, "known cave sample replaces memory history");
+        eq(merged[distant], history[distant], "missing cave sample retains memory history");
+        eq(history[probe], 0xFF465768, "cave refresh never changes caller history in place");
+        BitSet patch = new BitSet();
+        patch.set(0);
+        expect(IllegalArgumentException.class, () -> cut.bakeDetailPatches(history, patch));
+        for (int pixel : pixels) put(pixel);
+    }
+
+    private static ChunkSnapshot caveChamber(PreparedBlockLooks looks, boolean roof) {
+        int[][] sections = new int[16][];
+        sections[0] = new int[4096];
+        Arrays.fill(sections[0], 0, 256, 1);
+        if (roof) Arrays.fill(sections[0], 8 * 256, 9 * 256, 2);
+        int[] surface = new int[256];
+        Arrays.fill(surface, roof ? 8 : 0);
+        byte[][] blockLight = new byte[16][];
+        blockLight[0] = new byte[4096];
+        Arrays.fill(blockLight[0], (byte) 13);
+        return new ChunkSnapshot(
+            0,
+            0,
+            0,
+            looks.airId(),
+            looks,
+            sections,
+            blockLight,
+            new byte[16][],
+            false,
+            surface,
+            roof ? 8 : 0,
+            0,
+            tints());
     }
 
     private static PreparedBlockLooks table() {

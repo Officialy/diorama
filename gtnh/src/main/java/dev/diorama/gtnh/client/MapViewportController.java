@@ -106,7 +106,11 @@ final class MapViewportController {
 
     /** Visible surface tiles at the requested LOD, in row-major order. Use {@link #clip} for sparse maps. */
     List<Tile> tiles(int lod) {
-        if (lod < 0 || lod > 1) throw new IllegalArgumentException("Expected surface LOD0 or LOD1");
+        return tiles(TileKey.SURFACE, lod);
+    }
+
+    List<Tile> tiles(int layer, int lod) {
+        if (lod < 0 || lod > 1) throw new IllegalArgumentException("Expected LOD0 or LOD1");
         if (width == 0 || height == 0) return List.of();
         double units = (double) Projection.TILE_UNITS * (1 << lod);
         // Include boundary candidates, then use the same positive-area test as sparse clipping.
@@ -119,7 +123,7 @@ final class MapViewportController {
         List<Tile> visible = new ArrayList<>();
         for (long v = firstV; v < endV; v++) {
             for (long u = firstU; u < endU; u++) {
-                Tile tile = clip(new TileKey(TileKey.SURFACE, (int) u, (int) v, lod));
+                Tile tile = clip(new TileKey(layer, (int) u, (int) v, lod));
                 if (tile != null) visible.add(tile);
             }
         }

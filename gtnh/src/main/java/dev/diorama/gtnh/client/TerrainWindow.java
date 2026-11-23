@@ -65,6 +65,11 @@ final class TerrainWindow {
         return top == Integer.MIN_VALUE ? 0 : top + 1;
     }
 
+    /** Bake identity height: captured surface top, or the selected cave's exclusive cut. */
+    int topY(TileKey key) {
+        return key.isCave() ? TerrainPreview.caveCeiling(key) : topY();
+    }
+
     int ready() {
         return ready;
     }

@@ -105,6 +105,18 @@ public final class MinimapViewportProbe {
                 .equals(new Bounds(44, 6, 58)),
             "larger HUD clipped to window");
         checkOptions();
+        require(MinimapViewport.caveLayer(61, TileKey.SURFACE) == 68, "four-block initial cut");
+        require(MinimapViewport.caveLayer(65, 68) == 68, "small jump does not shift the cut");
+        require(MinimapViewport.caveLayer(66, 68) == 72, "ascend when cut nears the player");
+        require(MinimapViewport.caveLayer(60, 72) == 64, "descend immediately");
+        require(MinimapViewport.caveLayer(255, TileKey.SURFACE) == 260, "top-of-world layer identity");
+        require(
+            new MinimapViewport(0, 0, 68).tiles()
+                .stream()
+                .allMatch(
+                    tile -> tile.key()
+                        .layer() == 68),
+            "HUD only enumerates requested layer");
         double u = Projection.u(-15.5, 29.5), v = Projection.v(-15.5, 64, 29.5);
         var markerView = new MinimapViewport(u, v);
         close(markerView.normalizedX(u), 0.5, "waypoint center X");

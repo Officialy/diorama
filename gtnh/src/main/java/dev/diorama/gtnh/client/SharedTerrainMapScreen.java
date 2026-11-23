@@ -10,6 +10,7 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 import dev.diorama.Projection;
+import dev.diorama.bake.TileKey;
 import dev.diorama.gtnh.client.LegacyWaypointBook.Point;
 
 /** Fullscreen view of the same resident surface tiles used by the HUD. */
@@ -22,6 +23,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
     private static final int OPTIONS_X = BUTTON_X + BUTTON_WIDTH + 4;
     private static final int WAYPOINT_X = OPTIONS_X + BUTTON_WIDTH + 4;
     private static final int WAYPOINT_WIDTH = 72;
+    private static final int LAYER_Y = BUTTON_Y + BUTTON_HEIGHT + 4;
     private final WorldClient world;
     private final @Nullable ClientMapDimension dimension;
     private final MapViewportController view = new MapViewportController(0, 0, 4, 0.25, 16);
@@ -52,11 +54,19 @@ final class SharedTerrainMapScreen extends GuiScreen {
             buttonList.add(
                 new GuiButton(2, WAYPOINT_X, BUTTON_Y, WAYPOINT_WIDTH, BUTTON_HEIGHT, WaypointEditScreen.text("list")));
         }
+        if (dimension != null && dimension.surfaceTerrain()) {
+            buttonList.add(new GuiButton(3, BUTTON_X, LAYER_Y, BUTTON_WIDTH, BUTTON_HEIGHT, nextLayerLabel()));
+        }
         dragging = false;
         if (!initialized) {
             recenter();
             initialized = true;
         }
+    }
+
+    private String nextLayerLabel() {
+        return I18n
+            .format(ClientMinimap.layer(mc) == TileKey.SURFACE ? "diorama.map.show_caves" : "diorama.map.show_surface");
     }
 
     private void recenter() {
@@ -71,6 +81,10 @@ final class SharedTerrainMapScreen extends GuiScreen {
         if (!belongsTo(mc.theWorld)) return;
         if (button.id == 0) recenter();
         if (button.id == 1) mc.displayGuiScreen(new MinimapOptionsScreen(this));
+        if (button.id == 3) {
+            ClientMinimap.toggleLayer(mc);
+            button.displayString = nextLayerLabel();
+        }
         if (button.id == 2) {
             ClientWaypoints session = ClientWaypoints.active(mc);
             if (session != null) mc.displayGuiScreen(new WaypointListScreen(session, this));
@@ -107,6 +121,11 @@ final class SharedTerrainMapScreen extends GuiScreen {
         boolean controls = y >= BUTTON_Y && y < BUTTON_Y + BUTTON_HEIGHT
             && ((x >= BUTTON_X && x < BUTTON_X + BUTTON_WIDTH) || (x >= OPTIONS_X && x < OPTIONS_X + BUTTON_WIDTH)
                 || (x >= WAYPOINT_X && x < WAYPOINT_X + WAYPOINT_WIDTH && dimension != null));
+        controls |= dimension != null && dimension.surfaceTerrain()
+            && x >= BUTTON_X
+            && x < BUTTON_X + BUTTON_WIDTH
+            && y >= LAYER_Y
+            && y < LAYER_Y + BUTTON_HEIGHT;
         if (button == 0 && !controls) {
             dragging = true;
             lastX = x;
@@ -138,8 +157,14 @@ final class SharedTerrainMapScreen extends GuiScreen {
                 : I18n.format("diorama.map.dimension." + dimension.suffix());
             int bottom = height - fontRendererObj.FONT_HEIGHT - 6;
             drawString(fontRendererObj, status, 6, bottom, 0xFFDDDDDD);
-            if (dimension == ClientMapDimension.NETHER) {
-                drawString(fontRendererObj, I18n.format("diorama.map.nether_cave_pending"), 6, bottom - 12, 0xFFDDDDDD);
+            int layer = ClientMinimap.layer(mc);
+            if (layer != TileKey.SURFACE) {
+                drawString(
+                    fontRendererObj,
+                    I18n.format("diorama.map.cave_layer", Math.min(256, layer)),
+                    6,
+                    bottom - 12,
+                    0xFFDDDDDD);
             }
         }
         super.drawScreen(mouseX, mouseY, partialTicks);

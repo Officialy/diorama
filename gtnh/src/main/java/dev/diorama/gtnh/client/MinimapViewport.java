@@ -21,6 +21,10 @@ final class MinimapViewport {
 
     /** The player position already projected with the canonical default pitch and north facing. */
     MinimapViewport(double u, double v) {
+        this(u, v, TileKey.SURFACE);
+    }
+
+    MinimapViewport(double u, double v, int layer) {
         this.centerU = u;
         this.centerV = v;
         List<Axis> columns = axis(u), rows = axis(v);
@@ -29,7 +33,7 @@ final class MinimapViewport {
             for (Axis column : columns) {
                 visible.add(
                     new Tile(
-                        new TileKey(TileKey.SURFACE, column.index(), row.index()),
+                        new TileKey(layer, column.index(), row.index()),
                         column.start(),
                         row.start(),
                         column.end(),
@@ -54,6 +58,12 @@ final class MinimapViewport {
 
     double normalizedY(double v) {
         return .5 + (v - centerV) / SPAN;
+    }
+
+    /** Same four-block cut and upward hysteresis as the canonical MapSession. */
+    static int caveLayer(int feetY, int previous) {
+        int wanted = Math.floorDiv(feetY + 7, 4) * 4;
+        return previous == TileKey.SURFACE || wanted < previous || previous <= feetY + 2 ? wanted : previous;
     }
 
     private static List<Axis> axis(double center) {
