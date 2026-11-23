@@ -33,6 +33,8 @@ public final class TerrainMetrics {
         CAPTURE_STALE,
         CAPTURE_FAILED,
         CAPTURE_STATE_CELLS,
+        CAPTURE_UNKNOWN_LOOK_CELLS,
+        CAPTURE_PENDING_TINT,
         CAPTURE_LIGHT_CELLS,
         REFRESH_ENQUEUED,
         REFRESH_COALESCED,

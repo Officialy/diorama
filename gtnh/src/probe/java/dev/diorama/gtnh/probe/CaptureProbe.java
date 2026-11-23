@@ -29,6 +29,7 @@ public final class CaptureProbe {
         knownEmpty();
         surfaceInputs();
         pending();
+        partialAppearance();
         stale();
         invalid();
         StringBuilder hex = new StringBuilder();
@@ -344,6 +345,73 @@ public final class CaptureProbe {
         require(air.count("section") == 0 && air.looks.makeCalls == 0, "unready air aborts before section access");
     }
 
+    private static void partialAppearance() {
+        Fixture f = new Fixture(3, true);
+        f.unknownRaw = 65535;
+        Arrays.fill(f.raw[0], 255);
+        f.raw[0][0] = 0;
+        f.raw[0][1] = f.unknownRaw;
+        Arrays.fill(f.raw[2], f.unknownRaw);
+        ChunkCapture.Result strict = f.capture();
+        status(strict, ChunkCapture.Status.PENDING_APPEARANCE, f.epoch);
+        require(f.count("look") == 0 && f.count("tints") == 0, "strict capture still rejects failed preparation");
+        f.calls.clear();
+        f.allowUnknownLooks = true;
+        ChunkCapture.Result partial = f.capture();
+        status(partial, ChunkCapture.Status.READY, f.epoch);
+        ChunkSnapshot snapshot = partial.snapshot();
+        int[] mixed = snapshot.sectionIds(0);
+        require(
+            mixed.length == 4096 && mixed[0] == 0 && mixed[1] == ChunkSnapshot.UNKNOWN_LOOK && mixed[2] == 3,
+            "known solid, unknown look and known air retain distinct detached IDs");
+        require(snapshot.sectionIds(1) == null, "missing section stays known air");
+        int[] unknown = snapshot.sectionIds(2);
+        require(unknown.length == 4096, "uniform unknown section cannot become uniform air");
+        for (int id : unknown) require(id == ChunkSnapshot.UNKNOWN_LOOK, "dense unknown slot");
+        require(
+            snapshot.surface(0, 0) == 47 && snapshot.maxY == 47 && f.retainedSurface[0] == 47,
+            "unknown cells conservatively count toward terrain and tint height");
+        require(
+            snapshot.blockLight(0, 1, 0, 0) == block(0, 1) && snapshot.skyLight(0, 1, 0, 0) == skylight(0, 1),
+            "unknown appearance does not lose valid lighting");
+        Arrays.fill(f.raw[0], 255);
+        Arrays.fill(f.retainedSurface, -5);
+        mixed[1] = 3;
+        require(
+            snapshot.sectionIds(0)[1] == ChunkSnapshot.UNKNOWN_LOOK && snapshot.surface(0, 0) == 47,
+            "partial capture does not retain source, callback or returned arrays");
+        put(snapshot.sectionIds(0)[1]);
+        put(snapshot.maxY);
+
+        Fixture missingTint = new Fixture(1, true);
+        missingTint.allowUnknownLooks = true;
+        missingTint.unknownRaw = 65535;
+        missingTint.tint = null;
+        status(missingTint.capture(), ChunkCapture.Status.PENDING_APPEARANCE, missingTint.epoch);
+        Fixture limited = new Fixture(1, true);
+        limited.allowUnknownLooks = true;
+        limited.stateLimit = 1;
+        status(limited.capture(), ChunkCapture.Status.PENDING_APPEARANCE, limited.epoch);
+        require(limited.count("prepare") == 0, "partial capture does not bypass distinct-state limit");
+        Fixture malformed = new Fixture(1, true);
+        malformed.allowUnknownLooks = true;
+        malformed.overrideLook = -2;
+        expect(
+            IllegalArgumentException.class,
+            () -> malformed.capture(),
+            "only the exact unknown sentinel is admitted");
+        Fixture unready = new Fixture(1, true);
+        unready.allowUnknownLooks = true;
+        unready.overrideLook = 6;
+        status(unready.capture(), ChunkCapture.Status.PENDING_APPEARANCE, unready.epoch);
+        Fixture stale = new Fixture(1, true);
+        stale.allowUnknownLooks = true;
+        stale.unknownRaw = 65535;
+        stale.trigger = "look";
+        stale.action = () -> stale.inputEpoch = new Object();
+        status(stale.capture(), ChunkCapture.Status.STALE_SESSION, stale.epoch);
+    }
+
     private static void stale() {
         String[] stages = { "accessSession", "loaded", "chunkX", "chunkZ", "minSection", "sectionCount", "hasSky",
             "looks", "air", "section", "blockId", "metadata", "prepare", "look", "blockLight", "skyLight", "tints",
@@ -645,7 +713,8 @@ public final class CaptureProbe {
             }
         };
         private int stateLimit = 65536;
-        private boolean prepared = true;
+        private boolean prepared = true, allowUnknownLooks;
+        private int unknownRaw = -1;
         private final ChunkCapture.Inputs inputs = new ChunkCapture.Inputs() {
 
             @Override
@@ -654,12 +723,17 @@ public final class CaptureProbe {
             }
 
             @Override
+            public boolean allowUnknownLooks() {
+                return allowUnknownLooks;
+            }
+
+            @Override
             public boolean prepareState(int id, int metadata) {
                 touch("prepare");
                 require(
                     count("section") == reportedCount && count("look") == 0,
                     "appearance preparation starts after copying source states and before resolving looks");
-                return prepared;
+                return prepared && id != unknownRaw;
             }
 
             @Override
@@ -692,6 +766,7 @@ public final class CaptureProbe {
                     id == raw[si][cell] && metadata == meta[si][cell],
                     "raw ID and metadata reach resolver unchanged");
                 for (int i = 0; i < RAW.length; i++) if (RAW[i] == id) rawMask |= 1 << i;
+                if (id == unknownRaw) return ChunkSnapshot.UNKNOWN_LOOK;
                 return overrideLook == Integer.MIN_VALUE ? resolve(id, metadata, x, y, z) : overrideLook;
             }
 

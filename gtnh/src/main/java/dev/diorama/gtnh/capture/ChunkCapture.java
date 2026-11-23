@@ -75,9 +75,14 @@ public final class ChunkCapture {
             return 65536;
         }
 
-        /** Register a distinct raw state using only its detached values. False keeps the chunk pending. */
+        /** Register a distinct raw state using only its detached values. False means not ready. */
         default boolean prepareState(int blockId, int metadata) {
             return true;
+        }
+
+        /** Allow an unresolved cell to remain explicitly unknown instead of rejecting the snapshot. */
+        default boolean allowUnknownLooks() {
+            return false;
         }
 
         /** Registry air ID used as context above a known-null section. */
@@ -85,12 +90,13 @@ public final class ChunkCapture {
             return -1;
         }
 
-        /** A published valid look ID, or negative if appearance is not ready/supported. */
+        /** A published valid look ID, or UNKNOWN_LOOK if appearance is not ready or unsupported. */
         int lookId(int blockId, int metadata, int worldX, int worldY, int worldZ, int aboveRawId);
 
         /**
-         * Receives a detached resolved-non-air height array in (localZ << 4) | localX order; empty
-         * columns are Integer.MIN_VALUE. Null means not ready, never an implicit white fallback.
+         * Receives detached conservative non-air heights (including unknown looks), in
+         * (localZ << 4) | localX order with Integer.MIN_VALUE for empty columns. Null means not
+         * ready, never an implicit white fallback.
          */
         ChunkSnapshot.@Nullable Tints tints(int chunkX, int chunkZ, int[] surface);
 
@@ -169,6 +175,8 @@ public final class ChunkCapture {
             int stateLimit = inputs.stateLimit();
             current(access, session);
             if (stateLimit <= 0) throw new IllegalArgumentException("Invalid capture state limit");
+            boolean allowUnknownLooks = inputs.allowUnknownLooks();
+            current(access, session);
 
             long started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
             LongOpenHashSet unique = new LongOpenHashSet();
@@ -208,7 +216,7 @@ public final class ChunkCapture {
                     current(access, session);
                     if (inputs.session() != session) throw new Stale();
                     current(access, session);
-                    if (!prepared) throw new Pending();
+                    if (!prepared && !allowUnknownLooks) throw new Pending();
                 }
             } finally {
                 if (TerrainMetrics.ENABLED)
@@ -221,7 +229,7 @@ public final class ChunkCapture {
             int[] surface = new int[256];
             Arrays.fill(surface, Integer.MIN_VALUE);
             int maxY = Integer.MIN_VALUE;
-            int readLights = 0;
+            int readLights = 0, unknownLooks = 0;
             started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
             try {
                 for (int sectionIndex = 0; sectionIndex < count; sectionIndex++) {
@@ -245,13 +253,15 @@ public final class ChunkCapture {
                                 worldZ0 + ((cell >>> 4) & 15),
                                 above);
                             current(access, session);
-                            if (id < 0) throw new Pending();
-                            byte material = kind(looks, id);
+                            if (id < 0 && !allowUnknownLooks) throw new Pending();
+                            boolean unknown = id == ChunkSnapshot.UNKNOWN_LOOK;
+                            if (unknown) unknownLooks++;
+                            boolean nonAir = unknown || kind(looks, id) != Looks.AIR;
                             current(access, session);
                             ids[cell] = id;
                             if (cell == 0) first = id;
                             else uniform &= id == first;
-                            if (material != Looks.AIR) {
+                            if (nonAir) {
                                 int column = cell & 255;
                                 surface[column] = Math.max(surface[column], y);
                                 maxY = Math.max(maxY, y);
@@ -268,7 +278,8 @@ public final class ChunkCapture {
                             sky[cell] = light(skyValue);
                         }
                     }
-                    sections[sectionIndex] = ids == null ? null : uniform ? new int[] { first } : ids;
+                    sections[sectionIndex] = ids == null ? null
+                        : uniform && first != ChunkSnapshot.UNKNOWN_LOOK ? new int[] { first } : ids;
                     // Even known-air sections retain their captured 1.7.10 height-map light values.
                     blockLight[sectionIndex] = blocks;
                     skyLight[sectionIndex] = sky;
@@ -277,6 +288,7 @@ public final class ChunkCapture {
                 if (TerrainMetrics.ENABLED) {
                     TerrainMetrics.record(TerrainMetrics.Phase.CAPTURE_RESOLVE, System.nanoTime() - started);
                     TerrainMetrics.add(TerrainMetrics.Counter.CAPTURE_LIGHT_CELLS, readLights);
+                    TerrainMetrics.add(TerrainMetrics.Counter.CAPTURE_UNKNOWN_LOOK_CELLS, unknownLooks);
                 }
             }
             current(access, session);
@@ -289,7 +301,10 @@ public final class ChunkCapture {
                     TerrainMetrics.record(TerrainMetrics.Phase.CAPTURE_TINT, System.nanoTime() - started);
             }
             current(access, session);
-            if (tints == null) throw new Pending();
+            if (tints == null) {
+                if (TerrainMetrics.ENABLED) TerrainMetrics.add(TerrainMetrics.Counter.CAPTURE_PENDING_TINT, 1);
+                throw new Pending();
+            }
             int fog = inputs.fogColor(chunkX, chunkZ);
             current(access, session);
             if (inputs.session() != session) throw new Stale();

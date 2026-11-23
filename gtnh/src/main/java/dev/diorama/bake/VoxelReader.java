@@ -109,19 +109,22 @@ public final class VoxelReader extends VoxelReaderCore {
 
         private final ChunkSnapshot snapshot;
         private final @Nullable Looks looks;
+        private final boolean[] hasUnknown;
 
         Decoded(ChunkSnapshot snapshot, @Nullable Looks looks, Air air) {
             super(snapshot.sectionCount(), snapshot.minSectionY, air);
             this.snapshot = snapshot;
             this.looks = looks;
+            this.hasUnknown = new boolean[snapshot.sectionCount()];
         }
 
         @Override
         protected Section read(int index) {
             int[] ids = this.snapshot.sectionIds(index);
             if (ids == null) return this.air.section;
-            if (this.looks != null) {
-                for (int id : ids) {
+            for (int id : ids) {
+                if (id == UNKNOWN) this.hasUnknown[index] = true;
+                else if (this.looks != null) {
                     if (id >= this.looks.kind.length)
                         throw new IllegalArgumentException("Prepared ID outside look domain");
                     this.looks.ensure(id);
@@ -129,6 +132,12 @@ public final class VoxelReader extends VoxelReaderCore {
             }
             return ids.length == 1 ? new Section(ids[0], null, null, null, null)
                 : new Section(-1, ids, null, null, null);
+        }
+
+        @Override
+        int @Nullable [] unknownIds(int index) {
+            return index >= 0 && index < this.hasUnknown.length && this.hasUnknown[index] ? this.section(index).ids
+                : null;
         }
 
         @Override

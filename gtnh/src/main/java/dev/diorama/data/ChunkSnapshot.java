@@ -10,6 +10,7 @@ import org.jspecify.annotations.Nullable;
  */
 public final class ChunkSnapshot {
 
+    public static final int UNKNOWN_LOOK = -1;
     public static final int NETHER_WASTES_FOG = 0x330808;
     public final int chunkX;
     public final int chunkZ;
@@ -29,7 +30,8 @@ public final class ChunkSnapshot {
 
     /**
      * Copies every supplied array. Section entries are null for known air, one ID for an explicit
-     * uniform section, or 4096 IDs in (y << 8) | (z << 4) | x order. Light entries are null or 4096
+     * uniform known section, or 4096 IDs in (y << 8) | (z << 4) | x order (including UNKNOWN_LOOK).
+     * Light entries are null or 4096
      * unpacked values in 0..15. Surface is 256 column tops; maxY is the prepared highest non-air y,
      * or Integer.MIN_VALUE, not independently captured or derived here. The look-domain identity
      * must match the reader's explicit session. Returned tint arrays are read-only by contract.
@@ -57,8 +59,8 @@ public final class ChunkSnapshot {
             if (ids.length != 1 && ids.length != 4096)
                 throw new IllegalArgumentException("Section must be uniform or 4096 IDs");
             int[] copy = ids.clone();
-            for (int id : copy)
-                if (id < 0) throw new IllegalArgumentException("Snapshot IDs must be known and nonnegative");
+            for (int id : copy) if (id < UNKNOWN_LOOK || (copy.length == 1 && id == UNKNOWN_LOOK))
+                throw new IllegalArgumentException("Invalid snapshot ID or uniform unknown section");
             this.sections[i] = copy;
             if (copy.length == 1) this.uniformPresence[i] = copy;
             else this.densePresence[i] = copy;

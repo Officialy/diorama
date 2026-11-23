@@ -51,6 +51,7 @@ public abstract class VoxelReaderCore {
 	private int solidZ = Integer.MIN_VALUE;
 	private long @Nullable [] solidMask;
 	private long @Nullable [] partialMask;
+	private int @Nullable [] unknownIds;
 	/** A section's palette indices, unpacked while reading it. */
 	private final int[] unpacked = new int[4096];
 
@@ -132,7 +133,7 @@ public abstract class VoxelReaderCore {
 		}
 		int i = ((y & 15) << 8) | ((z & 15) << 4) | (x & 15);
 		if ((mask[i >> 6] >>> i & 1) == 0) {
-			return 0;
+			return this.unknownIds != null && this.unknownIds[i] == UNKNOWN ? UNKNOWN : 0;
 		}
 		return 1 + ((int) (this.partialMask[i >> 6] >>> i) & 1);
 	}
@@ -181,10 +182,12 @@ public abstract class VoxelReaderCore {
 				this.missing.add(key(sx, sz));
 			}
 			this.solidMask = null;
+			this.unknownIds = null;
 		} else {
 			int index = sy - chunk.minSectionY;
 			this.solidMask = chunk.solid(index, this.kinds, this.shapes, this.unpacked);
 			this.partialMask = chunk.partial(index);
+			this.unknownIds = chunk.unknownIds(index);
 		}
 		this.solidX = sx;
 		this.solidY = sy;

@@ -145,8 +145,10 @@ public final class TerrainPreview {
             for (int section = 0; section < 16; section++) {
                 int[] ids = snapshot.sectionIds(section);
                 if (ids == null) continue;
-                for (int id : ids) if (id >= this.looks.kind.length || !this.looks.isPrepared(id))
-                    throw new IllegalArgumentException("Preview snapshot contains an unprepared look");
+                for (int id : ids) {
+                    if (id != ChunkSnapshot.UNKNOWN_LOOK && !this.looks.isPrepared(id))
+                        throw new IllegalArgumentException("Preview snapshot contains an unprepared look");
+                }
             }
         }
 

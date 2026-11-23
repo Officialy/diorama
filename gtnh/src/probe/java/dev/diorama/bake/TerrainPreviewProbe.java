@@ -32,6 +32,7 @@ public final class TerrainPreviewProbe {
             realBake();
             patchBake();
             caveBake();
+            partialAppearanceBake();
         } finally {
             MapStyle.set(oldStyle);
             Projection.setFacing(oldFacing);
@@ -396,6 +397,43 @@ public final class TerrainPreviewProbe {
             roof ? 8 : 0,
             0,
             tints());
+    }
+
+    private static void partialAppearanceBake() {
+        PreparedBlockLooks looks = table();
+        int[][] sections = new int[16][];
+        sections[0] = new int[4096];
+        Arrays.fill(sections[0], 0, 256, 1);
+        int[] surface = new int[256];
+        for (int z = 0; z < 16; z++) for (int x = 0; x < 4; x++) {
+            sections[0][256 + z * 16 + x] = ChunkSnapshot.UNKNOWN_LOOK;
+            surface[z * 16 + x] = 1;
+        }
+        ChunkSnapshot mixed = new ChunkSnapshot(
+            0,
+            0,
+            0,
+            looks.airId(),
+            looks,
+            sections,
+            new byte[16][],
+            new byte[16][],
+            true,
+            surface,
+            1,
+            0,
+            tints());
+        TerrainPreview.Work work = TerrainPreview.prepare(looks, looks.session(), KEY, new ChunkSnapshot[] { mixed });
+        VoxelReader reader = new VoxelReader(work, looks);
+        eq(reader.state(1, 1, 4), VoxelReader.UNKNOWN, "unavailable appearance remains unknown to camera rays");
+        eq(reader.solid(1, 1, 4), VoxelReader.UNKNOWN, "unknown remains unknown to solid-mask rays");
+        eq(reader.solid(8, 1, 4), 0, "adjacent air remains distinct from unknown");
+        eq(reader.solid(8, 0, 4), 1, "known floor remains solid");
+        int[] pixels = work.bake()
+            .mips()[0];
+        int row = 16 * Projection.TILE_PIXELS;
+        eq(pixels[row + 6], 0, "ray hitting unknown stays transparent rather than exposing the floor beneath");
+        eq(pixels[row + 32] >>> 24, 255, "known terrain in the same chunk stays visible");
     }
 
     private static PreparedBlockLooks table() {

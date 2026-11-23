@@ -232,6 +232,11 @@ public final class ClientCaptureLifecycle {
         }
 
         @Override
+        public boolean allowUnknownLooks() {
+            return true;
+        }
+
+        @Override
         public boolean prepareState(int rawId, int metadata) {
             if (rawId > 0xFFFFFF) return false;
             if (this.appearance.isGrass(rawId, metadata)) {

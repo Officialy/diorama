@@ -72,7 +72,7 @@
     {
       "path": "dev/diorama/bake/DecodedSections.java",
       "fqn": "dev.diorama.bake.DecodedSections",
-      "reviewedSha256": "542c8bae72095f99d5ce8df1928d1fa9505fba44ae2f9168d945f89d19d43e96",
+      "reviewedSha256": "0df62766b9dfaa18e89ebfbe495435801e1af4358ae1f561092309955465f999",
       "reason": "Canonical job-local numeric section decoding/masks/cache; game state/palette numbering stays in VoxelReader adapter."
     },
     {
@@ -84,7 +84,7 @@
     {
       "path": "dev/diorama/bake/VoxelReaderCore.java",
       "fqn": "dev.diorama.bake.VoxelReaderCore",
-      "reviewedSha256": "43fdc4e325b9aec023576a5cf2a8e6dff2b493a6839b076757e991cc0725db0e",
+      "reviewedSha256": "38e0e7bcb84167115a674dfb307c08fa1bbe1de34adea384ac95c600609eccc6",
       "reason": "Canonical numeric job-local voxel queries, pinned chunks, caster masks, height and light defaults; snapshot adapters remain platform-specific."
     },
     {

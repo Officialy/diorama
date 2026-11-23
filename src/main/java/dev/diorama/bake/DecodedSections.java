@@ -96,6 +96,11 @@ abstract class DecodedSections {
 
 	protected abstract int[] byBlock(int index);
 
+	/** Dense ids if this section contains unknown cells; otherwise no per-cell check is needed. */
+	int @Nullable [] unknownIds(int index) {
+		return null;
+	}
+
 	/** Fills both mask caches without first allocating block ids. */
 	protected abstract void fillSolidByBlock(int index, byte[] kinds, int @Nullable [] shapes);
 
@@ -164,7 +169,7 @@ abstract class DecodedSections {
 	}
 
 	static byte solidFlags(int id, byte[] kinds, int @Nullable [] shapes) {
-		if (kinds[id] != Looks.SOLID) {
+		if (id < 0 || kinds[id] != Looks.SOLID) {
 			return 0;
 		}
 		return shapes != null && shapes[id] != 0 ? (byte) 3 : (byte) 1;
