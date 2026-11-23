@@ -10,6 +10,8 @@ import dev.diorama.bake.TileKey;
 final class MapViewportController {
 
     private static final double WHEEL_FACTOR = 1.25;
+    // Match the detailed zoom cutoff in the modern MapViewport, in GUI pixels per unit.
+    private static final double DETAILED_ZOOM = 0.5;
     private final double minPixelsPerUnit, maxPixelsPerUnit;
     private double centerU, centerV, pixelsPerUnit;
     private int x, y, width, height;
@@ -92,10 +94,21 @@ final class MapViewportController {
         return Math.max(minPixelsPerUnit, Math.min(maxPixelsPerUnit, scale));
     }
 
-    /** Visible detail surface tiles in row-major order. For sparse maps use {@link #clip} on known keys. */
+    /** Preferred shared surface LOD by zoom only; callers may fall back to detail if needed. */
+    int preferredLod() {
+        return pixelsPerUnit < DETAILED_ZOOM ? 1 : 0;
+    }
+
+    /** Visible detail surface tiles in row-major order. */
     List<Tile> tiles() {
+        return tiles(0);
+    }
+
+    /** Visible surface tiles at the requested LOD, in row-major order. Use {@link #clip} for sparse maps. */
+    List<Tile> tiles(int lod) {
+        if (lod < 0 || lod > 1) throw new IllegalArgumentException("Expected surface LOD0 or LOD1");
         if (width == 0 || height == 0) return List.of();
-        double units = Projection.TILE_UNITS;
+        double units = (double) Projection.TILE_UNITS * (1 << lod);
         // Include boundary candidates, then use the same positive-area test as sparse clipping.
         // Do not narrow to int before looping: the exclusive end may be Integer.MAX_VALUE + 1.
         long firstU = firstTile(projectedU(x), units);
@@ -106,7 +119,7 @@ final class MapViewportController {
         List<Tile> visible = new ArrayList<>();
         for (long v = firstV; v < endV; v++) {
             for (long u = firstU; u < endU; u++) {
-                Tile tile = clip(new TileKey(TileKey.SURFACE, (int) u, (int) v));
+                Tile tile = clip(new TileKey(TileKey.SURFACE, (int) u, (int) v, lod));
                 if (tile != null) visible.add(tile);
             }
         }

@@ -14,7 +14,7 @@ import dev.diorama.Projection;
 final class SharedTerrainMapScreen extends GuiScreen {
 
     private final WorldClient world;
-    private final MapViewportController view = new MapViewportController(0, 0, 4, 1, 16);
+    private final MapViewportController view = new MapViewportController(0, 0, 4, 0.25, 16);
     private boolean initialized, dragging;
     private int lastX, lastY;
 

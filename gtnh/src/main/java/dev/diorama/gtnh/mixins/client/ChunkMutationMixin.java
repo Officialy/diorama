@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import dev.diorama.gtnh.client.TerrainPreviewScreen;
+import dev.diorama.gtnh.client.ClientMinimap;
 
 /** Observe accepted writes, never renderer updates or neighbour notifications. */
 @Mixin(Chunk.class)
@@ -20,7 +20,7 @@ public abstract class ChunkMutationMixin {
     private void diorama$block(int x, int y, int z, Block block, int meta, CallbackInfoReturnable<Boolean> cir) {
         Chunk chunk = (Chunk) (Object) this;
         if (chunk.worldObj.isRemote && cir.getReturnValueZ()) {
-            TerrainPreviewScreen.blockChanged(chunk.worldObj, chunk.xPosition, chunk.zPosition, x, y, z);
+            ClientMinimap.blockChanged(chunk.worldObj, chunk.xPosition, chunk.zPosition, x, y, z);
         }
     }
 
@@ -28,7 +28,7 @@ public abstract class ChunkMutationMixin {
     private void diorama$metadata(int x, int y, int z, int meta, CallbackInfoReturnable<Boolean> cir) {
         Chunk chunk = (Chunk) (Object) this;
         if (chunk.worldObj.isRemote && cir.getReturnValueZ()) {
-            TerrainPreviewScreen.blockChanged(chunk.worldObj, chunk.xPosition, chunk.zPosition, x, y, z);
+            ClientMinimap.blockChanged(chunk.worldObj, chunk.xPosition, chunk.zPosition, x, y, z);
         }
     }
 
@@ -38,14 +38,13 @@ public abstract class ChunkMutationMixin {
     private void diorama$filled(byte[] data, int sections, int extra, boolean full, CallbackInfo ci) {
         Chunk chunk = (Chunk) (Object) this;
         if (chunk.worldObj.isRemote) {
-            TerrainPreviewScreen.chunkFilled(chunk.worldObj, chunk.xPosition, chunk.zPosition, full);
+            ClientMinimap.chunkFilled(chunk.worldObj, chunk.xPosition, chunk.zPosition, full);
         }
     }
 
     @Inject(method = "onChunkUnload()V", at = @At("RETURN"))
     private void diorama$unloaded(CallbackInfo ci) {
         Chunk chunk = (Chunk) (Object) this;
-        if (chunk.worldObj.isRemote)
-            TerrainPreviewScreen.chunkUnloaded(chunk.worldObj, chunk.xPosition, chunk.zPosition);
+        if (chunk.worldObj.isRemote) ClientMinimap.chunkUnloaded(chunk.worldObj, chunk.xPosition, chunk.zPosition);
     }
 }

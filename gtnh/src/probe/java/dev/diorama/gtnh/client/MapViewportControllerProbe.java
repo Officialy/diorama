@@ -19,6 +19,7 @@ public final class MapViewportControllerProbe {
         digest = MessageDigest.getInstance("SHA-256");
         checkCamera();
         checkClipping();
+        checkOverview();
         checkFixedMinimapParity();
         StringBuilder hex = new StringBuilder();
         for (byte value : digest.digest()) {
@@ -28,7 +29,7 @@ public final class MapViewportControllerProbe {
         System.out.println("FIXTURE-SHA256=" + hex);
         System.out.println(
             "PASS map viewport: " + assertions
-                + " assertions; pan, anchored zoom, recenter, tile clipping and minimap parity");
+                + " assertions; pan, anchored zoom, recenter, LOD policy, tile clipping and minimap parity");
     }
 
     private static void checkCamera() {
@@ -140,6 +141,66 @@ public final class MapViewportControllerProbe {
             "empty resized view has no area");
     }
 
+    private static void checkOverview() {
+        double cutoff = 0.5;
+        MapViewportController view = new MapViewportController(0, 0, cutoff, 0.25, 4);
+        require(view.preferredLod() == 0, "canonical cutoff stays detailed");
+        require(
+            new MapViewportController(0, 0, Math.nextUp(cutoff), 0.25, 4).preferredLod() == 0,
+            "just above canonical cutoff stays detailed");
+        require(
+            new MapViewportController(0, 0, Math.nextDown(cutoff), 0.25, 4).preferredLod() == 1,
+            "just below canonical cutoff prefers overview");
+        require(
+            view.tiles(1)
+                .isEmpty(),
+            "uninitialized view has no overview tiles");
+        checkRejectedLod(view, -1);
+        checkRejectedLod(view, 2);
+
+        view.resize(7, 13, UNITS, UNITS / 2);
+        List<Tile> overview = view.tiles(1);
+        require(
+            overview.stream()
+                .map(Tile::key)
+                .toList()
+                .equals(List.of(overviewKey(-1, -1), overviewKey(0, -1), overviewKey(-1, 0), overviewKey(0, 0))),
+            "explicit overview tiles cross the origin in row-major order even at detail zoom");
+        checkTile(overview.get(0), 7, 13, 7 + UNITS / 2, 13 + UNITS / 4, 0.5, 0.75, 1, 1);
+        checkTile(overview.get(3), 7 + UNITS / 2, 13 + UNITS / 4, 7 + UNITS, 13 + UNITS / 2, 0, 0, 0.5, 0.25);
+        for (Tile tile : overview) require(tile.equals(view.clip(tile.key())), "overview clipping matches enumeration");
+
+        view.resize(7, 13, UNITS, UNITS);
+        view.recenter(-UNITS, UNITS);
+        List<Tile> aligned = view.tiles(1);
+        require(aligned.size() == 1, "overview excludes edge-only intersections");
+        require(
+            aligned.get(0)
+                .key()
+                .equals(overviewKey(-1, 0)),
+            "aligned negative overview key");
+        checkTile(aligned.get(0), 7, 13, 7 + UNITS, 13 + UNITS, 0, 0, 1, 1);
+
+        double centerX = view.screenX(view.centerU()), centerY = view.screenY(view.centerV());
+        view.zoomAt(centerX, centerY, -1);
+        require(view.preferredLod() == 1, "zooming out crosses into overview mode");
+        require(
+            view.tiles()
+                .equals(view.tiles(0)),
+            "default enumeration remains explicit detail below cutoff");
+        view.zoomAt(centerX, centerY, 1);
+        require(view.preferredLod() == 0, "zooming back to cutoff restores detail mode");
+    }
+
+    private static void checkRejectedLod(MapViewportController view, int lod) {
+        try {
+            view.tiles(lod);
+            throw new AssertionError("Expected invalid LOD to be rejected: " + lod);
+        } catch (IllegalArgumentException expected) {
+            require(true, "reject invalid enumeration LOD " + lod);
+        }
+    }
+
     private static void checkFixedMinimapParity() {
         double[] centers = { -29_999_983.625, -141.5, -128, -116, -0.25, 0, 12, 64, 116, 127.875, 128, 29_999_984 };
         int[] sizes = { 96, 63, 1 };
@@ -191,6 +252,10 @@ public final class MapViewportControllerProbe {
 
     private static TileKey key(int u, int v) {
         return new TileKey(TileKey.SURFACE, u, v);
+    }
+
+    private static TileKey overviewKey(int u, int v) {
+        return new TileKey(TileKey.SURFACE, u, v, 1);
     }
 
     private static void close(double actual, double expected, String description) {

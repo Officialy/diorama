@@ -69,7 +69,7 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
             terrainChat = chat;
             terrainWorld = minecraft.theWorld;
         } else {
-            minecraft.displayGuiScreen(new TerrainPreviewScreen(minecraft.theWorld));
+            minecraft.displayGuiScreen(new SharedTerrainMapScreen(minecraft.theWorld));
         }
     }
 
@@ -128,7 +128,7 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         if (!event.isCanceled() && event.gui == null
             && minecraft.currentScreen == originating
             && minecraft.theWorld == originatingWorld) {
-            event.gui = new TerrainPreviewScreen(originatingWorld);
+            event.gui = new SharedTerrainMapScreen(originatingWorld);
         }
     }
 

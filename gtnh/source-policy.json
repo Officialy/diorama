@@ -162,6 +162,10 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/client/SharedTileIo.java",
+      "fqn": "dev.diorama.gtnh.client.SharedTileIo"
+    },
+    {
       "path": "dev/diorama/gtnh/client/MapViewportController.java",
       "fqn": "dev.diorama.gtnh.client.MapViewportController"
     },
@@ -236,10 +240,6 @@
     {
       "path": "dev/diorama/gtnh/client/TerrainPreviewCommand.java",
       "fqn": "dev.diorama.gtnh.client.TerrainPreviewCommand"
-    },
-    {
-      "path": "dev/diorama/gtnh/client/TerrainPreviewScreen.java",
-      "fqn": "dev.diorama.gtnh.client.TerrainPreviewScreen"
     },
     {
       "path": "dev/diorama/gtnh/client/TerrainPreviewJob.java",
