@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.resources.I18n;
 
+import org.jspecify.annotations.Nullable;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
@@ -22,16 +23,18 @@ final class SharedTerrainMapScreen extends GuiScreen {
     private static final int WAYPOINT_X = OPTIONS_X + BUTTON_WIDTH + 4;
     private static final int WAYPOINT_WIDTH = 72;
     private final WorldClient world;
+    private final @Nullable ClientMapDimension dimension;
     private final MapViewportController view = new MapViewportController(0, 0, 4, 0.25, 16);
     private boolean initialized, dragging;
     private int lastX, lastY;
 
     SharedTerrainMapScreen(WorldClient world) {
         this.world = world;
+        this.dimension = ClientMapDimension.of(world);
     }
 
     boolean belongsTo(WorldClient current) {
-        return initialized && current == world;
+        return initialized && current == world && ClientMapDimension.of(current) == dimension;
     }
 
     MapViewportController viewport() {
@@ -45,7 +48,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
             new GuiButton(0, BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, I18n.format("diorama.map.recenter")));
         buttonList.add(
             new GuiButton(1, OPTIONS_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, I18n.format("diorama.minimap.options")));
-        if (ClientWaypoints.supported(world)) {
+        if (dimension != null) {
             buttonList.add(
                 new GuiButton(2, WAYPOINT_X, BUTTON_Y, WAYPOINT_WIDTH, BUTTON_HEIGHT, WaypointEditScreen.text("list")));
         }
@@ -103,7 +106,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
         super.mouseClicked(x, y, button);
         boolean controls = y >= BUTTON_Y && y < BUTTON_Y + BUTTON_HEIGHT
             && ((x >= BUTTON_X && x < BUTTON_X + BUTTON_WIDTH) || (x >= OPTIONS_X && x < OPTIONS_X + BUTTON_WIDTH)
-                || (x >= WAYPOINT_X && x < WAYPOINT_X + WAYPOINT_WIDTH && ClientWaypoints.supported(world)));
+                || (x >= WAYPOINT_X && x < WAYPOINT_X + WAYPOINT_WIDTH && dimension != null));
         if (button == 0 && !controls) {
             dragging = true;
             lastX = x;
@@ -130,6 +133,15 @@ final class SharedTerrainMapScreen extends GuiScreen {
         drawRect(0, 0, width, height, 0xFF111820);
         ClientMinimap.drawMap(mc, this);
         drawWaypoints(mouseX, mouseY);
+        if (belongsTo(mc.theWorld)) {
+            String status = dimension == null ? I18n.format("diorama.map.unsupported_dimension")
+                : I18n.format("diorama.map.dimension." + dimension.suffix());
+            int bottom = height - fontRendererObj.FONT_HEIGHT - 6;
+            drawString(fontRendererObj, status, 6, bottom, 0xFFDDDDDD);
+            if (dimension == ClientMapDimension.NETHER) {
+                drawString(fontRendererObj, I18n.format("diorama.map.nether_cave_pending"), 6, bottom - 12, 0xFFDDDDDD);
+            }
+        }
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 

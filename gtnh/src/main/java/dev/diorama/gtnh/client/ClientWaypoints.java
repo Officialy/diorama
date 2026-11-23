@@ -9,7 +9,6 @@ import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.world.WorldProviderSurface;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,15 +22,17 @@ final class ClientWaypoints {
     private static final Logger LOG = LogManager.getLogger("Diorama");
     private static @Nullable ClientWaypoints current;
     private final WorldClient world;
+    private final int dimensionId;
     private final @Nullable Path file;
     private long lock;
     private boolean unavailable;
     private LegacyWaypointBook book = new LegacyWaypointBook();
 
-    private ClientWaypoints(Minecraft mc, WorldClient world) {
+    private ClientWaypoints(Minecraft mc, WorldClient world, ClientMapDimension dimension) {
         this.world = world;
+        this.dimensionId = dimension.id();
         Path save = ClientPreviewStorage.savePath(mc, world);
-        file = save == null ? null : save.resolve("diorama-waypoints-v1-overworld.dat");
+        file = save == null ? null : save.resolve("diorama-waypoints-v1-" + dimension.suffix() + ".dat");
         if (file == null) {
             unavailable = mc.isIntegratedServerRunning();
             return;
@@ -49,18 +50,18 @@ final class ClientWaypoints {
     }
 
     static boolean supported(@Nullable WorldClient world) {
-        return world != null && world.provider != null
-            && world.provider.getClass() == WorldProviderSurface.class
-            && world.provider.dimensionId == 0
-            && world.getHeight() == 256;
+        return ClientMapDimension.of(world) != null;
     }
 
     static void observe(Minecraft mc) {
+        // Remote worlds have no reliable sub-world identity (a proxy can keep the play handler).
+        // Do not carry a RAM book into a replacement WorldClient, even across a dimension change.
         if (current != null && !current.valid(mc)) current = null;
-        if (current == null && supported(mc.theWorld) && mc.thePlayer != null) {
+        ClientMapDimension dimension = ClientMapDimension.of(mc.theWorld);
+        if (current == null && dimension != null && mc.thePlayer != null) {
             // Wait until the local server exposes a save identity rather than opening a RAM-only book for it.
             if (mc.isIntegratedServerRunning() && mc.getIntegratedServer() == null) return;
-            current = new ClientWaypoints(mc, mc.theWorld);
+            current = new ClientWaypoints(mc, mc.theWorld, dimension);
         }
     }
 
@@ -75,7 +76,9 @@ final class ClientWaypoints {
     }
 
     boolean valid(Minecraft mc) {
-        return current == this && mc.theWorld == world && supported(world);
+        if (current != this || mc.theWorld != world) return false;
+        ClientMapDimension dimension = ClientMapDimension.of(world);
+        return dimension != null && dimension.id() == dimensionId;
     }
 
     List<Point> points() {

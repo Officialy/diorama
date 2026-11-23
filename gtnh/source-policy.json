@@ -162,6 +162,10 @@
   ],
   "platform": [
     {
+      "path": "dev/diorama/gtnh/client/ClientMapDimension.java",
+      "fqn": "dev.diorama.gtnh.client.ClientMapDimension"
+    },
+    {
       "path": "dev/diorama/gtnh/client/LegacyWaypointBook.java",
       "fqn": "dev.diorama.gtnh.client.LegacyWaypointBook"
     },

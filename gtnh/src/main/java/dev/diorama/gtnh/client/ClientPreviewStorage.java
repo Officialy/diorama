@@ -19,19 +19,23 @@ final class ClientPreviewStorage {
     private ClientPreviewStorage() {}
 
     static @Nullable PreviewTileStore forWorld(Minecraft minecraft, WorldClient world) {
-        Path save = savePath(minecraft, world);
+        ClientMapDimension dimension = ClientMapDimension.of(world);
+        if (dimension == null) return null;
+        Path save = integratedSavePath(minecraft, world);
         if (save == null) return null;
         try {
-            return PreviewTileStore.forSave(save);
+            return PreviewTileStore.forSave(save, dimension.suffix());
         } catch (IOException invalid) {
             return null;
         }
     }
 
     static @Nullable Path savePath(Minecraft minecraft, WorldClient world) {
-        if (minecraft.theWorld != world || world.provider == null
-            || world.provider.dimensionId != 0
-            || !minecraft.isIntegratedServerRunning()) return null;
+        return ClientMapDimension.of(world) == null ? null : integratedSavePath(minecraft, world);
+    }
+
+    private static @Nullable Path integratedSavePath(Minecraft minecraft, WorldClient world) {
+        if (minecraft.theWorld != world || !minecraft.isIntegratedServerRunning()) return null;
         IntegratedServer server = minecraft.getIntegratedServer();
         if (server == null) return null;
         String folder = server.getFolderName();

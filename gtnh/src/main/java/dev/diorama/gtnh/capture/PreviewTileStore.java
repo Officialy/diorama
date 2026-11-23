@@ -61,12 +61,22 @@ public final class PreviewTileStore {
         this.sessionId = sessionId;
     }
 
-    /** Capture vanilla's existing lock, read-only. The cache itself belongs to the save, not the session. */
+    /** Open the original Overworld store. */
     public static PreviewTileStore forSave(Path directory) throws IOException {
+        return forSave(directory, "overworld");
+    }
+
+    /** Bind the dimension-specific cache to vanilla's single lock at the integrated save root. */
+    public static PreviewTileStore forSave(Path directory, String dimensionSuffix) throws IOException {
+        if (!"overworld".equals(dimensionSuffix) && !"nether".equals(dimensionSuffix) && !"end".equals(dimensionSuffix))
+            throw new IllegalArgumentException("Expected a vanilla map dimension suffix");
         Path save = directory.toAbsolutePath()
             .normalize();
         Path lock = save.resolve("session.lock");
-        return new PreviewTileStore(save.resolve("diorama-terrain-preview-v1-overworld"), lock, readSession(lock));
+        return new PreviewTileStore(
+            save.resolve("diorama-terrain-preview-v1-" + dimensionSuffix),
+            lock,
+            readSession(lock));
     }
 
     private static long readSession(Path lock) throws IOException {

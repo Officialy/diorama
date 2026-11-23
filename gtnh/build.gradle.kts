@@ -11,7 +11,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.24-dev"
+version = "0.8.1-gtnh.25-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -296,6 +296,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
             val expectedMr = setOf("dev/diorama/gtnh/capture/TerrainPreview.class",
+                "dev/diorama/gtnh/client/SharedTerrainMapScreen.class",
                 "dev/diorama/gtnh/client/ClientWaypoints.class",
                 "dev/diorama/gtnh/client/LegacyWaypointBook.class",
                 "dev/diorama/gtnh/client/LegacyWaypointBook\$Point.class",

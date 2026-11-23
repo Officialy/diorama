@@ -38,6 +38,7 @@ public final class PreviewStorageProbe {
         try {
             merged = persistence(temp, overview);
             saveSession(temp, merged);
+            dimensionStores(temp, merged);
         } finally {
             Path[] paths;
             try (Stream<Path> tree = Files.walk(temp)) {
@@ -61,7 +62,7 @@ public final class PreviewStorageProbe {
         System.out.println("FIXTURE-SHA256=" + hex);
         System.out.println(
             "PASS preview storage: " + assertions
-                + " assertions; LOD1, OMT1 subset, validation, retention, isolated roots");
+                + " assertions; LOD1, OMT1 subset, validation, retention, dimension roots and shared save lock");
     }
 
     private static void saveSession(Path temp, int[] pixels) throws Exception {
@@ -87,6 +88,41 @@ public final class PreviewStorageProbe {
                 PreviewTileStore.forSave(save)
                     .read(CHILD)),
             "the same save restores terrain after legitimate reopen");
+    }
+
+    private static void dimensionStores(Path temp, int[] pixels) throws Exception {
+        Path save = Files.createDirectory(temp.resolve("dimension-save"));
+        Path lock = save.resolve("session.lock");
+        writeSessionLock(lock, 31L);
+        expect(IllegalArgumentException.class, () -> PreviewTileStore.forSave(save, "../other"));
+        expect(IllegalArgumentException.class, () -> PreviewTileStore.forSave(save, null));
+        String[] suffixes = { "overworld", "nether", "end" };
+        PreviewTileStore[] stores = new PreviewTileStore[suffixes.length];
+        int[][] rasters = { pixels, pixels.clone(), pixels.clone() };
+        rasters[1][0] = 0xFF123456;
+        rasters[2][0] = 0xFF654321;
+        for (int i = 0; i < stores.length; i++) {
+            stores[i] = i == 0 ? PreviewTileStore.forSave(save) : PreviewTileStore.forSave(save, suffixes[i]);
+            require(stores[i].read(CHILD) == null, "different dimension does not see previous writes");
+            stores[i].write(CHILD, rasters[i]);
+            require(
+                Files.isRegularFile(
+                    save.resolve("diorama-terrain-preview-v1-" + suffixes[i])
+                        .resolve("-1_-1.omt")),
+                "dimension tile has isolated root: " + suffixes[i]);
+        }
+        writeSessionLock(lock, 32L);
+        for (int i = 0; i < stores.length; i++) {
+            PreviewTileStore stale = stores[i];
+            expect(IOException.class, () -> stale.read(CHILD));
+            expect(IOException.class, () -> stale.write(CHILD, pixels));
+            require(
+                Arrays.equals(
+                    rasters[i],
+                    PreviewTileStore.forSave(save, suffixes[i])
+                        .read(CHILD)),
+                "reopened dimension root preserves its own raster: " + suffixes[i]);
+        }
     }
 
     private static void writeSessionLock(Path path, long id) throws IOException {

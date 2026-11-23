@@ -19,7 +19,6 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.util.MathHelper;
 import net.minecraft.world.World;
-import net.minecraft.world.WorldProviderSurface;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 
 import org.apache.logging.log4j.LogManager;
@@ -160,12 +159,6 @@ public final class ClientMinimap {
             && (mc.currentScreen == null || mc.currentScreen instanceof GuiChat);
     }
 
-    private static boolean surface(WorldClient world) {
-        return world.provider != null && world.provider.getClass() == WorldProviderSurface.class
-            && world.provider.dimensionId == 0
-            && world.getHeight() == 256;
-    }
-
     private static boolean bounded(double x, double y, double z) {
         return x >= -29999984 && x < 29999984 && z >= -29999984 && z < 29999984 && y >= 0 && y < 256;
     }
@@ -197,8 +190,10 @@ public final class ClientMinimap {
             }
             WorldClient active = mc.theWorld;
             EntityClientPlayerMP player = mc.thePlayer;
+            ClientMapDimension dimension = ClientMapDimension.of(active);
             if (active == null || player == null
-                || !surface(active)
+                || dimension == null
+                || !dimension.surfaceTerrain()
                 || !bounded(player.posX, player.boundingBox.minY, player.posZ)
                 || !TerrainPreview.supported()) return;
             if (session == null) {
