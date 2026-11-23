@@ -24,6 +24,7 @@ import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jspecify.annotations.Nullable;
+import org.lwjgl.opengl.Display;
 import org.lwjgl.opengl.GL11;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -70,6 +71,9 @@ public final class ClientMinimap {
     private @Nullable BitSet jobPatches;
     private @Nullable ProbeGlState drawing;
     private boolean updating;
+    private @Nullable WorldClient lastFrameWorld;
+    private TerrainMetrics.@Nullable FrameView lastFrameView;
+    private long lastFrameStart;
     private int retryTicks;
 
     ClientMinimap(Path optionsFile) {
@@ -134,6 +138,29 @@ public final class ClientMinimap {
             layer = next;
             discardJob();
         }
+    }
+
+    static void frameStart(Minecraft mc) {
+        ClientMinimap hud = installed;
+        if (!TerrainMetrics.ENABLED || hud == null) return;
+        WorldClient world = mc.theWorld;
+        TerrainMetrics.FrameView view = null;
+        if (world != null && mc.thePlayer != null && Display.isActive()) {
+            if (mc.currentScreen instanceof SharedTerrainMapScreen map && map.belongsTo(world)) {
+                view = TerrainMetrics.FrameView.MAP;
+            } else if (mc.currentScreen == null && mc.inGameHasFocus
+                && !mc.gameSettings.hideGUI
+                && !mc.gameSettings.showDebugInfo) {
+                    view = hud.options.visible ? TerrainMetrics.FrameView.HUD : TerrainMetrics.FrameView.HUD_HIDDEN;
+                }
+        }
+        long now = view == null ? 0 : System.nanoTime();
+        // The cadence is between comparable render starts, not the CPU cost of one GL call.
+        if (view != null && view == hud.lastFrameView && world == hud.lastFrameWorld)
+            TerrainMetrics.recordFrame(view, now - hud.lastFrameStart);
+        hud.lastFrameWorld = view == null ? null : world;
+        hud.lastFrameView = view;
+        hud.lastFrameStart = now;
     }
 
     static void tick(Minecraft mc) {
@@ -512,7 +539,7 @@ public final class ClientMinimap {
                 CachedTile tile = tiles.get(part.key());
                 if (tile != null && tile.pixels != null
                     && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
-                    if (!uploadPatch(mc, part.key(), tile, state)) upload(mc, part.key(), tile, state);
+                    if (!uploadPatch(mc, part.key(), tile, state, false)) upload(mc, part.key(), tile, state, false);
                     break; // Never queue multiple full texture uploads on one render frame.
                 }
             }
@@ -584,7 +611,7 @@ public final class ClientMinimap {
                 CachedTile tile = cache.get(key);
                 if (tile != null && tile.pixels != null
                     && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
-                    if (!uploadPatch(mc, key, tile, state)) upload(mc, key, tile, state);
+                    if (!uploadPatch(mc, key, tile, state, true)) upload(mc, key, tile, state, true);
                     break;
                 }
             }
@@ -637,7 +664,7 @@ public final class ClientMinimap {
         return (key.lod() == 0 ? tiles : overviews).get(key);
     }
 
-    private boolean uploadPatch(Minecraft mc, TileKey key, CachedTile tile, ProbeGlState state) {
+    private boolean uploadPatch(Minecraft mc, TileKey key, CachedTile tile, ProbeGlState state, boolean map) {
         BitSet mask = tile.pendingUpload;
         if (tile.texture == null || mask == null || mask.isEmpty() || tile.anaglyph != mc.gameSettings.anaglyph)
             return false;
@@ -687,17 +714,12 @@ public final class ClientMinimap {
                 textureGeneration++;
                 tile.release(state);
             }
-            if (TerrainMetrics.ENABLED) {
-                TerrainMetrics.record(TerrainMetrics.Phase.HUD_UPLOAD, System.nanoTime() - started);
-                TerrainMetrics.add(
-                    ok ? TerrainMetrics.Counter.HUD_UPLOAD_PUBLISHED : TerrainMetrics.Counter.HUD_UPLOAD_FAILED,
-                    1);
-            }
+            recordUpload(map, started, ok, !ok);
         }
         return true; // One attempted upload per frame. A tainted texture falls back next frame.
     }
 
-    private void upload(Minecraft mc, TileKey key, CachedTile tile, ProbeGlState state) {
+    private void upload(Minecraft mc, TileKey key, CachedTile tile, ProbeGlState state, boolean map) {
         int[] scratch = tile.pixels;
         boolean anaglyph = mc.gameSettings.anaglyph;
         DynamicTexture old = tile.texture;
@@ -710,10 +732,10 @@ public final class ClientMinimap {
             published = PreviewUpload.transfer(() -> new DynamicTexture(edge, edge), texture -> {
                 raw[0] = texture.getGlTextureId();
                 ProbePixels.copyToArgb(scratch, texture.getTextureData());
-                if (current(mc) && tiles.get(key) == tile && tile.pixels == scratch) texture.updateDynamicTexture();
+                if (current(mc) && tileFor(key) == tile && tile.pixels == scratch) texture.updateDynamicTexture();
             },
                 () -> current(mc) && mc.gameSettings.anaglyph == anaglyph
-                    && tiles.get(key) == tile
+                    && tileFor(key) == tile
                     && tile.pixels == scratch
                     && tile.texture == old,
                 texture -> {
@@ -730,19 +752,25 @@ public final class ClientMinimap {
                 });
             failed = false;
         } finally {
-            if (TerrainMetrics.ENABLED) {
-                TerrainMetrics.record(TerrainMetrics.Phase.HUD_UPLOAD, System.nanoTime() - started);
-                TerrainMetrics.add(
-                    failed ? TerrainMetrics.Counter.HUD_UPLOAD_FAILED
-                        : published ? TerrainMetrics.Counter.HUD_UPLOAD_PUBLISHED
-                            : TerrainMetrics.Counter.HUD_UPLOAD_REJECTED,
-                    1);
-            }
+            recordUpload(map, started, published, failed);
         }
         if (published && old != null) {
             state.forgetDeletedTexture(oldId);
             old.deleteGlTexture();
         }
+    }
+
+    private static void recordUpload(boolean map, long started, boolean published, boolean failed) {
+        if (!TerrainMetrics.ENABLED) return;
+        TerrainMetrics.record(
+            map ? TerrainMetrics.Phase.MAP_UPLOAD : TerrainMetrics.Phase.HUD_UPLOAD,
+            System.nanoTime() - started);
+        TerrainMetrics.Counter outcome = failed
+            ? (map ? TerrainMetrics.Counter.MAP_UPLOAD_FAILED : TerrainMetrics.Counter.HUD_UPLOAD_FAILED)
+            : published
+                ? (map ? TerrainMetrics.Counter.MAP_UPLOAD_PUBLISHED : TerrainMetrics.Counter.HUD_UPLOAD_PUBLISHED)
+                : (map ? TerrainMetrics.Counter.MAP_UPLOAD_REJECTED : TerrainMetrics.Counter.HUD_UPLOAD_REJECTED);
+        TerrainMetrics.add(outcome, 1);
     }
 
     private static final class CachedTile {

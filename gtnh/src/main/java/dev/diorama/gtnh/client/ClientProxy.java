@@ -22,6 +22,7 @@ import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.InputEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import dev.diorama.gtnh.CommonProxy;
+import dev.diorama.gtnh.capture.TerrainMetrics;
 
 /** Client bindings, UI and lifecycle event wiring. */
 public final class ClientProxy extends CommonProxy implements IResourceManagerReloadListener {
@@ -147,6 +148,12 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
             && minecraft.theWorld == originatingWorld) {
             event.gui = new SharedTerrainMapScreen(originatingWorld);
         }
+    }
+
+    @SubscribeEvent
+    public void onRenderTick(TickEvent.RenderTickEvent event) {
+        if (event.phase == TickEvent.Phase.START && TerrainMetrics.ENABLED)
+            ClientMinimap.frameStart(Minecraft.getMinecraft());
     }
 
     @SubscribeEvent

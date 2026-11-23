@@ -1,5 +1,7 @@
 package dev.diorama.gtnh.capture;
 
+import java.util.Arrays;
+
 import org.jspecify.annotations.Nullable;
 
 /** Process-wide GTNH terrain timing and counts, enabled by -Ddiorama.terrainMetrics=true. */
@@ -47,6 +49,17 @@ public final class TerrainMetrics {
         MAP_UPLOAD_FAILED
     }
 
+    public enum FrameView {
+        HUD,
+        HUD_HIDDEN,
+        MAP
+    }
+
+    /** Record a cadence interval between successive frames in the same view. Negative samples are ignored. */
+    public static void recordFrame(FrameView view, long nanos) {
+        if (ENABLED && nanos >= 0) Aggregate.recordFrame(view, nanos);
+    }
+
     /** Guard the timestamps and this call with ENABLED at the probe site. */
     public static void record(Phase phase, long elapsedNanos) {
         if (ENABLED) Aggregate.record(phase, elapsedNanos);
@@ -62,10 +75,22 @@ public final class TerrainMetrics {
         return ENABLED ? Aggregate.drainIfDue(System.nanoTime()) : null;
     }
 
+    // Standalone probe seam: exercise the same drain logic without waiting on the wall clock.
+    static @Nullable String reportAfterElapsed(long elapsedNanos) {
+        return ENABLED ? Aggregate.drainAfterElapsed(elapsedNanos) : null;
+    }
+
     // Lazy initialization: the disabled path never initializes the accumulator.
     private static final class Aggregate {
 
         private static final long INTERVAL_NS = 5_000_000_000L;
+        // 1 ms upper bounds through 250 ms, plus exact zero and a final overflow bin.
+        private static final long FRAME_BUCKET_NS = 1_000_000L;
+        private static final int FRAME_OVERFLOW = 251;
+        private static final FrameView[] FRAME_VIEWS = FrameView.values();
+        private static final long[][] frameBuckets = new long[FRAME_VIEWS.length][FRAME_OVERFLOW + 1];
+        private static final long[] frameCounts = new long[FRAME_VIEWS.length];
+        private static final long[] frameMaxima = new long[FRAME_VIEWS.length];
         private static final Phase[] PHASES = Phase.values();
         private static final Counter[] COUNTERS = Counter.values();
         private static final long[] counts = new long[PHASES.length];
@@ -81,8 +106,32 @@ public final class TerrainMetrics {
             maxima[i] = Math.max(maxima[i], elapsedNanos);
         }
 
+        private static synchronized void recordFrame(FrameView view, long nanos) {
+            int i = view.ordinal();
+            if (frameCounts[i] == Long.MAX_VALUE) return;
+            // Subtract before rounding, then clamp before narrowing; even Long.MAX_VALUE is safe.
+            int bucket = nanos == 0 ? 0 : (int) Math.min(FRAME_OVERFLOW, (nanos - 1) / FRAME_BUCKET_NS + 1);
+            frameBuckets[i][bucket]++;
+            frameCounts[i]++;
+            frameMaxima[i] = Math.max(frameMaxima[i], nanos);
+        }
+
         private static synchronized void add(Counter counter, long count) {
             counters[counter.ordinal()] += count;
+        }
+
+        private static synchronized @Nullable String drainAfterElapsed(long elapsedNanos) {
+            return drainIfDue(since + elapsedNanos);
+        }
+
+        private static long frameUpperBound(int view, long rank) {
+            long seen = 0;
+            for (int bucket = 0; bucket < FRAME_OVERFLOW; bucket++) {
+                seen += frameBuckets[view][bucket];
+                if (seen >= rank) return bucket * FRAME_BUCKET_NS;
+            }
+            // Overflow samples still participate in the percentile, with the observed max as their bound.
+            return frameMaxima[view];
         }
 
         private static synchronized @Nullable String drainIfDue(long now) {
@@ -115,6 +164,27 @@ public final class TerrainMetrics {
                     .append('=')
                     .append(counters[i]);
                 counters[i] = 0;
+            }
+            for (FrameView view : FRAME_VIEWS) {
+                int i = view.ordinal();
+                long count = frameCounts[i];
+                if (count == 0) continue;
+                String prefix = " FRAME_" + view;
+                // Nearest ranks ceil(0.95 * count), ceil(0.99 * count), with no multiplication overflow.
+                report.append(prefix)
+                    .append(".count=")
+                    .append(count)
+                    .append(prefix)
+                    .append(".max_ns=")
+                    .append(frameMaxima[i])
+                    .append(prefix)
+                    .append(".p95_upper_ns=")
+                    .append(frameUpperBound(i, count - count / 20))
+                    .append(prefix)
+                    .append(".p99_upper_ns=")
+                    .append(frameUpperBound(i, count - count / 100));
+                Arrays.fill(frameBuckets[i], 0);
+                frameCounts[i] = frameMaxima[i] = 0;
             }
             return report.length() == 0 ? null : "window_ns=" + elapsed + report;
         }

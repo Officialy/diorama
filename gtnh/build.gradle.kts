@@ -11,7 +11,7 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.27-dev"
+version = "0.8.1-gtnh.28-dev"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
@@ -66,7 +66,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/gtnh/probe/CaptureProbe.java", "dev/diorama/bake/SpriteAverageProbe.java",
             "dev/diorama/bake/PreparedBlockLooksProbe.java", "dev/diorama/gtnh/probe/OpaquePngProbe.java",
             "dev/diorama/gtnh/probe/StaticCubeAppearanceProbe.java", "dev/diorama/bake/OverworldAppearanceProbe.java",
-            "dev/diorama/gtnh/probe/PreviewStorageProbe.java",
+            "dev/diorama/gtnh/probe/PreviewStorageProbe.java", "dev/diorama/gtnh/capture/TerrainMetricsProbe.java",
             "dev/diorama/gtnh/probe/EpochFenceProbe.java", "dev/diorama/gtnh/probe/SectionBlocksProbe.java", "dev/diorama/gtnh/probe/TintCaptureProbe.java", "dev/diorama/bake/GrassProbe.java", "dev/diorama/bake/WaterProbe.java",
             "dev/diorama/bake/TerrainPreviewProbe.java", "dev/diorama/gtnh/client/TerrainPreviewJobProbe.java", "dev/diorama/gtnh/client/PreviewUploadProbe.java",
             "dev/diorama/gtnh/client/TerrainPreviewRefreshProbe.java", "dev/diorama/gtnh/client/LegacyWaypointBookProbe.java", "dev/diorama/gtnh/client/MinimapViewportProbe.java", "dev/diorama/gtnh/client/MapViewportControllerProbe.java", "dev/diorama/gtnh/client/SharedTileIoProbe.java", "dev/diorama/gtnh/client/DirtyTerrainTilesProbe.java", "dev/diorama/gtnh/client/HudTexturePatchPixelsProbe.java")
@@ -263,6 +263,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/capture/TerrainMetrics\$Aggregate.class",
                 "dev/diorama/gtnh/capture/TerrainMetrics\$Counter.class",
                 "dev/diorama/gtnh/capture/TerrainMetrics\$Phase.class",
+                "dev/diorama/gtnh/capture/TerrainMetrics\$FrameView.class",
                 "dev/diorama/gtnh/client/TerrainWindow\$1.class",
                 "dev/diorama/gtnh/capture/PreviewTileStore\$PixelStream.class",
                 "dev/diorama/gtnh/client/ClientMinimap\$CachedTile.class",
@@ -311,6 +312,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/capture/TerrainMetrics\$Aggregate.class",
                 "dev/diorama/gtnh/capture/TerrainMetrics\$Counter.class",
                 "dev/diorama/gtnh/capture/TerrainMetrics\$Phase.class",
+                "dev/diorama/gtnh/capture/TerrainMetrics\$FrameView.class",
                 "dev/diorama/gtnh/client/TerrainWindow\$1.class",
                 "dev/diorama/gtnh/capture/TerrainMetrics.class",
                 "dev/diorama/gtnh/client/TerrainWindow.class",
@@ -462,6 +464,7 @@ for ((prefix, mainName) in listOf(
     "staticCubeAppearance" to "dev.diorama.gtnh.probe.StaticCubeAppearanceProbe",
     "overworldAppearance" to "dev.diorama.bake.OverworldAppearanceProbe",
     "previewStorage" to "dev.diorama.gtnh.probe.PreviewStorageProbe",
+    "terrainMetrics" to "dev.diorama.gtnh.capture.TerrainMetricsProbe",
     "terrainPreview" to "dev.diorama.bake.TerrainPreviewProbe",
     "terrainPreviewJob" to "dev.diorama.gtnh.client.TerrainPreviewJobProbe",
     "terrainPreviewRefresh" to "dev.diorama.gtnh.client.TerrainPreviewRefreshProbe",

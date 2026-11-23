@@ -3,7 +3,7 @@
     "modid": "diorama",
     "name": "Diorama",
     "description": "Experimental 1.7.10 port. Diagnostics: /dioramaprobe and /dioramaterrain. Bounded CPU terrain minimap and map preview; not a full map.",
-    "version": "0.8.1-gtnh.27-dev",
+    "version": "0.8.1-gtnh.28-dev",
     "mcversion": "1.7.10",
     "url": "https://github.com/wufe8/diorama",
     "authorList": ["SunkenInTime", "Diorama port contributors"],
