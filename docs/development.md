@@ -2,6 +2,8 @@
 
 Needs JDK 25. Gradle downloads everything else.
 
+The [Minecraft 1.7.10 / Forge target](../versions/1.7.10-forge/README.md) uses a separate Gradle build. The Stonecutter commands below are for newer Minecraft versions only.
+
 ## One source tree, many versions
 
 One source tree builds a jar for each supported Minecraft version, using [Stonecutter](https://codeberg.org/stonecutter/stonecutter). The source is written for the newest version, 26.3. Names that only changed between versions are translated by the replacements in `stonecutter.gradle.kts`. Code that differs in other ways sits in `//? if >=26.1 { … //?} else { /* … *///?}` blocks, with the older version commented out. Keep the active version at 26.3: the replacements only translate in one direction.
@@ -15,7 +17,7 @@ One source tree builds a jar for each supported Minecraft version, using [Stonec
 ./gradlew :1.20.1-forge:build      # Forge 47.1 or later
 ```
 
-Each jar lands in `versions/<version>/build/libs/`. 1.21.11 ships obfuscated, so its build remaps the mod to the names a normal install uses. `./gradlew --continue compileJava` compiles every version; run it before merging anything that touches code shared across versions.
+Each jar lands in `versions/<version>/build/libs/`. 1.21.11 ships obfuscated, so its build remaps the mod to the names a normal install uses. `./gradlew --continue compileJava` compiles every Stonecutter target; run it before merging anything that touches code shared across versions.
 
 ## Fabric, NeoForge and Forge
 

@@ -11,7 +11,7 @@ import cpw.mods.fml.common.event.FMLInitializationEvent;
 @Mod(
     modid = "diorama",
     name = "Diorama",
-    version = "0.8.1-gtnh.28-dev",
+    version = "0.8.1-preview.1",
     acceptableRemoteVersions = "*",
     dependencies = "required-after:gtnhlib@[0.11.48,);required-after:unimixins@[0.3.1,)")
 public final class DioramaLegacy {
@@ -24,7 +24,6 @@ public final class DioramaLegacy {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         proxy.init();
-        LOG.info(
-            "Diorama legacy diagnostic build loaded; client commands /dioramaprobe and /dioramaterrain available.");
+        LOG.info("Diorama 1.7.10 preview loaded; client commands /dioramaprobe and /dioramaterrain available.");
     }
 }

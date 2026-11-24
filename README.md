@@ -8,7 +8,11 @@ A minimap and world map for Minecraft that draws your world at an angle, like a 
 
 ![A castle beside a village on Diorama's fullscreen map](docs/images/map.jpg)
 
-## What you get
+## Minecraft 1.7.10 (Forge) preview
+
+The separate 1.7.10 build is a client-side preview. It does not require the GT New Horizons modpack; it does require the runtime and library mods listed in the [1.7.10 install and build guide](versions/1.7.10-forge/README.md). The downloads and feature list for newer versions do not apply to this preview.
+
+## What you get on newer versions
 
 - **A minimap** in the corner of your choice, square or round, with a compass, your coordinates, the biome and, if you turn it on, the game time.
 - **A fullscreen map** you can drag and zoom, from single blocks out to about 10,000 blocks across.

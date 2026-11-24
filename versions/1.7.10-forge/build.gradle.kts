@@ -11,11 +11,11 @@ plugins {
     id("com.gtnewhorizons.gtnhconvention")
 }
 
-version = "0.8.1-gtnh.28-dev"
+version = "0.8.1-preview.1"
 extra["modVersion"] = version.toString()
 
 // Only these canonical files participate. No generated modern-version cache.
-val sharedRoot = layout.projectDirectory.dir("../src/main/java")
+val sharedRoot = layout.projectDirectory.dir("../../src/main/java")
 val policyFile = layout.projectDirectory.file("source-policy.json").asFile
 @Suppress("UNCHECKED_CAST")
 val policy = JsonSlurper().parse(policyFile) as Map<String, Any>
@@ -135,7 +135,11 @@ tasks.register<JavaExec>("probeNative25") {
 fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
     .digest(bytes).joinToString("") { "%02x".format(it) }
 
-val repositoryRoot = layout.projectDirectory.dir("..").asFile
+val repositoryRoot = layout.projectDirectory.dir("../..").asFile.canonicalFile
+val upstreamLicense = repositoryRoot.resolve("LICENSE")
+tasks.named<Jar>("jar") {
+    from(upstreamLicense) { rename { "LICENSE_diorama" } }
+}
 val gitHead = providers.exec {
     workingDir(repositoryRoot)
     commandLine("git", "rev-parse", "HEAD")
@@ -198,6 +202,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
     val artifact = tasks.named<ReobfuscatedJar>("reobfJar").flatMap { it.archiveFile }
     inputs.file(artifact)
     inputs.file(policyFile)
+    inputs.file(upstreamLicense)
     val report = layout.buildDirectory.file("reports/artifact-audit.json")
     outputs.file(report)
     doLast {
@@ -206,6 +211,10 @@ val verifyArtifact = tasks.register("verifyArtifact") {
         ZipFile(jarFile).use { zip ->
             val names = zip.entries().asSequence().map { it.name }.toList()
             require(names.size == names.toSet().size) { "Duplicate archive entry" }
+            val license = requireNotNull(zip.getEntry("LICENSE_diorama")) { "Missing Diorama license" }
+            require(zip.getInputStream(license).use { it.readBytes() }.contentEquals(upstreamLicense.readBytes())) {
+                "Diorama license differs from the repository LICENSE"
+            }
             require("mcmod.info" in names) { "Missing legacy mod metadata" }
             @Suppress("UNCHECKED_CAST")
             val metadata = JsonSlurper().parse(zip.getInputStream(zip.getEntry("mcmod.info"))) as List<Map<String, Any>>

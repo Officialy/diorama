@@ -17,4 +17,4 @@ plugins {
     id("com.gtnewhorizons.gtnhsettingsconvention") version "2.0.33"
 }
 
-rootProject.name = "diorama-gtnh"
+rootProject.name = "1.7.10-forge"
