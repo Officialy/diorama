@@ -1,9 +1,6 @@
 name: GTNH build
 on:
   workflow_dispatch:
-  push:
-    branches: [port/gtnh-1.7.10]
-    paths: ['.github/workflows/gtnh-build.yml']
 permissions:
   contents: read
 jobs:
@@ -20,9 +17,11 @@ jobs:
           distribution: temurin
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - name: Build and verify
         working-directory: versions/1.7.10-forge
-        run: bash gradlew assemble verifyBaseline --continue
+        run: bash gradlew assemble verifyBaseline --build-cache --continue
       - name: List JAR bytecode products on failure
         if: failure()
         working-directory: versions/1.7.10-forge
