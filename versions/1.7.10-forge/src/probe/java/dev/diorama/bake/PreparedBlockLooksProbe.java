@@ -23,6 +23,7 @@ public final class PreparedBlockLooksProbe {
         digest = MessageDigest.getInstance("SHA-256");
         allocation();
         approximate();
+        observedVariant();
         extendedKeys();
         leaves();
         leafInputs();
@@ -55,12 +56,31 @@ public final class PreparedBlockLooksProbe {
         require(table.shape[id] != 0 && table.emission[id] == 7, "shape and light retained");
         boxes[4] = 1;
         require(table.shapes[table.shape[id]][4] == 0.5F, "shape input copied");
-        expect(IllegalArgumentException.class,
+        expect(
+            IllegalArgumentException.class,
             () -> table.approximate(6, 0, TOP, SIDE, 0, Looks.SOLID, new float[] { 0, 0, 0, 2, 1, 1 }));
         require(table.find(6, 0) == -1, "invalid geometry not published");
         require(table.approximate(6, 0, TOP, SIDE, 0, Looks.GLASS, null) == 2, "glass fallback");
         require(table.approximate(7, 0, TOP, SIDE, 0, Looks.SOLID, null) == -1, "capacity bounded");
         put(payload(table, id));
+    }
+
+    private static void observedVariant() {
+        PreparedBlockLooks table = new PreparedBlockLooks(new Object(), 4);
+        int base = table.approximate(9, 0, TOP, SIDE, 0, Looks.SOLID, null);
+        int observed = table.approximate(
+            9,
+            0,
+            3,
+            TOP,
+            SIDE,
+            0,
+            Looks.SOLID,
+            new float[] { 0, 0, 0, 0.5F, 1, 1 });
+        require(base != observed && table.find(9, 0) == base && table.find(9, 0, 3) == observed,
+            "observed geometry has its own immutable ID");
+        require(table.shape[base] == 0 && table.shape[observed] != 0, "base remains unchanged");
+        put(payload(table, observed));
     }
 
     private static void allocation() {
