@@ -15,7 +15,7 @@ Put the 1.7.10 Forge jar in the client's `mods` folder. The server does not need
 - CPU terrain baking, an isometric minimap and a fullscreen map with drag, scroll zoom and recentering.
 - `M` opens the fullscreen map, `B` adds a waypoint and `U` lists waypoints. Rebind these under Minecraft's Controls; the minimap visibility key is unbound by default.
 - Surface and cave views, with a cave slice that follows the player by default. In the fullscreen cave map, Shift+scroll adjusts the cut by four blocks; the Follow player height button restores automatic mode. Singleplayer surface tiles and waypoints are saved per dimension. Multiplayer surface tiles and waypoints can optionally persist with an explicit identity; cave tiles remain session-only.
-- New terrain is drawn from nearby, loaded chunks as you explore; panning does not load distant chunks. Some block appearances are incomplete. The newer versions' HUD zoom, radar, drawing and GPU baking are not included.
+- New terrain is progressively captured from received chunks within the configured render distance (up to 32 chunks). Nearby chunks and visible tiles take priority; background baking also fills the surrounding footprint. Panning never requests distant server chunks. Use `-Ddiorama.captureRadius=8` to override the capture radius if memory or tick cost is excessive. Live chunk capture stays on the client thread with a soft 3ms budget and at most eight attempts per tick; detached validation and raster baking run on a worker. Some block appearances are incomplete. The newer versions' HUD zoom, radar, drawing and GPU baking are not included.
 
 ## Modded dimensions and multiplayer persistence
 

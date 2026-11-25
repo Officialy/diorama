@@ -2,6 +2,7 @@ package dev.diorama.gtnh.client;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.BitSet;
 
 /** Deterministic queue/capture interleavings; no sleeps, client or Minecraft classes. */
 public final class TerrainPreviewRefreshProbe {
@@ -73,6 +74,15 @@ public final class TerrainPreviewRefreshProbe {
         check(
             moved.takeDue(loadAgain + TerrainPreviewRefresh.LOAD, unrelated) == carried,
             "moved request keeps its original deadline");
+        TerrainPreviewRefresh wide = new TerrainPreviewRefresh(-4, 8, 8, now);
+        BitSet seen = new BitSet();
+        for (int i = 0; i < 289; i++) {
+            int slot = wide.takeDue(now, seen);
+            check(slot >= 0 && !seen.get(slot), "wide queue visits each slot once");
+            if (i == 0) check(slot == wide.slot(-4, 8), "wide queue prioritizes center");
+            seen.set(slot);
+        }
+        check(seen.cardinality() == 289 && !wide.pending(), "wide queue beyond 32-bit mask drains");
         StringBuilder hex = new StringBuilder();
         for (byte value : hash.digest()) {
             hex.append(Character.forDigit((value >>> 4) & 15, 16));

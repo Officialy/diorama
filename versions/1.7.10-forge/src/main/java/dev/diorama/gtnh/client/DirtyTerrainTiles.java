@@ -47,6 +47,17 @@ final class DirtyTerrainTiles {
         return project(tile, x0, y0, z0, x1, y1, z1);
     }
 
+    /** Conservative ray and shading reach for selecting detached chunk snapshots, including caves. */
+    static boolean intersectsChunk(TileKey tile, int cx, int cz) {
+        long x = (long) cx * 16, z = (long) cz * 16;
+        double u0 = x - 1 - AROUND - OUTLINE_HALO;
+        double u1 = x + 17 + EAST + OUTLINE_HALO;
+        double v0 = (z - 1 - NORTH) * SIN - (LAST_Y + 2 + LIGHT_REACH) * COS - OUTLINE_HALO;
+        double v1 = (z + 17 + AROUND) * SIN + (1 + DOWN) * COS + OUTLINE_HALO;
+        return u0 < tile.minU() + tile.units() && u1 >= tile.minU()
+            && v0 < tile.minV() + tile.units() && v1 >= tile.minV();
+    }
+
     private static BitSet project(TileKey tile, long x0, long y0, long z0, long x1, long y1, long z1) {
         BitSet mask = new BitSet();
         if (tile.isCave() || tile.lod() != 0 || x0 > x1 || y0 > y1 || z0 > z1 || y1 < 0 || y0 > LAST_Y) return mask;

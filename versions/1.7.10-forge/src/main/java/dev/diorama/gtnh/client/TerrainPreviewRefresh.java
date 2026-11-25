@@ -1,68 +1,104 @@
 package dev.diorama.gtnh.client;
 
 import java.util.Arrays;
+import java.util.BitSet;
 
 import dev.diorama.gtnh.capture.TerrainMetrics;
 
-/** Owner-thread queue for one fixed 3x3 preview, using monotonic nanosecond deadlines. */
+/** Owner-thread, distance-prioritized refresh queue; no live-world access. */
 final class TerrainPreviewRefresh {
 
     static final int SLOTS = 9;
+    static final int MAX_RADIUS = 32;
     static final long CHANGE = 250_000_000L;
     static final long LOAD = 750_000_000L;
     static final int CAPTURES_PER_TICK = 24;
     static final int DISCOVERY_TICKS = 40;
 
-    private final int centerX, centerZ;
-    private final long[] deadlines = new long[SLOTS];
-    private final long[] versions = new long[SLOTS];
-    private int queued;
+    private final int centerX, centerZ, radius, edge, slots;
+    private final long[] deadlines, versions;
+    private final int[] order;
+    private final BitSet queued;
     private long revision;
 
     TerrainPreviewRefresh(int centerX, int centerZ, long now) {
+        this(centerX, centerZ, 1, now);
+    }
+
+    TerrainPreviewRefresh(int centerX, int centerZ, int radius, long now) {
+        if (radius < 1 || radius > MAX_RADIUS) throw new IllegalArgumentException("Invalid capture radius");
         this.centerX = centerX;
         this.centerZ = centerZ;
+        this.radius = radius;
+        edge = radius * 2 + 1;
+        slots = edge * edge;
+        deadlines = new long[slots];
+        versions = new long[slots];
+        queued = new BitSet(slots);
+        order = new int[slots];
         Arrays.fill(deadlines, now);
-        queued = (1 << SLOTS) - 1; // Explicit opening capture; not a load event.
+        queued.set(0, slots);
+        // Preserve the original nine-slot diagnostic ordering. Larger windows capture near first.
+        int next = 0;
+        if (radius == 1) {
+            for (int i = 0; i < slots; i++) order[next++] = i;
+        } else {
+            for (int ring = 0; ring <= radius; ring++) {
+                for (int dz = -ring; dz <= ring; dz++) {
+                    for (int dx = -ring; dx <= ring; dx++) {
+                        if (Math.max(Math.abs(dx), Math.abs(dz)) == ring)
+                            order[next++] = (dz + radius) * edge + dx + radius;
+                    }
+                }
+            }
+        }
+    }
+
+    int slots() {
+        return slots;
+    }
+
+    int radius() {
+        return radius;
     }
 
     int slot(int chunkX, int chunkZ) {
         long dx = (long) chunkX - centerX, dz = (long) chunkZ - centerZ;
-        return dx < -1 || dx > 1 || dz < -1 || dz > 1 ? -1 : (int) ((dz + 1) * 3 + dx + 1);
+        return dx < -radius || dx > radius || dz < -radius || dz > radius ? -1
+            : (int) ((dz + radius) * edge + dx + radius);
     }
 
     int x(int slot) {
-        return centerX + slot % 3 - 1;
+        return centerX + slot % edge - radius;
     }
 
     int z(int slot) {
-        return centerZ + slot / 3 - 1;
+        return centerZ + slot / edge - radius;
     }
 
     void request(int slot, long now, long delay) {
         if (slot < 0) return;
         long due = now + delay;
-        int bit = 1 << slot;
-        boolean already = (queued & bit) != 0;
+        boolean already = queued.get(slot);
         if (TerrainMetrics.ENABLED) TerrainMetrics
             .add(already ? TerrainMetrics.Counter.REFRESH_COALESCED : TerrainMetrics.Counter.REFRESH_ENQUEUED, 1);
         if (!already || due - deadlines[slot] < 0) deadlines[slot] = due;
-        queued |= bit;
+        queued.set(slot);
         versions[slot]++;
         revision++;
     }
 
     void inherit(int slot, TerrainPreviewRefresh previous, int priorSlot) {
         if (previous.queued(priorSlot)) deadlines[slot] = previous.deadlines[priorSlot];
-        else queued &= ~(1 << slot);
+        else queued.clear(slot);
     }
 
     boolean queued(int slot) {
-        return (queued & (1 << slot)) != 0;
+        return queued.get(slot);
     }
 
     boolean pending() {
-        return queued != 0;
+        return !queued.isEmpty();
     }
 
     long revision() {
@@ -73,13 +109,16 @@ final class TerrainPreviewRefresh {
         return versions[slot];
     }
 
-    /** Detach the next due request before any native read/callback can queue another one. */
+    /** Original diagnostic interface. */
     int takeDue(long now, int attempted) {
-        int candidates = queued & ~attempted;
-        for (int slot = 0; slot < SLOTS; slot++) {
-            int bit = 1 << slot;
-            if ((candidates & bit) != 0 && now - deadlines[slot] >= 0) {
-                queued &= ~bit;
+        return takeDue(now, BitSet.valueOf(new long[] { Integer.toUnsignedLong(attempted) }));
+    }
+
+    /** Detach a due request before native callbacks can queue another one. */
+    int takeDue(long now, BitSet attempted) {
+        for (int slot : order) {
+            if (queued.get(slot) && !attempted.get(slot) && now - deadlines[slot] >= 0) {
+                queued.clear(slot);
                 if (TerrainMetrics.ENABLED) {
                     TerrainMetrics.record(TerrainMetrics.Phase.REFRESH_QUEUE_WAIT, now - deadlines[slot]);
                     TerrainMetrics.add(TerrainMetrics.Counter.REFRESH_DEQUEUED, 1);

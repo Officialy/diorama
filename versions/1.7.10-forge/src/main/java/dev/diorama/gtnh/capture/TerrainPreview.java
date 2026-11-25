@@ -2,6 +2,8 @@ package dev.diorama.gtnh.capture;
 
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 import org.jspecify.annotations.Nullable;
@@ -20,6 +22,7 @@ import dev.diorama.data.ChunkSnapshot;
 public final class TerrainPreview {
 
     public static final int MAX_SNAPSHOTS = 9;
+    public static final int MAX_EXTENDED_SNAPSHOTS = 65 * 65;
     private static final int WORLD_TOP = 256;
     // The canonical player-follow cut can round up just beyond the world storage span.
     private static final int MAX_CAVE_LAYER = WORLD_TOP + 4;
@@ -43,7 +46,13 @@ public final class TerrainPreview {
 
     public static Work prepare(PreparedBlockLooks looks, Object token, TileKey key,
         ChunkSnapshot @Nullable [] snapshots) {
-        return new Work(looks, token, key, Objects.requireNonNull(snapshots, "snapshots"));
+        return new Work(looks, token, key, Objects.requireNonNull(snapshots, "snapshots"), false);
+    }
+
+    /** Full render-distance input: detached snapshot validation is deferred to the bake worker. */
+    public static Work prepareExtended(PreparedBlockLooks looks, Object token, TileKey key,
+        ChunkSnapshot[] snapshots) {
+        return new Work(looks, token, key, Objects.requireNonNull(snapshots, "snapshots"), true);
     }
 
     public static boolean supported() {
@@ -85,13 +94,16 @@ public final class TerrainPreview {
         private final Object token;
         private final TileKey key;
         private final ChunkSnapshot[] snapshots;
+        private final Map<Long, ChunkSnapshot> byCoordinate = new HashMap<>();
+        private final boolean extended;
         private final int count;
         private final int top;
         private final float[] sunTint;
         private final float[] shadowTint;
         private volatile boolean current = true;
 
-        private Work(PreparedBlockLooks looks, Object token, TileKey key, ChunkSnapshot[] snapshots) {
+        private Work(PreparedBlockLooks looks, Object token, TileKey key, ChunkSnapshot[] snapshots, boolean extended) {
+            this.extended = extended;
             this.looks = Objects.requireNonNull(looks, "looks");
             this.token = Objects.requireNonNull(token, "token");
             if (looks.session() != token) throw new IllegalArgumentException("Preview token does not own looks");
@@ -102,20 +114,20 @@ public final class TerrainPreview {
                 .clone();
             this.shadowTint = MapStyle.DEFAULT.shadowTint()
                 .clone();
-            if (snapshots.length == 0 || snapshots.length > MAX_SNAPSHOTS)
-                throw new IllegalArgumentException("Preview requires at most nine snapshot slots");
+            if (snapshots.length == 0 || snapshots.length > (extended ? MAX_EXTENDED_SNAPSHOTS : MAX_SNAPSHOTS))
+                throw new IllegalArgumentException("Invalid preview snapshot count");
             this.snapshots = snapshots.clone();
             int n = 0, highest = Integer.MIN_VALUE;
             for (int i = 0; i < this.snapshots.length; i++) {
                 ChunkSnapshot snapshot = this.snapshots[i];
                 if (snapshot == null) continue;
                 n++;
-                validate(snapshot);
-                for (int j = 0; j < i; j++) {
-                    ChunkSnapshot previous = this.snapshots[j];
-                    if (previous != null && previous.key() == snapshot.key())
-                        throw new IllegalArgumentException("Duplicate preview chunk coordinate");
-                }
+                if (!extended) validate(snapshot);
+                else if (snapshot.lookDomain() != this.looks || snapshot.airId() != this.looks.airId()
+                    || snapshot.minSectionY != 0 || snapshot.sectionCount() != 16)
+                    throw new IllegalArgumentException("Invalid extended snapshot domain or height");
+                if (this.byCoordinate.put(snapshot.key(), snapshot) != null)
+                    throw new IllegalArgumentException("Duplicate preview chunk coordinate");
                 highest = Math.max(highest, snapshot.maxY);
             }
             if (n == 0) throw new IllegalArgumentException("Preview requires at least one ready snapshot");
@@ -222,6 +234,7 @@ public final class TerrainPreview {
 
         private TileImage bake(@Nullable BitSet patches) {
             if (!this.stillCurrent()) throw new IllegalStateException("Stale preview projection/style");
+            if (this.extended) for (ChunkSnapshot snapshot : this.snapshots) if (snapshot != null) validate(snapshot);
             // Cave keys take the canonical fixed cut path. There is no visited-voxel mask or
             // artificial roof/lift here; missing chunks remain unknown to the baker.
             TileImage image = TileBaker.bake(this.key, this, this.looks, patches, false);
@@ -262,9 +275,7 @@ public final class TerrainPreview {
 
         @Override
         public @Nullable ChunkSnapshot chunk(int chunkX, int chunkZ) {
-            for (ChunkSnapshot snapshot : this.snapshots)
-                if (snapshot != null && snapshot.chunkX == chunkX && snapshot.chunkZ == chunkZ) return snapshot;
-            return null;
+            return this.byCoordinate.get(ChunkSnapshot.key(chunkX, chunkZ));
         }
 
         @Override

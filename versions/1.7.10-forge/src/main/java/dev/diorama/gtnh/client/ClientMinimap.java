@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -42,12 +43,13 @@ import dev.diorama.gtnh.diagnostic.ProbePixels;
 public final class ClientMinimap {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
-    private static final int CACHE_TILES = 24;
-    private static final int MAP_TILES = 6;
-    private static final int OVERVIEW_TILES = 4;
+    private static final int CACHE_TILES = 128;
+    private static final int MAP_TILES = 24;
+    private static final int OVERVIEW_TILES = 16;
     private static final int PATCH_FALLBACK = 160;
     private static final int PATCH_SIDE = Projection.TILE_PIXELS / TileImage.BLOCK;
-    private static final int CAPTURES_PER_TICK = 2;
+    private static final int CAPTURES_PER_TICK = 8;
+    private static final long CAPTURE_BUDGET_NS = 3_000_000L;
     private static @Nullable ClientMinimap installed;
 
     private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(CACHE_TILES + 1, 0.75f, true);
@@ -241,11 +243,14 @@ public final class ClientMinimap {
     }
 
     private void dirtyChunk(int cx, int cz) {
-        for (var entry : tiles.entrySet()) entry.getValue()
+        for (var entry : tiles.entrySet()) {
+            if (!DirtyTerrainTiles.intersectsChunk(entry.getKey(), cx, cz)) continue;
+            entry.getValue()
             .invalidate(
                 DirtyTerrainTiles.chunk(entry.getKey(), cx, cz),
                 entry.getKey()
                     .isCave());
+        }
     }
 
     private boolean canShow(Minecraft mc) {
@@ -267,6 +272,11 @@ public final class ClientMinimap {
             && ClientCaptureLifecycle.accepts(opened.token(), opened.looks())
             && session == opened
             && world == mc.theWorld;
+    }
+
+    private static int captureRadius(Minecraft mc) {
+        int configured = Integer.getInteger("diorama.captureRadius", mc.gameSettings.renderDistanceChunks);
+        return Math.max(1, Math.min(TerrainPreviewRefresh.MAX_RADIUS, configured));
     }
 
     private void update(Minecraft mc) {
@@ -307,18 +317,13 @@ public final class ClientMinimap {
             }
             if (!current(mc)) return;
             int cx = MathHelper.floor_double(player.posX) >> 4, cz = MathHelper.floor_double(player.posZ) >> 4;
-            if (window == null || cx != centerX || cz != centerZ) {
-                if (window != null) {
-                    for (int z = centerZ - 1; z <= centerZ + 1; z++) for (int x = centerX - 1; x <= centerX + 1; x++)
-                        if (Math.abs(x - cx) > 1 || Math.abs(z - cz) > 1) dirtyChunk(x, z);
-                    for (int z = cz - 1; z <= cz + 1; z++)
-                        for (int x = cx - 1; x <= cx + 1; x++) if (!window.contains(x, z)) dirtyChunk(x, z);
-                }
+            int radius = captureRadius(mc);
+            if (window == null || cx != centerX || cz != centerZ || window.radius() != radius) {
                 centerX = cx;
                 centerZ = cz;
-                window = new TerrainWindow(session, cx, cz, () -> current(mc), window, this::dirtyChunk);
+                window = new TerrainWindow(session, cx, cz, radius, () -> current(mc), window, this::dirtyChunk);
             }
-            window.tick(CAPTURES_PER_TICK);
+            window.tick(CAPTURES_PER_TICK, CAPTURE_BUDGET_NS);
             if (!current(mc)) return;
             finish(mc);
             if (!current(mc)) return;
@@ -335,7 +340,7 @@ public final class ClientMinimap {
             }
             List<TileKey> live = new ArrayList<>();
             for (TileKey key : wanted) {
-                boolean local = local(key);
+                boolean local = window.hasReady(key);
                 if (local) live.add(key);
                 boolean onDisk = persistent && !key.isCave();
                 if (onDisk || local) {
@@ -345,9 +350,17 @@ public final class ClientMinimap {
             }
             if (map != null && map.viewport()
                 .preferredLod() == 1) buildOverview(visible);
-            if (retryTicks > 0 || job != null || TerrainPreviewJob.isBusy() || window.queued() || window.ready() == 0)
+            if (retryTicks > 0 || job != null || TerrainPreviewJob.isBusy() || window.ready() == 0)
                 return;
-            TileKey selected = choose(live, window);
+            // Visible tiles first, then pre-bake the rest of the received render-distance footprint.
+            List<TileKey> background = window.candidates(layer);
+            double playerU = Projection.u(player.posX, player.posZ);
+            double playerV = Projection.v(player.posX, player.boundingBox.minY, player.posZ);
+            background.sort(Comparator.comparingDouble(key -> Math.hypot(
+                key.minU() + key.units() * .5 - playerU, key.minV() + key.units() * .5 - playerV)));
+            LinkedHashSet<TileKey> ordered = new LinkedHashSet<>(live);
+            for (TileKey key : background) if (window.hasReady(key)) ordered.add(key);
+            TileKey selected = choose(new ArrayList<>(ordered), window);
             if (selected == null) return;
             CachedTile entry = detail(selected);
             if (entry == null || !current(mc)) return;
@@ -377,8 +390,8 @@ public final class ClientMinimap {
         TileKey stale = null;
         for (TileKey key : wanted) {
             CachedTile entry = tiles.get(key);
-            if (entry == null) return key;
-            if (stale == null && (entry.needsFull || entry.top != input.topY(key) || !entry.dirty.isEmpty()))
+            if (entry == null || entry.pixels == null) return key;
+            if (stale == null && (entry.needsFull || !entry.dirty.isEmpty() || entry.top != input.topY(key)))
                 stale = key;
         }
         return stale;
@@ -593,14 +606,6 @@ public final class ClientMinimap {
         } finally {
             drawing = null;
         }
-    }
-
-    private boolean local(TileKey key) {
-        // The conservative 0..255 surface projection also bounds every cave slice.
-        if (key.isCave()) key = new TileKey(TileKey.SURFACE, key.tileU(), key.tileV());
-        return !DirtyTerrainTiles
-            .range(key, (centerX - 1) * 16, 0, (centerZ - 1) * 16, (centerX + 2) * 16 - 1, 255, (centerZ + 2) * 16 - 1)
-            .isEmpty();
     }
 
     private static List<TileKey> mapWanted(MapViewportController view, int layer) {

@@ -125,6 +125,11 @@ public final class TerrainPreviewProbe {
         for (int i = 0; i < nine.length; i++) nine[i] = snapshot(looks, i % 3, i / 3, i == 4);
         TerrainPreview.Work bounded = TerrainPreview.prepare(looks, token, KEY, nine);
         eq(bounded.snapshotCount(), 9, "nine ready snapshots allowed");
+        ChunkSnapshot[] wide = new ChunkSnapshot[25];
+        for (int i = 0; i < wide.length; i++) wide[i] = snapshot(looks, i % 5, i / 5, false);
+        TerrainPreview.Work extended = TerrainPreview.prepareExtended(looks, token, KEY, wide);
+        eq(extended.snapshotCount(), 25, "extended capture accepts wider snapshot domain");
+        if (extended.chunk(4, 4) != wide[24]) throw new AssertionError("extended coordinate lookup");
         eq(bounded.topY(), 1, "top derived from maximum captured height");
         expect(IllegalArgumentException.class, () -> TerrainPreview.prepare(looks, new Object(), KEY, nine));
         expect(IllegalArgumentException.class, () -> TerrainPreview.prepare(looks, token, KEY, new ChunkSnapshot[0]));

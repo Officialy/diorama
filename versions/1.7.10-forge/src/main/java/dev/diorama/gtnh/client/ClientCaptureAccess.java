@@ -133,6 +133,11 @@ public final class ClientCaptureAccess implements ChunkCapture.Access {
         return copied;
     }
 
+    /** Cheap loaded check for discovery; does not decode sections or request server chunks. */
+    boolean hasLoadedChunk(int chunkX, int chunkZ) {
+        return this.loadedChunk(chunkX, chunkZ) != null;
+    }
+
     private net.minecraft.world.chunk.@Nullable Chunk loadedChunk(int chunkX, int chunkZ) {
         this.requireCurrent();
         net.minecraft.world.chunk.Chunk chunk = this.chunkProvider.provideChunk(chunkX, chunkZ);
