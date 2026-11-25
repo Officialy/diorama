@@ -56,6 +56,7 @@ public final class PreparedBlockLooksProbe {
         float[] boxes = { 0, 0, 0, 1, 0.5F, 1 };
         int id = table.approximate(5, 0, TOP, SIDE, 7, Looks.SOLID, boxes);
         require(id == 1 && table.find(5, 0) == id, "approximation published");
+        require(table.used() == 2, "diagnostic count includes air");
         require(table.shape[id] != 0 && table.emission[id] == 7, "shape and light retained");
         boxes[4] = 1;
         require(table.shapes[table.shape[id]][4] == 0.5F, "shape input copied");
@@ -63,6 +64,7 @@ public final class PreparedBlockLooksProbe {
             IllegalArgumentException.class,
             () -> table.approximate(6, 0, TOP, SIDE, 0, Looks.SOLID, new float[] { 0, 0, 0, 2, 1, 1 }));
         require(table.find(6, 0) == -1, "invalid geometry not published");
+        require(table.used() == 2, "invalid geometry does not consume capacity");
         require(table.approximate(6, 0, TOP, SIDE, 0, Looks.GLASS, null) == 2, "glass fallback");
         require(table.approximate(7, 0, TOP, SIDE, 0, Looks.SOLID, null) == -1, "capacity bounded");
         put(payload(table, id));

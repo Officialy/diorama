@@ -17,7 +17,8 @@ import dev.diorama.gtnh.capture.TerrainPreview;
 final class TerrainWindow {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
-    static final int CAPACITY = 4096;
+    // 32K states cost roughly 1.3 MiB for the base primitive arrays, before maps/shapes.
+    static final int CAPACITY = 32768;
     private final ClientCaptureLifecycle.Session session;
     private final BooleanSupplier accepts;
     private final TerrainPreviewRefresh refresh;

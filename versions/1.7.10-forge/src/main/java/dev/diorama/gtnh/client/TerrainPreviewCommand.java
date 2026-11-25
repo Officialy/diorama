@@ -20,7 +20,7 @@ public final class TerrainPreviewCommand extends CommandBase {
 
     @Override
     public String getCommandUsage(ICommandSender sender) {
-        return "/dioramaterrain";
+        return "/dioramaterrain [status|missing]";
     }
 
     @Override
@@ -30,8 +30,14 @@ public final class TerrainPreviewCommand extends CommandBase {
 
     @Override
     public void processCommand(ICommandSender sender, String[] arguments) {
+        if (arguments.length == 1 && ("status".equals(arguments[0]) || "missing".equals(arguments[0]))) {
+            for (String line : ClientCaptureLifecycle.diagnostics("missing".equals(arguments[0]))) {
+                sender.addChatMessage(new ChatComponentText(line));
+            }
+            return;
+        }
         if (arguments.length != 0) {
-            sender.addChatMessage(new ChatComponentText("Usage: /dioramaterrain (development diagnostic)"));
+            sender.addChatMessage(new ChatComponentText("Usage: /dioramaterrain [status|missing]"));
             return;
         }
         owner.requestTerrainPreview();
