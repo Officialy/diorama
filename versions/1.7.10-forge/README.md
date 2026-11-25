@@ -22,13 +22,17 @@ Put the 1.7.10 Forge jar in the client's `mods` folder. The server does not need
 The fallback appearance path uses atlas-frame colours, map colours and metadata-based slab/straight
 stair outlines. Unknown registry states remain unknown. The optional JVM flag
 `-Ddiorama.experimentalGeometry=true` enables a passive RenderBlocks/Tessellator observer, sampling
-custom render types and some connected vanilla blocks on the client appearance owner's thread.
+custom render types and some connected vanilla blocks on the client appearance owner's thread. A second optional flag,
+`-Ddiorama.experimentalGeometryWorkers=true`, permits detached samples from renderer workers only
+when the source is the active WorldClient, a matching vanilla ChunkCache, or a recognized Angelica
+WorldSlice. Unknown world-access wrappers are skipped. World/resource epochs fence publication.
+With `-Ddiorama.terrainMetrics=true`, the log reports captured states and worker-captured states.
 It does not invoke renderers, draw anything or modify vertex buffers. A bounded sample of up to
 256 textured vertices per state is reduced to up to sixteen local cuboids or an enclosing box.
 UV rectangles are resolved against the stitched atlas; available CPU frame data is sampled on a
 bounded 8x8 grid, otherwise full-sprite colour is used. Projected quad areas weight top/side colour.
 No GPU readback is performed; renderer vertex lighting/tints are not applied. Geometry is a
-representative state approximation, not a per-position neighbour or tile-entity model. New observations request a coalesced recapture of nearby tiles at most once per second. Angelica may bypass these hooks; no compatibility or visual quality
+representative state approximation, not a per-position neighbour or tile-entity model. New observations request a coalesced recapture of nearby tiles at most once per second. Angelica versions or optimized renderer paths may bypass these hooks; no compatibility or visual quality
 claim is made without client testing. The option defaults off.
 
 ## Known compatibility issue
