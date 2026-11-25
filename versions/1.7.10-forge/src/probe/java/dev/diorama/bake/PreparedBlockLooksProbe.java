@@ -68,16 +68,9 @@ public final class PreparedBlockLooksProbe {
     private static void observedVariant() {
         PreparedBlockLooks table = new PreparedBlockLooks(new Object(), 4);
         int base = table.approximate(9, 0, TOP, SIDE, 0, Looks.SOLID, null);
-        int observed = table.approximate(
-            9,
-            0,
-            3,
-            TOP,
-            SIDE,
-            0,
-            Looks.SOLID,
-            new float[] { 0, 0, 0, 0.5F, 1, 1 });
-        require(base != observed && table.find(9, 0) == base && table.find(9, 0, 3) == observed,
+        int observed = table.approximate(9, 0, 3, TOP, SIDE, 0, Looks.SOLID, new float[] { 0, 0, 0, 0.5F, 1, 1 });
+        require(
+            base != observed && table.find(9, 0) == base && table.findObserved(9, 0) == observed,
             "observed geometry has its own immutable ID");
         require(table.shape[base] == 0 && table.shape[observed] != 0, "base remains unchanged");
         put(payload(table, observed));
