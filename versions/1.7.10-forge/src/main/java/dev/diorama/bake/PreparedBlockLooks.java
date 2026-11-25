@@ -39,6 +39,12 @@ public final class PreparedBlockLooks extends Looks {
         return this.session;
     }
 
+    /** Number of published entries, including air; owner-thread diagnostics only. */
+    public int used() {
+        this.requireOwner();
+        return this.next;
+    }
+
     public int airId() {
         return 0;
     }

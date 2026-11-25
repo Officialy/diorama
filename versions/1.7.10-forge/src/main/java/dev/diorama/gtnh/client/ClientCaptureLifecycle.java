@@ -1,5 +1,11 @@
 package dev.diorama.gtnh.client;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.renderer.texture.TextureMap;
@@ -205,6 +211,34 @@ public final class ClientCaptureLifecycle {
             && accepts(result.session(), domain);
     }
 
+    /** Local diagnostic: does not open a capture session, load chunks, or sample block renderers. */
+    static List<String> diagnostics(boolean missing) {
+        Minecraft mc = client();
+        List<String> lines = new ArrayList<>();
+        WorldClient currentWorld = mc.theWorld;
+        if (currentWorld == null || currentWorld.provider == null) {
+            lines.add("Diorama: no client world");
+            return lines;
+        }
+        ClientMapDimension map = ClientMapDimension.of(currentWorld);
+        lines.add("Diorama: dimension " + currentWorld.provider.dimensionId + ", height " + currentWorld.getHeight()
+            + ", noSky=" + currentWorld.provider.hasNoSky
+            + ", map=" + (map == null ? "unsupported" : map.surfaceTerrain() ? "surface" : "cave"));
+        lines.add("Provider: " + currentWorld.provider.getClass().getName());
+        IChunkProvider chunkProvider = currentWorld.getChunkProvider();
+        lines.add("Chunks: " + (chunkProvider == null ? "none" : chunkProvider.getClass().getName()));
+        Session session = active;
+        if (session == null || !current(session.token)) {
+            lines.add("No active capture session (open map or show minimap first).");
+            return lines;
+        }
+        lines.add("Appearances: " + session.looks().used() + "/" + session.looks().kind.length
+            + "; observed geometry: " + LegacyGeometryCapture.sampleCount()
+            + "; unresolved sampled states: " + session.missing.size());
+        if (missing) session.describeMissing(lines);
+        return lines;
+    }
+
     /** Native owner-thread handle: never send it, its access, or its appearance callbacks to workers. */
     public static final class Session implements ChunkCapture.Inputs {
 
@@ -212,6 +246,7 @@ public final class ClientCaptureLifecycle {
         private final ClientBlockAppearance appearance;
         private final ClientCaptureAccess access;
         private final ClientBiomeColors biomes;
+        private final Map<Long, Integer> missing = new HashMap<>();
 
         private Session(Object token, ClientBlockAppearance appearance, ClientCaptureAccess access) {
             this.token = token;
@@ -240,13 +275,41 @@ public final class ClientCaptureLifecycle {
 
         @Override
         public boolean prepareState(int rawId, int metadata) {
-            if (rawId > 0xFFFFFF) return false;
-            if (this.appearance.isGrass(rawId, metadata)) {
-                boolean normal = this.appearance.prepare(rawId, metadata, GrassContext.NORMAL) >= 0;
-                boolean snowy = this.appearance.prepare(rawId, metadata, GrassContext.SNOWY) >= 0;
-                return normal && snowy;
+            boolean ready = false;
+            if (rawId >= 0 && rawId <= 0xFFFFFF) {
+                if (this.appearance.isGrass(rawId, metadata)) {
+                    boolean normal = this.appearance.prepare(rawId, metadata, GrassContext.NORMAL) >= 0;
+                    boolean snowy = this.appearance.prepare(rawId, metadata, GrassContext.SNOWY) >= 0;
+                    ready = normal && snowy;
+                } else {
+                    ready = this.appearance.prepare(rawId, metadata) >= 0;
+                }
             }
-            return this.appearance.prepare(rawId, metadata) >= 0;
+            long key = ((long) rawId << 16) | (metadata & 65535L);
+            if (ready) this.missing.remove(key);
+            else if (this.missing.size() < 512 || this.missing.containsKey(key)) {
+                int previous = this.missing.getOrDefault(key, 0);
+                this.missing.put(key, previous == Integer.MAX_VALUE ? previous : previous + 1);
+            }
+            return ready;
+        }
+
+        private void describeMissing(List<String> lines) {
+            List<Map.Entry<Long, Integer>> entries = new ArrayList<>(this.missing.entrySet());
+            entries.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+            if (entries.isEmpty()) lines.add("No unresolved states sampled.");
+            for (int i = 0; i < Math.min(10, entries.size()); i++) {
+                Map.Entry<Long, Integer> entry = entries.get(i);
+                int raw = (int) (entry.getKey() >> 16), meta = (int) (entry.getKey() & 65535L);
+                String name = "unregistered";
+                if (raw >= 0) {
+                    Block block = Block.getBlockById(raw);
+                    if (block != null && Block.getIdFromBlock(block) == raw) {
+                        name = String.valueOf(Block.blockRegistry.getNameForObject(block));
+                    }
+                }
+                lines.add(name + " (" + raw + ":" + meta + "), unresolved attempts: " + entry.getValue());
+            }
         }
 
         @Override

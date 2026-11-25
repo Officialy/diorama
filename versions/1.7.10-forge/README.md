@@ -76,6 +76,14 @@ The reobfuscated installable jar is in `versions/1.7.10-forge/build/libs/`; do n
 
 Build inputs are pinned in the [build script](build.gradle.kts), [Gradle properties](gradle.properties) and [dependency file](dependencies.gradle). The [source policy](source-policy.json) selects canonical sources and platform adapters. The optional EndlessIDs adapter compiles against version 1.7.4 without bundling it. See the [port design](../docs/gtnh-port-design.md) for architecture and scope.
 
+### Client diagnostics
+
+`/dioramaterrain status` reports the current dimension, world and chunk provider classes,
+appearance-table usage and observed geometry count. `/dioramaterrain missing` adds up to ten
+unresolved block states ranked by failed preparation attempts (not cell counts). Tracking is
+bounded to 512 distinct unresolved states per capture session. The appearance table now holds
+32,768 entries rather than 4,096, reducing exhaustion in large modpacks.
+
 ### Client acceptance checklist
 
 Use the same area and camera angle on the GTNH server before and after installing the build.

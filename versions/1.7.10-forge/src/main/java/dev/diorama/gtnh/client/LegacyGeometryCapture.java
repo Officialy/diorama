@@ -72,6 +72,10 @@ public final class LegacyGeometryCapture {
         return true;
     }
 
+    static int sampleCount() {
+        return SAMPLES.size();
+    }
+
     private static boolean eligibleThread() {
         return ENABLED && epoch != null && (owner == Thread.currentThread() || WORKERS);
     }
