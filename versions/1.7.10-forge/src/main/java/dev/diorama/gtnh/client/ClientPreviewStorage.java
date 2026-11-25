@@ -35,7 +35,7 @@ final class ClientPreviewStorage {
     static @Nullable Path savePath(Minecraft minecraft, WorldClient world) {
         if (ClientMapDimension.of(world) == null || minecraft.theWorld != world) return null;
         if (minecraft.isIntegratedServerRunning()) return integratedSavePath(minecraft, world);
-        ServerData server = minecraft.getCurrentServerData();
+        ServerData server = minecraft.func_147104_D();
         if (server == null) return null;
         try {
             return RemoteWorldIdentity.open(
