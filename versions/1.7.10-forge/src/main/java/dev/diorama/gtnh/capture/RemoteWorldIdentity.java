@@ -22,7 +22,8 @@ public final class RemoteWorldIdentity {
 
     public static @Nullable Path open(Path game, @Nullable String connected, @Nullable String configured,
         @Nullable String worldLabel) throws IOException {
-        if (connected == null || configured == null || worldLabel == null
+        if (connected == null || configured == null
+            || worldLabel == null
             || !connected.equals(configured)
             || !valid(connected, 255)
             || !valid(worldLabel, 128)) return null;
