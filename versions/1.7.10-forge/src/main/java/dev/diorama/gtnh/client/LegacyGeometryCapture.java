@@ -76,8 +76,11 @@ public final class LegacyGeometryCapture {
         x -= originX;
         y -= originY;
         z -= originZ;
-        if (count == MAX_VERTICES || !local(x) || !local(y) || !local(z)
-            || !Double.isFinite(u) || !Double.isFinite(v)) {
+        if (count == MAX_VERTICES || !local(x)
+            || !local(y)
+            || !local(z)
+            || !Double.isFinite(u)
+            || !Double.isFinite(v)) {
             collecting = false;
             return;
         }
@@ -100,7 +103,11 @@ public final class LegacyGeometryCapture {
     public static void end(Block block, int x, int y, int z, boolean rendered) {
         if (!ENABLED || owner != Thread.currentThread() || !collecting) return;
         collecting = false;
-        if (!rendered || x != originX || y != originY || z != originZ || count < 8 || count % 4 != 0
+        if (!rendered || x != originX
+            || y != originY
+            || z != originZ
+            || count < 8
+            || count % 4 != 0
             || Block.getIdFromBlock(block) != (int) (key >>> 16)) return;
         float[] result = bounds();
         if (result != null && BOXES.size() < MAX_STATES) BOXES.put(key, result);
@@ -137,8 +144,11 @@ public final class LegacyGeometryCapture {
             for (int b = 0; b < faceCount; b++) {
                 int j = b * 6;
                 float delta = faces[j + 1] - faces[i + 1];
-                if (delta > 0 && delta < distance && faces[i] == faces[j] && faces[i + 2] == faces[j + 2]
-                    && faces[i + 3] == faces[j + 3] && faces[i + 5] == faces[j + 5]) {
+                if (delta > 0 && delta < distance
+                    && faces[i] == faces[j]
+                    && faces[i + 2] == faces[j + 2]
+                    && faces[i + 3] == faces[j + 3]
+                    && faces[i + 5] == faces[j + 5]) {
                     partner = j;
                     distance = delta;
                 }

@@ -105,7 +105,7 @@ public final class ClientBlockAppearance {
         if (rawId < 0 || metadata < 0 || metadata > 65535) return -1;
         Block block = Block.getBlockById(rawId);
         if (block == null || Block.getIdFromBlock(block) != rawId) return -1;
-        int geometry = context == 0 ? this.looks.find(rawId, metadata, 3) : -1;
+        int geometry = context == 0 ? this.looks.findObserved(rawId, metadata) : -1;
         if (geometry >= 0) return geometry;
         int id = block == Blocks.air && block.getClass() == BlockAir.class && context == 0 ? this.looks.airId()
             : grass(block, metadata) && context != 0 ? this.looks.find(rawId, metadata, context)
@@ -122,7 +122,7 @@ public final class ClientBlockAppearance {
         if (!this.current()) return -1;
         if (context < 0 || context > GrassContext.SNOWY) return -1;
         if (rawId < 0 || metadata < 0 || metadata > 65535) return -1;
-        if (context == 0 && this.looks.find(rawId, metadata, 3) < 0) {
+        if (context == 0 && this.looks.findObserved(rawId, metadata) < 0) {
             float[] observed = LegacyGeometryCapture.boxes(rawId, metadata);
             if (observed != null) {
                 Block candidate = Block.getBlockById(rawId);
@@ -188,7 +188,9 @@ public final class ClientBlockAppearance {
             if (observed != null && kind != Looks.SOLID) return -1;
             float[] boxes = kind == Looks.SOLID ? observed != null ? observed : legacyBoxes(block, metadata) : null;
             int light = Math.max(0, Math.min(15, block.getLightValue()));
-            return this.current() ? this.looks.approximate(rawId, metadata, observed == null ? 0 : 3, top, side, light, kind, boxes) : -1;
+            return this.current()
+                ? this.looks.approximate(rawId, metadata, observed == null ? 0 : 3, top, side, light, kind, boxes)
+                : -1;
         } catch (RuntimeException | LinkageError unsupported) {
             return -1;
         }

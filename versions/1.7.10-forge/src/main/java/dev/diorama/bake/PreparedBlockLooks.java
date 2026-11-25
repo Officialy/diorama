@@ -66,7 +66,15 @@ public final class PreparedBlockLooks extends Looks {
 
     public int find(int rawId, int metadata, int context) {
         this.requireOwner();
+        if (context > GrassContext.SNOWY) throw new IllegalArgumentException("Invalid grass context");
         long key = key(rawId, metadata, context);
+        return this.active ? this.ids.getOrDefault(key, -1) : -1;
+    }
+
+    /** Renderer-observed geometry has its own key, separate from the public grass contexts. */
+    public int findObserved(int rawId, int metadata) {
+        this.requireOwner();
+        long key = key(rawId, metadata, 3);
         return this.active ? this.ids.getOrDefault(key, -1) : -1;
     }
 
