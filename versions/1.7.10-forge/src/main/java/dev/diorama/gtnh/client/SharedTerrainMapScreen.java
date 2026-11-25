@@ -155,7 +155,8 @@ final class SharedTerrainMapScreen extends GuiScreen {
             && x < BUTTON_X + BUTTON_WIDTH
             && y >= LAYER_Y
             && y < LAYER_Y + BUTTON_HEIGHT;
-        controls |= followHeight != null && followHeight.visible && x >= OPTIONS_X
+        controls |= followHeight != null && followHeight.visible
+            && x >= OPTIONS_X
             && x < OPTIONS_X + BUTTON_WIDTH
             && y >= LAYER_Y
             && y < LAYER_Y + BUTTON_HEIGHT;
@@ -196,7 +197,8 @@ final class SharedTerrainMapScreen extends GuiScreen {
             if (layer != TileKey.SURFACE) {
                 drawString(
                     fontRendererObj,
-                    I18n.format(ClientMinimap.lockedCaveHeight(mc) ? "diorama.map.cave_locked" : "diorama.map.cave_layer",
+                    I18n.format(
+                        ClientMinimap.lockedCaveHeight(mc) ? "diorama.map.cave_locked" : "diorama.map.cave_layer",
                         Math.min(256, layer)),
                     6,
                     bottom - 12,

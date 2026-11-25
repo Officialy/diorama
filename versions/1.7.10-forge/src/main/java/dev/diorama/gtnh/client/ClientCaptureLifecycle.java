@@ -221,20 +221,36 @@ public final class ClientCaptureLifecycle {
             return lines;
         }
         ClientMapDimension map = ClientMapDimension.of(currentWorld);
-        lines.add("Diorama: dimension " + currentWorld.provider.dimensionId + ", height " + currentWorld.getHeight()
-            + ", noSky=" + currentWorld.provider.hasNoSky
-            + ", map=" + (map == null ? "unsupported" : map.surfaceTerrain() ? "surface" : "cave"));
-        lines.add("Provider: " + currentWorld.provider.getClass().getName());
+        lines.add(
+            "Diorama: dimension " + currentWorld.provider.dimensionId
+                + ", height "
+                + currentWorld.getHeight()
+                + ", noSky="
+                + currentWorld.provider.hasNoSky
+                + ", map="
+                + (map == null ? "unsupported" : map.surfaceTerrain() ? "surface" : "cave"));
+        lines.add(
+            "Provider: " + currentWorld.provider.getClass()
+                .getName());
         IChunkProvider chunkProvider = currentWorld.getChunkProvider();
-        lines.add("Chunks: " + (chunkProvider == null ? "none" : chunkProvider.getClass().getName()));
+        lines.add(
+            "Chunks: " + (chunkProvider == null ? "none"
+                : chunkProvider.getClass()
+                    .getName()));
         Session session = active;
         if (session == null || !current(session.token)) {
             lines.add("No active capture session (open map or show minimap first).");
             return lines;
         }
-        lines.add("Appearances: " + session.looks().used() + "/" + session.looks().kind.length
-            + "; observed geometry: " + LegacyGeometryCapture.sampleCount()
-            + "; unresolved sampled states: " + session.missing.size());
+        lines.add(
+            "Appearances: " + session.looks()
+                .used()
+                + "/"
+                + session.looks().kind.length
+                + "; observed geometry: "
+                + LegacyGeometryCapture.sampleCount()
+                + "; unresolved sampled states: "
+                + session.missing.size());
         if (missing) session.describeMissing(lines);
         return lines;
     }
