@@ -17,6 +17,7 @@ public abstract class TessellatorCaptureMixin {
     private void diorama$vertex(double x, double y, double z, double u, double v, CallbackInfo ci) {
         LegacyGeometryCapture.vertexWithUv(x, y, z, u, v);
     }
+
     @Inject(method = "addVertexWithUV(DDDDD)V", at = @At("RETURN"), require = 0)
     private void diorama$vertexEnd(double x, double y, double z, double u, double v, CallbackInfo ci) {
         LegacyGeometryCapture.vertexWithUvEnd();

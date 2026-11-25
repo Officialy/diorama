@@ -187,6 +187,7 @@ public final class ClientCaptureLifecycle {
             return null;
         }
         active = new Session(token, appearance, access);
+        LegacyGeometryCapture.reset(world);
         return active;
     }
 

@@ -76,7 +76,6 @@ public final class ClientBlockAppearance {
         this.atlas = this.minecraft.getTextureMapBlocks();
         this.looks = new PreparedBlockLooks(session, capacity);
         if (!this.current()) throw new IllegalStateException("Appearance resource epoch is not ready");
-        LegacyGeometryCapture.reset(this.minecraft.theWorld);
     }
 
     public PreparedBlockLooks looks() {
@@ -148,8 +147,8 @@ public final class ClientBlockAppearance {
         int audited = -1;
         if (leaf(block, metadata)) audited = this.prepareLeaves(rawId, metadata, block);
         else if (water(block, metadata)) audited = this.prepareWater(rawId, metadata, block);
-        else if (block == Blocks.tallgrass && block.getClass() == BlockTallGrass.class && (metadata == 1 || metadata == 2))
-            audited = this.prepareOverworld(rawId, metadata, block, false);
+        else if (block == Blocks.tallgrass && block.getClass() == BlockTallGrass.class
+            && (metadata == 1 || metadata == 2)) audited = this.prepareOverworld(rawId, metadata, block, false);
         else if (block == Blocks.snow_layer && block.getClass() == BlockSnow.class && metadata <= 7)
             audited = this.prepareOverworld(rawId, metadata, block, true);
         if (audited >= 0) return audited;
@@ -180,10 +179,12 @@ public final class ClientBlockAppearance {
             Material material = block.getMaterial();
             // Tile-only solid blocks may still have a representative map/inventory colour.
             if (renderType < 0 && (!block.hasTileEntity(metadata) || !material.isSolid())) return -1;
-            byte kind = material == Material.water ? Looks.WATER : material == Material.lava ? Looks.LAVA
-                : (material == Material.glass || material == Material.ice) && !block.isOpaqueCube() ? Looks.GLASS
-                    : renderType == 1 || renderType == 6 || renderType == 19 || renderType == 20 || renderType == 37
-                        ? Looks.PLANT : Looks.SOLID;
+            byte kind = material == Material.water ? Looks.WATER
+                : material == Material.lava ? Looks.LAVA
+                    : (material == Material.glass || material == Material.ice) && !block.isOpaqueCube() ? Looks.GLASS
+                        : renderType == 1 || renderType == 6 || renderType == 19 || renderType == 20 || renderType == 37
+                            ? Looks.PLANT
+                            : Looks.SOLID;
             float[] top = this.fallbackFace(block, metadata, 1);
             float[] side = this.fallbackFace(block, metadata, 3);
             if (top == null) top = side;
@@ -204,8 +205,9 @@ public final class ClientBlockAppearance {
             }
             boolean shaped = kind == Looks.SOLID || kind == Looks.GLASS;
             if (observed != null && !shaped) return -1;
-            float[] boxes = shaped ? observed != null ? LegacyGeometryMath.bounds(observed)
-                : legacyBoxes(block, metadata) : null;
+            float[] boxes = shaped
+                ? observed != null ? LegacyGeometryMath.bounds(observed) : legacyBoxes(block, metadata)
+                : null;
             if (observed != null && boxes == null) return -1;
             int light = Math.max(0, Math.min(15, block.getLightValue()));
             return this.current()
@@ -228,7 +230,7 @@ public final class ClientBlockAppearance {
                 field = TextureMap.class.getDeclaredField("field_94252_e");
             }
             field.setAccessible(true);
-            if (!(field.get(this.atlas) instanceof Map<?, ?> uploaded) || uploaded.size() > 65536) return;
+            if (!(field.get(this.atlas) instanceof Map<?, ?>uploaded) || uploaded.size() > 65536) return;
             int count = 0;
             for (Object value : uploaded.values()) {
                 if (!(value instanceof TextureAtlasSprite sprite) || "missingno".equals(sprite.getIconName())) continue;
@@ -258,8 +260,8 @@ public final class ClientBlockAppearance {
     /** Resolve a quad to one stitched sprite, rejecting ambiguous/multi-sprite UVs. */
     private @Nullable TextureAtlasSprite sprite(float[] quad) {
         this.indexAtlas();
-        List<TextureAtlasSprite> candidates = this.atlasBins.get(
-            bin((quad[1] + quad[3]) * 0.5F) * 32 + bin((quad[0] + quad[2]) * 0.5F));
+        List<TextureAtlasSprite> candidates = this.atlasBins
+            .get(bin((quad[1] + quad[3]) * 0.5F) * 32 + bin((quad[0] + quad[2]) * 0.5F));
         if (candidates == null) return null;
         TextureAtlasSprite match = null;
         for (TextureAtlasSprite sprite : candidates) {
@@ -304,7 +306,9 @@ public final class ClientBlockAppearance {
             if (width > 0 && height > 0 && (long) width * height <= 1048576L && sprite.getFrameCount() > 0) {
                 int[][] frame = sprite.getFrameTextureData(0);
                 float du = sprite.getMaxU() - sprite.getMinU(), dv = sprite.getMaxV() - sprite.getMinV();
-                if (du > 0 && dv > 0 && frame != null && frame.length > 0
+                if (du > 0 && dv > 0
+                    && frame != null
+                    && frame.length > 0
                     && frame[0] != null
                     && frame[0].length == width * height) {
                     SpriteAverage average = new SpriteAverage();
@@ -321,7 +325,7 @@ public final class ClientBlockAppearance {
                 }
             }
             return this.fallbackSprite(sprite);
-        } catch (IOException | RuntimeException | LinkageError unsupported) {
+        } catch (RuntimeException | LinkageError unsupported) {
             return null;
         }
     }
@@ -407,10 +411,10 @@ public final class ClientBlockAppearance {
             return boxes;
         }
         if (block == Blocks.carpet) return new float[] { 0, 0, 0, 1, 0.0625F, 1 };
-        if (block == Blocks.snow_layer && metadata <= 7)
-            return new float[] { 0, 0, 0, 1, (metadata + 1) / 8F, 1 };
+        if (block == Blocks.snow_layer && metadata <= 7) return new float[] { 0, 0, 0, 1, (metadata + 1) / 8F, 1 };
         if (block == Blocks.stone_pressure_plate || block == Blocks.wooden_pressure_plate
-            || block == Blocks.light_weighted_pressure_plate || block == Blocks.heavy_weighted_pressure_plate)
+            || block == Blocks.light_weighted_pressure_plate
+            || block == Blocks.heavy_weighted_pressure_plate)
             return new float[] { 0.0625F, 0, 0.0625F, 0.9375F, 0.0625F, 0.9375F };
         return LegacyGeometryMath.basicBoxes(block.getRenderType(), metadata);
     }

@@ -412,6 +412,10 @@
     {
       "path": "dev/diorama/gtnh/capture/LegacyGeometryMath.java",
       "fqn": "dev.diorama.gtnh.capture.LegacyGeometryMath"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/LegacyGeometrySample.java",
+      "fqn": "dev.diorama.gtnh.client.LegacyGeometrySample"
     }
   ],
   "deferred": [
