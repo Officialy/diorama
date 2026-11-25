@@ -29,7 +29,14 @@ public final class WaterPng {
      */
     public static float @Nullable [] averageFirstFrame(InputStream input, int width, int height, boolean animated)
         throws IOException {
-        if (width <= 0 || width > 4096 || width != height) return null;
+        if (width != height) return null;
+        return averageSpriteFrame(input, width, height, animated);
+    }
+
+    /** Approximate ordinary resource sprites, including rectangular frames and alpha coverage. */
+    public static float @Nullable [] averageSpriteFrame(InputStream input, int width, int height, boolean animated)
+        throws IOException {
+        if (width <= 0 || height <= 0 || width > 4096 || height > 4096) return null;
         BufferedInputStream stream = new BufferedInputStream(input);
         stream.mark(8);
         int[] signature = { 137, 80, 78, 71, 13, 10, 26, 10 };

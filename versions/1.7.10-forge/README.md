@@ -20,7 +20,8 @@ Put the 1.7.10 Forge jar in the client's `mods` folder. The server does not need
 ## Experimental legacy geometry capture
 
 The fallback appearance path uses atlas-frame colours, map colours and metadata-based slab/straight
-stair outlines. Unknown registry states remain unknown. The optional JVM flag
+stair outlines, thin panes, fences, walls, doors, ladders, rails, beds and other representative
+legacy shapes. Connected shapes, tile entities and modded metadata conventions remain approximate. Unknown registry states remain unknown. The optional JVM flag
 `-Ddiorama.experimentalGeometry=true` enables a passive RenderBlocks/Tessellator observer, sampling
 custom render types and some connected vanilla blocks on the client appearance owner's thread. A second optional flag,
 `-Ddiorama.experimentalGeometryWorkers=true`, permits detached samples from renderer workers only

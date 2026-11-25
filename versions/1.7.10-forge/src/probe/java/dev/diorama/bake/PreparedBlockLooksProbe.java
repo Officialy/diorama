@@ -26,6 +26,7 @@ public final class PreparedBlockLooksProbe {
         approximate();
         observedVariant();
         geometryMath();
+        basicShapesAndMaterials();
         extendedKeys();
         leaves();
         leafInputs();
@@ -98,6 +99,22 @@ public final class PreparedBlockLooksProbe {
         quads[0] = Float.NaN;
         require(LegacyGeometryMath.bounds(quads) == null, "non-finite vertices rejected");
         put(Float.floatToIntBits(uv[4]));
+    }
+
+    private static void basicShapesAndMaterials() {
+        PreparedBlockLooks table = new PreparedBlockLooks(new Object(), 4);
+        float[] pane = LegacyGeometryMath.basicBoxes(18, 0);
+        require(pane != null && pane.length == 12, "pane uses two thin boxes");
+        int glass = table.approximate(11, 0, TOP, SIDE, 0, Looks.GLASS, pane);
+        require(table.kind[glass] == Looks.GLASS && table.shape[glass] != 0, "transparent shape retained");
+        int water = table.approximate(12, 0, TOP, SIDE, 0, Looks.WATER, null);
+        require(table.kind[water] == Looks.WATER && table.top[water] == 0xFF8000, "water uses sampled colour");
+        require(table.topTintWeight[water] == 1 && table.tint[water] == Looks.TINT_NONE, "fixed water colour");
+        float[] fence = LegacyGeometryMath.basicBoxes(11, 0);
+        require(fence != null && fence[0] == 0.375F && fence[3] == 0.625F, "fence post");
+        require(LegacyGeometryMath.basicBoxes(0, 0) == null, "ordinary cube has no partial shape");
+        put(payload(table, glass));
+        put(payload(table, water));
     }
 
     private static void allocation() {

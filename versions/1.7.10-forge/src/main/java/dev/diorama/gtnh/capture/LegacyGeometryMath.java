@@ -71,6 +71,50 @@ public final class LegacyGeometryMath {
         return box[0] < box[3] && box[1] < box[4] && box[2] < box[5];
     }
 
+    /** Representative metadata-only outlines for legacy built-in render types. Null means full cube. */
+    public static float @Nullable [] basicBoxes(int type, int metadata) {
+        float thin = 1F / 16;
+        return switch (type) {
+            case 2 -> new float[] { 0.4375F, 0, 0.4375F, 0.5625F, 0.625F, 0.5625F };
+            case 5, 9, 28 -> new float[] { 0, 0, 0, 1, thin, 1 };
+            case 7 -> {
+                // Upper halves do not encode orientation; this is a representative thin door.
+                if ((metadata & 8) != 0) yield new float[] { 0, 0, 0.40625F, 1, 1, 0.59375F };
+                int facing = metadata & 3;
+                if ((metadata & 4) != 0) facing = (facing + 1) & 3;
+                yield switch (facing) {
+                    case 0 -> new float[] { 0, 0, 0, 0.1875F, 1, 1 };
+                    case 1 -> new float[] { 0, 0, 0, 1, 1, 0.1875F };
+                    case 2 -> new float[] { 0.8125F, 0, 0, 1, 1, 1 };
+                    default -> new float[] { 0, 0, 0.8125F, 1, 1, 1 };
+                };
+            }
+            case 8 -> switch (metadata) {
+                case 2 -> new float[] { 0, 0, 0.875F, 1, 1, 1 };
+                case 3 -> new float[] { 0, 0, 0, 1, 1, 0.125F };
+                case 4 -> new float[] { 0.875F, 0, 0, 1, 1, 1 };
+                case 5 -> new float[] { 0, 0, 0, 0.125F, 1, 1 };
+                default -> null;
+            };
+            case 11 -> new float[] { 0.375F, 0, 0.375F, 0.625F, 1, 0.625F };
+            case 13 -> new float[] { thin, 0, thin, 1 - thin, 1, 1 - thin };
+            case 14 -> new float[] { 0, 0, 0, 1, 0.5625F, 1 };
+            case 15, 34 -> new float[] { 0, 0, 0, 1, 0.125F, 1 };
+            case 18 -> new float[] { 0.4375F, 0, 0, 0.5625F, 1, 1, 0, 0, 0.4375F, 1, 1, 0.5625F };
+            case 21 -> (metadata & 1) == 0 ? new float[] { 0, 0.25F, 0.375F, 1, 1, 0.625F }
+                : new float[] { 0.375F, 0.25F, 0, 0.625F, 1, 1 };
+            case 22 -> new float[] { thin, 0, thin, 1 - thin, 0.875F, 1 - thin };
+            case 23 -> new float[] { 0, 0, 0, 1, thin, 1 };
+            case 24 -> new float[] { 0, 0, 0, 1, 0.3125F, 1, 0, 0.3125F, 0, 0.125F, 1, 1,
+                0.875F, 0.3125F, 0, 1, 1, 1, 0.125F, 0.3125F, 0, 0.875F, 1, 0.125F,
+                0.125F, 0.3125F, 0.875F, 0.875F, 1, 1 };
+            case 32 -> new float[] { 0.25F, 0, 0.25F, 0.75F, 1, 0.75F };
+            case 35 -> new float[] { 0, 0.625F, 0, 1, 1, 1, 0.25F, 0.25F, 0.25F, 0.75F, 0.625F, 0.75F,
+                0.375F, 0, 0.375F, 0.625F, 0.25F, 0.625F };
+            default -> null;
+        };
+    }
+
     /** Returns UV rectangle and geometric projected areas (top, side). */
     public static float[] quad(float[] vertices, int offset) {
         if (offset < 0 || offset % 20 != 0 || offset > vertices.length - 20)

@@ -197,10 +197,10 @@ public final class PreparedBlockLooks extends Looks {
         if (existing != 0) return existing;
         checkAverage(top);
         checkAverage(side);
-        if (emission < 0 || emission > 15 || kind < SOLID || kind > PLANT || kind == WATER)
+        if (emission < 0 || emission > 15 || kind < SOLID || kind > PLANT)
             throw new IllegalArgumentException("Invalid approximate material");
         if (boxes != null) {
-            if (kind != SOLID || boxes.length == 0 || boxes.length % 6 != 0 || boxes.length > 96)
+            if ((kind != SOLID && kind != GLASS) || boxes.length == 0 || boxes.length % 6 != 0 || boxes.length > 96)
                 throw new IllegalArgumentException("Invalid approximate shape");
             for (int i = 0; i < boxes.length; i += 6) {
                 for (int axis = 0; axis < 3; axis++) {
@@ -214,8 +214,10 @@ public final class PreparedBlockLooks extends Looks {
         int shapeIndex = boxes == null ? 0 : this.internShape(boxes.clone());
         FaceColor topFace = new FaceColor();
         FaceColor sideFace = new FaceColor();
-        topFace.add(top, -1);
-        sideFace.add(side, -1);
+        // The shared water tracer reads the tint slot; a fixed white tint preserves sampled RGB.
+        int layer = kind == WATER ? 0 : -1;
+        topFace.add(top, layer);
+        sideFace.add(side, layer);
         return this.commit(key, topFace, sideFace, emission, -1, TINT_NONE, kind, shapeIndex);
     }
 

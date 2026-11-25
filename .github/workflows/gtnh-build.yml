@@ -18,6 +18,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
+      - name: Format preview and report exact patch
+        working-directory: versions/1.7.10-forge
+        run: |
+          bash gradlew spotlessApply
+          git diff --no-ext-diff | tee "$RUNNER_TEMP/format.patch"
       - name: Build and verify
         working-directory: versions/1.7.10-forge
         run: bash gradlew assemble verifyBaseline --continue

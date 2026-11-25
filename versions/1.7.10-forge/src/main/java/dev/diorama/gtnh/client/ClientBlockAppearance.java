@@ -145,12 +145,14 @@ public final class ClientBlockAppearance {
         if (block == null || Block.getIdFromBlock(block) != rawId) return -1;
         if (grass(block, metadata)) return context == 0 ? -1 : this.prepareGrass(rawId, metadata, context, block);
         if (context != 0) return -1;
-        if (leaf(block, metadata)) return this.prepareLeaves(rawId, metadata, block);
-        if (water(block, metadata)) return this.prepareWater(rawId, metadata, block);
-        if (block == Blocks.tallgrass && block.getClass() == BlockTallGrass.class)
-            return metadata == 1 || metadata == 2 ? this.prepareOverworld(rawId, metadata, block, false) : -1;
-        if (block == Blocks.snow_layer && block.getClass() == BlockSnow.class)
-            return metadata <= 7 ? this.prepareOverworld(rawId, metadata, block, true) : -1;
+        int audited = -1;
+        if (leaf(block, metadata)) audited = this.prepareLeaves(rawId, metadata, block);
+        else if (water(block, metadata)) audited = this.prepareWater(rawId, metadata, block);
+        else if (block == Blocks.tallgrass && block.getClass() == BlockTallGrass.class && (metadata == 1 || metadata == 2))
+            audited = this.prepareOverworld(rawId, metadata, block, false);
+        else if (block == Blocks.snow_layer && block.getClass() == BlockSnow.class && metadata <= 7)
+            audited = this.prepareOverworld(rawId, metadata, block, true);
+        if (audited >= 0) return audited;
         int strict = StaticCubeAppearance.prepare(this.looks, rawId, metadata, new StaticCubeAppearance.Access() {
 
             @Override
@@ -175,11 +177,13 @@ public final class ClientBlockAppearance {
         if (!this.current() || block.getMaterial() == Material.air) return -1;
         try {
             int renderType = block.getRenderType();
-            if (renderType < 0) return -1;
             Material material = block.getMaterial();
-            byte kind = material == Material.lava ? Looks.LAVA
-                : material == Material.glass && !block.isOpaqueCube() ? Looks.GLASS
-                    : renderType == 1 || renderType == 6 || renderType == 40 ? Looks.PLANT : Looks.SOLID;
+            // Tile-only solid blocks may still have a representative map/inventory colour.
+            if (renderType < 0 && (!block.hasTileEntity(metadata) || !material.isSolid())) return -1;
+            byte kind = material == Material.water ? Looks.WATER : material == Material.lava ? Looks.LAVA
+                : (material == Material.glass || material == Material.ice) && !block.isOpaqueCube() ? Looks.GLASS
+                    : renderType == 1 || renderType == 6 || renderType == 19 || renderType == 20 || renderType == 37
+                        ? Looks.PLANT : Looks.SOLID;
             float[] top = this.fallbackFace(block, metadata, 1);
             float[] side = this.fallbackFace(block, metadata, 3);
             if (top == null) top = side;
@@ -198,8 +202,9 @@ public final class ClientBlockAppearance {
                 if (colours[3] > 0) top = new float[] { colours[0], colours[1], colours[2], 1 };
                 if (colours[7] > 0) side = new float[] { colours[4], colours[5], colours[6], 1 };
             }
-            if (observed != null && kind != Looks.SOLID) return -1;
-            float[] boxes = kind == Looks.SOLID ? observed != null ? LegacyGeometryMath.bounds(observed)
+            boolean shaped = kind == Looks.SOLID || kind == Looks.GLASS;
+            if (observed != null && !shaped) return -1;
+            float[] boxes = shaped ? observed != null ? LegacyGeometryMath.bounds(observed)
                 : legacyBoxes(block, metadata) : null;
             if (observed != null && boxes == null) return -1;
             int light = Math.max(0, Math.min(15, block.getLightValue()));
@@ -315,7 +320,7 @@ public final class ClientBlockAppearance {
                     return average.finish(64);
                 }
             }
-            return this.average(sprite, true);
+            return this.fallbackSprite(sprite);
         } catch (IOException | RuntimeException | LinkageError unsupported) {
             return null;
         }
@@ -332,15 +337,21 @@ public final class ClientBlockAppearance {
 
     private float @Nullable [] fallbackFace(Block block, int metadata, int side) {
         try {
-            IIcon icon = block.getIcon(side, metadata);
-            if (icon == null) return null;
-            float[] cached = this.fallbackSprites.get(icon);
-            if (cached != null) return cached;
-            float[] result = null;
-            if (icon instanceof TextureAtlasSprite sprite && !"missingno".equals(sprite.getIconName())
-                && sprite.getFrameCount() > 0) {
+            return this.fallbackSprite(block.getIcon(side, metadata));
+        } catch (RuntimeException | LinkageError unsupported) {
+            return null;
+        }
+    }
+
+    private float @Nullable [] fallbackSprite(@Nullable IIcon icon) {
+        if (icon == null) return null;
+        float[] cached = this.fallbackSprites.get(icon);
+        if (cached != null) return cached[3] > 0 ? cached : null;
+        float[] result = null;
+        try {
+            if (icon instanceof TextureAtlasSprite sprite && !"missingno".equals(sprite.getIconName())) {
                 int width = sprite.getIconWidth(), height = sprite.getIconHeight();
-                if (width > 0 && height > 0 && (long) width * height <= 1048576L) {
+                if (width > 0 && height > 0 && (long) width * height <= 1048576L && sprite.getFrameCount() > 0) {
                     int[][] frame = sprite.getFrameTextureData(0);
                     if (frame != null && frame.length > 0 && frame[0] != null && frame[0].length == width * height) {
                         SpriteAverage average = new SpriteAverage();
@@ -348,16 +359,32 @@ public final class ClientBlockAppearance {
                         result = average.finish(frame[0].length);
                     }
                 }
+                // Static sprites can discard CPU frame data after stitching. Use the ordinary
+                // source resource only when it really represents this registered sprite.
+                if ((result == null || result[3] <= 0) && this.atlas.getAtlasSprite(sprite.getIconName()) == sprite) {
+                    ResourceLocation logical = new ResourceLocation(sprite.getIconName());
+                    if (!sprite.hasCustomLoader(this.resources, logical)) {
+                        ResourceLocation location = new ResourceLocation(
+                            logical.getResourceDomain(),
+                            "textures/blocks/" + logical.getResourcePath() + ".png");
+                        IResource resource = this.resources.getResource(location);
+                        try (InputStream stream = resource.getInputStream()) {
+                            result = WaterPng.averageSpriteFrame(
+                                stream,
+                                width,
+                                height,
+                                resource.getMetadata("animation") != null || sprite.hasAnimationMetadata());
+                        }
+                    }
+                }
             }
             if (result == null || result[3] <= 0) result = this.average(icon, true);
-            if (result != null && result[3] > 0 && this.current()) {
-                if (this.fallbackSprites.size() < 8192) this.fallbackSprites.put(icon, result);
-                return result;
-            }
         } catch (IOException | RuntimeException | LinkageError unsupported) {
-            // A map colour is preferable to dropping a known state when texture sampling fails.
+            // Unsupported resource paths remain eligible for a map-colour fallback.
         }
-        return null;
+        if (!this.current()) return null;
+        if (this.fallbackSprites.size() < 8192) this.fallbackSprites.put(icon, result == null ? new float[4] : result);
+        return result != null && result[3] > 0 ? result : null;
     }
 
     /** Metadata-only straight stair/slab outlines. Connected corners need a contextual capture. */
@@ -379,7 +406,13 @@ public final class ClientBlockAppearance {
             }
             return boxes;
         }
-        return null;
+        if (block == Blocks.carpet) return new float[] { 0, 0, 0, 1, 0.0625F, 1 };
+        if (block == Blocks.snow_layer && metadata <= 7)
+            return new float[] { 0, 0, 0, 1, (metadata + 1) / 8F, 1 };
+        if (block == Blocks.stone_pressure_plate || block == Blocks.wooden_pressure_plate
+            || block == Blocks.light_weighted_pressure_plate || block == Blocks.heavy_weighted_pressure_plate)
+            return new float[] { 0.0625F, 0, 0.0625F, 0.9375F, 0.0625F, 0.9375F };
+        return LegacyGeometryMath.basicBoxes(block.getRenderType(), metadata);
     }
 
     public boolean isGrass(int rawId, int metadata) {
