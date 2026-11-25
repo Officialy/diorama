@@ -28,6 +28,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
     private final @Nullable ClientMapDimension dimension;
     private final MapViewportController view = new MapViewportController(0, 0, 4, 0.25, 16);
     private boolean initialized, dragging;
+    private @Nullable GuiButton followHeight;
     private int lastX, lastY;
 
     SharedTerrainMapScreen(WorldClient world) {
@@ -57,11 +58,29 @@ final class SharedTerrainMapScreen extends GuiScreen {
         if (dimension != null && dimension.surfaceTerrain()) {
             buttonList.add(new GuiButton(3, BUTTON_X, LAYER_Y, BUTTON_WIDTH, BUTTON_HEIGHT, nextLayerLabel()));
         }
+        followHeight = null;
+        if (dimension != null) {
+            followHeight = new GuiButton(
+                4,
+                OPTIONS_X,
+                LAYER_Y,
+                BUTTON_WIDTH,
+                BUTTON_HEIGHT,
+                I18n.format("diorama.map.follow_height"));
+            buttonList.add(followHeight);
+            updateHeightControl();
+        }
         dragging = false;
         if (!initialized) {
             recenter();
             initialized = true;
         }
+    }
+
+    private void updateHeightControl() {
+        if (followHeight == null) return;
+        followHeight.visible = ClientMinimap.layer(mc) != TileKey.SURFACE;
+        followHeight.enabled = ClientMinimap.lockedCaveHeight(mc);
     }
 
     private String nextLayerLabel() {
@@ -84,6 +103,11 @@ final class SharedTerrainMapScreen extends GuiScreen {
         if (button.id == 3) {
             ClientMinimap.toggleLayer(mc);
             button.displayString = nextLayerLabel();
+            updateHeightControl();
+        }
+        if (button.id == 4) {
+            ClientMinimap.followCaveHeight(mc);
+            updateHeightControl();
         }
         if (button.id == 2) {
             ClientWaypoints session = ClientWaypoints.active(mc);
@@ -109,6 +133,11 @@ final class SharedTerrainMapScreen extends GuiScreen {
         super.handleMouseInput();
         int wheel = Mouse.getEventDWheel();
         if (wheel != 0) {
+            if (belongsTo(mc.theWorld) && ClientMinimap.layer(mc) != TileKey.SURFACE && isShiftKeyDown()) {
+                ClientMinimap.adjustCaveHeight(mc, wheel > 0);
+                updateHeightControl();
+                return;
+            }
             double x = (double) Mouse.getEventX() * width / mc.displayWidth;
             double y = height - (double) Mouse.getEventY() * height / mc.displayHeight - 1;
             view.zoomAt(x, y, wheel > 0 ? 1 : -1);
@@ -124,6 +153,10 @@ final class SharedTerrainMapScreen extends GuiScreen {
         controls |= dimension != null && dimension.surfaceTerrain()
             && x >= BUTTON_X
             && x < BUTTON_X + BUTTON_WIDTH
+            && y >= LAYER_Y
+            && y < LAYER_Y + BUTTON_HEIGHT;
+        controls |= followHeight != null && followHeight.visible && x >= OPTIONS_X
+            && x < OPTIONS_X + BUTTON_WIDTH
             && y >= LAYER_Y
             && y < LAYER_Y + BUTTON_HEIGHT;
         if (button == 0 && !controls) {
@@ -162,12 +195,14 @@ final class SharedTerrainMapScreen extends GuiScreen {
             if (layer != TileKey.SURFACE) {
                 drawString(
                     fontRendererObj,
-                    I18n.format("diorama.map.cave_layer", Math.min(256, layer)),
+                    I18n.format(ClientMinimap.lockedCaveHeight(mc) ? "diorama.map.cave_locked" : "diorama.map.cave_layer",
+                        Math.min(256, layer)),
                     6,
                     bottom - 12,
                     0xFFDDDDDD);
             }
         }
+        updateHeightControl();
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 

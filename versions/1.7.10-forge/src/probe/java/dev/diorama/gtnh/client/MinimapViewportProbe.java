@@ -110,6 +110,10 @@ public final class MinimapViewportProbe {
         require(MinimapViewport.caveLayer(66, 68) == 72, "ascend when cut nears the player");
         require(MinimapViewport.caveLayer(60, 72) == 64, "descend immediately");
         require(MinimapViewport.caveLayer(255, TileKey.SURFACE) == 260, "top-of-world layer identity");
+        require(MinimapViewport.stepCaveLayer(64, true) == 68, "manual cut ascends four blocks");
+        require(MinimapViewport.stepCaveLayer(64, false) == 60, "manual cut descends four blocks");
+        require(MinimapViewport.stepCaveLayer(4, false) == 4, "manual cut floor");
+        require(MinimapViewport.stepCaveLayer(260, true) == 256, "manual cut top clamps to storage");
         require(
             new MinimapViewport(0, 0, 68).tiles()
                 .stream()

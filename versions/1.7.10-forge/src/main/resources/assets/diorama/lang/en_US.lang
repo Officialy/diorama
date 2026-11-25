@@ -31,3 +31,5 @@ diorama.waypoint.unavailable=Waypoint storage unavailable
 diorama.waypoint.invalid=Enter a name and valid Overworld coordinates
 diorama.waypoint.save_failed=Could not save waypoints
 diorama.map.dimension.custom=Dimension %s
+diorama.map.follow_height=Follow player height
+diorama.map.cave_locked=Cave cut: Y %s (locked)

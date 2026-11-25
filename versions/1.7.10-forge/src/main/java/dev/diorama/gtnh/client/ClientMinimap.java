@@ -57,6 +57,7 @@ public final class ClientMinimap {
     private boolean persistent;
     private @Nullable WorldClient layerWorld;
     private boolean manualCave;
+    private int manualCut = TileKey.SURFACE;
     private int layer = TileKey.SURFACE;
     private @Nullable WorldClient world;
     private ClientCaptureLifecycle.@Nullable Session session;
@@ -117,14 +118,35 @@ public final class ClientMinimap {
         if (hud != null && dimension != null && dimension.surfaceTerrain()) {
             hud.observeLayer(mc);
             hud.manualCave = !hud.manualCave;
+            hud.manualCut = TileKey.SURFACE;
             hud.observeLayer(mc);
         }
+    }
+
+    static boolean lockedCaveHeight(Minecraft mc) {
+        ClientMinimap hud = installed;
+        return hud != null && hud.layerWorld == mc.theWorld && hud.manualCut != TileKey.SURFACE;
+    }
+
+    static void adjustCaveHeight(Minecraft mc, boolean up) {
+        ClientMinimap hud = installed;
+        if (hud == null || hud.layerWorld != mc.theWorld || hud.layer == TileKey.SURFACE) return;
+        hud.manualCut = MinimapViewport.stepCaveLayer(hud.layer, up);
+        hud.observeLayer(mc);
+    }
+
+    static void followCaveHeight(Minecraft mc) {
+        ClientMinimap hud = installed;
+        if (hud == null || hud.layerWorld != mc.theWorld) return;
+        hud.manualCut = TileKey.SURFACE;
+        hud.observeLayer(mc);
     }
 
     private void observeLayer(Minecraft mc) {
         if (layerWorld != mc.theWorld) {
             layerWorld = mc.theWorld;
             manualCave = false;
+            manualCut = TileKey.SURFACE;
             layer = TileKey.SURFACE;
         }
         ClientMapDimension dimension = ClientMapDimension.of(mc.theWorld);
@@ -132,7 +154,8 @@ public final class ClientMinimap {
         int next = TileKey.SURFACE;
         if (player != null && dimension != null && (!dimension.surfaceTerrain() || manualCave)) {
             double feet = player.boundingBox.minY;
-            if (feet >= 0 && feet < 256) next = MinimapViewport.caveLayer(MathHelper.floor_double(feet), layer);
+            if (manualCut != TileKey.SURFACE) next = manualCut;
+            else if (feet >= 0 && feet < 256) next = MinimapViewport.caveLayer(MathHelper.floor_double(feet), layer);
         }
         if (next != layer) {
             layer = next;

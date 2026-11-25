@@ -66,6 +66,13 @@ final class MinimapViewport {
         return previous == TileKey.SURFACE || wanted < previous || previous <= feetY + 2 ? wanted : previous;
     }
 
+    /** Manual cuts are exclusive ceilings in the actual stored height, with four-block steps. */
+    static int stepCaveLayer(int current, boolean up) {
+        if (current <= 0) throw new IllegalArgumentException("Expected an active cave layer");
+        int clamped = Math.max(4, Math.min(256, current));
+        return Math.max(4, Math.min(256, clamped + (up ? 4 : -4)));
+    }
+
     private static List<Axis> axis(double center) {
         if (!Double.isFinite(center) || center < Integer.MIN_VALUE * TILE_UNITS + HALF
             || center > (Integer.MAX_VALUE + 1.0) * TILE_UNITS - HALF) {
