@@ -53,6 +53,7 @@ public final class ClientCaptureLifecycle {
                 .invalidate();
             active = null;
         }
+        LegacyGeometryCapture.clear();
     }
 
     public static void beginReload(SimpleReloadableResourceManager manager) {

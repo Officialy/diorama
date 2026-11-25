@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import dev.diorama.data.ChunkSnapshot;
 import dev.diorama.gtnh.capture.ChunkCapture;
+import dev.diorama.gtnh.capture.LegacyGeometryMath;
 import dev.diorama.gtnh.capture.LegacyLeaves;
 
 /** Standalone CPU contract probe; real capture interfaces, never substitute Minecraft classes. */
@@ -24,6 +25,7 @@ public final class PreparedBlockLooksProbe {
         allocation();
         approximate();
         observedVariant();
+        geometryMath();
         extendedKeys();
         leaves();
         leafInputs();
@@ -74,6 +76,28 @@ public final class PreparedBlockLooksProbe {
             "observed geometry has its own immutable ID");
         require(table.shape[base] == 0 && table.shape[observed] != 0, "base remains unchanged");
         put(payload(table, observed));
+    }
+
+    private static void geometryMath() {
+        float[] quads = new float[80];
+        float[] a = { 0, 0, 0, 0, 0, 0.25F, 0, 0, 1, 0, 0.25F, 0, 1, 1, 1, 0, 0, 1, 0, 1 };
+        float[] b = a.clone();
+        for (int i = 1; i < b.length; i += 5) b[i] = 0.5F;
+        System.arraycopy(a, 0, quads, 0, 20);
+        System.arraycopy(b, 0, quads, 20, 20);
+        for (int i = 0; i < 40; i += 5) {
+            quads[40 + i] = quads[i] + 0.75F;
+            for (int j = 1; j < 5; j++) quads[40 + i + j] = quads[i + j];
+        }
+        float[] boxes = LegacyGeometryMath.bounds(quads);
+        require(boxes != null && boxes.length == 12, "two disjoint cuboids remain disjoint");
+        require(boxes[3] == 0.25F && boxes[6] == 0.75F, "cuboid footprint preserved");
+        float[] uv = LegacyGeometryMath.quad(quads, 0);
+        require(uv[0] == 0 && uv[2] == 1 && uv[4] == 0.25F && uv[5] == 0, "UV and projected area");
+        require(LegacyGeometryMath.bounds(a) == null, "insufficient vertices rejected");
+        quads[0] = Float.NaN;
+        require(LegacyGeometryMath.bounds(quads) == null, "non-finite vertices rejected");
+        put(Float.floatToIntBits(uv[4]));
     }
 
     private static void allocation() {

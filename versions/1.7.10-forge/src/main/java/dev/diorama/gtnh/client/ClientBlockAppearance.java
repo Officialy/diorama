@@ -2,7 +2,11 @@ package dev.diorama.gtnh.client;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
@@ -38,6 +42,7 @@ import dev.diorama.bake.Looks;
 import dev.diorama.bake.PreparedBlockLooks;
 import dev.diorama.bake.SpriteAverage;
 import dev.diorama.gtnh.capture.GrassContext;
+import dev.diorama.gtnh.capture.LegacyGeometryMath;
 import dev.diorama.gtnh.capture.LegacyLeaves;
 import dev.diorama.gtnh.capture.OpaquePng;
 import dev.diorama.gtnh.capture.StaticCubeAppearance;
@@ -59,6 +64,8 @@ public final class ClientBlockAppearance {
     private final BooleanSupplier generationCurrent;
     private final PreparedBlockLooks looks;
     private final Map<IIcon, float[]> fallbackSprites = new IdentityHashMap<>();
+    private final Map<Integer, List<TextureAtlasSprite>> atlasBins = new HashMap<>();
+    private boolean atlasIndexed;
     private boolean active = true;
 
     public ClientBlockAppearance(Object session, int capacity, BooleanSupplier generationCurrent) {
@@ -123,7 +130,7 @@ public final class ClientBlockAppearance {
         if (context < 0 || context > GrassContext.SNOWY) return -1;
         if (rawId < 0 || metadata < 0 || metadata > 65535) return -1;
         if (context == 0 && this.looks.findObserved(rawId, metadata) < 0) {
-            float[] observed = LegacyGeometryCapture.boxes(rawId, metadata);
+            float[] observed = LegacyGeometryCapture.sample(rawId, metadata);
             if (observed != null) {
                 Block candidate = Block.getBlockById(rawId);
                 if (candidate != null && Block.getIdFromBlock(candidate) == rawId && !grass(candidate, metadata)) {
@@ -181,18 +188,136 @@ public final class ClientBlockAppearance {
                 int color = block.getMapColor(metadata).colorValue;
                 top = rgb(color);
                 side = top;
+            } else {
+                int tint = block.getRenderColor(metadata);
+                top = multiply(top, tint);
+                side = multiply(side, tint);
             }
-            int tint = block.getRenderColor(metadata);
-            top = multiply(top, tint);
-            side = multiply(side, tint);
+            if (observed != null) {
+                float[] colours = this.observedColours(observed);
+                if (colours[3] > 0) top = new float[] { colours[0], colours[1], colours[2], 1 };
+                if (colours[7] > 0) side = new float[] { colours[4], colours[5], colours[6], 1 };
+            }
             if (observed != null && kind != Looks.SOLID) return -1;
-            float[] boxes = kind == Looks.SOLID ? observed != null ? observed : legacyBoxes(block, metadata) : null;
+            float[] boxes = kind == Looks.SOLID ? observed != null ? LegacyGeometryMath.bounds(observed)
+                : legacyBoxes(block, metadata) : null;
+            if (observed != null && boxes == null) return -1;
             int light = Math.max(0, Math.min(15, block.getLightValue()));
             return this.current()
                 ? this.looks.approximate(rawId, metadata, observed == null ? 0 : 3, top, side, light, kind, boxes)
                 : -1;
         } catch (RuntimeException | LinkageError unsupported) {
             return -1;
+        }
+    }
+
+    /** Build a bounded UV lookup once per resource epoch, without reading GPU texture state. */
+    private void indexAtlas() {
+        if (this.atlasIndexed) return;
+        this.atlasIndexed = true;
+        try {
+            Field field;
+            try {
+                field = TextureMap.class.getDeclaredField("mapUploadedSprites");
+            } catch (NoSuchFieldException mapped) {
+                field = TextureMap.class.getDeclaredField("field_94252_e");
+            }
+            field.setAccessible(true);
+            if (!(field.get(this.atlas) instanceof Map<?, ?> uploaded) || uploaded.size() > 65536) return;
+            int count = 0;
+            for (Object value : uploaded.values()) {
+                if (!(value instanceof TextureAtlasSprite sprite) || "missingno".equals(sprite.getIconName())) continue;
+                int x0 = bin(sprite.getMinU()), x1 = bin(sprite.getMaxU());
+                int y0 = bin(sprite.getMinV()), y1 = bin(sprite.getMaxV());
+                if (x0 > x1 || y0 > y1) continue;
+                for (int y = y0; y <= y1; y++) {
+                    for (int x = x0; x <= x1; x++) {
+                        if (++count > 262144) {
+                            this.atlasBins.clear();
+                            return;
+                        }
+                        this.atlasBins.computeIfAbsent(y * 32 + x, ignored -> new ArrayList<>())
+                            .add(sprite);
+                    }
+                }
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError unsupported) {
+            this.atlasBins.clear();
+        }
+    }
+
+    private static int bin(float coordinate) {
+        return Math.max(0, Math.min(31, (int) (coordinate * 32)));
+    }
+
+    /** Resolve a quad to one stitched sprite, rejecting ambiguous/multi-sprite UVs. */
+    private @Nullable TextureAtlasSprite sprite(float[] quad) {
+        this.indexAtlas();
+        List<TextureAtlasSprite> candidates = this.atlasBins.get(
+            bin((quad[1] + quad[3]) * 0.5F) * 32 + bin((quad[0] + quad[2]) * 0.5F));
+        if (candidates == null) return null;
+        TextureAtlasSprite match = null;
+        for (TextureAtlasSprite sprite : candidates) {
+            if (quad[0] + 0.000001F < sprite.getMinU() || quad[1] + 0.000001F < sprite.getMinV()
+                || quad[2] - 0.000001F > sprite.getMaxU()
+                || quad[3] - 0.000001F > sprite.getMaxV()) continue;
+            if (match != null && match != sprite) return null;
+            match = sprite;
+        }
+        return match;
+    }
+
+    /** Texture colour only: the shared baker adds its own lighting; do not double-shade. */
+    private float[] observedColours(float[] sample) {
+        float[] result = new float[8];
+        for (int i = 0; i < sample.length; i += 20) {
+            float[] quad = LegacyGeometryMath.quad(sample, i);
+            TextureAtlasSprite sprite = this.sprite(quad);
+            if (sprite == null) continue;
+            float[] colour = this.sampleSprite(sprite, quad);
+            if (colour == null || colour[3] <= 0) continue;
+            for (int face = 0; face < 2; face++) {
+                int base = face * 4;
+                float weight = quad[4 + face] * colour[3];
+                for (int channel = 0; channel < 3; channel++) result[base + channel] += colour[channel] * weight;
+                result[base + 3] += weight;
+            }
+        }
+        for (int face = 0; face < 2; face++) {
+            int base = face * 4;
+            if (result[base + 3] > 0) {
+                for (int channel = 0; channel < 3; channel++) result[base + channel] /= result[base + 3];
+            }
+        }
+        return result;
+    }
+
+    /** Sample a bounded 8x8 grid within the observed UV rectangle, with a full-sprite fallback. */
+    private float @Nullable [] sampleSprite(TextureAtlasSprite sprite, float[] quad) {
+        try {
+            int width = sprite.getIconWidth(), height = sprite.getIconHeight();
+            if (width > 0 && height > 0 && (long) width * height <= 1048576L && sprite.getFrameCount() > 0) {
+                int[][] frame = sprite.getFrameTextureData(0);
+                float du = sprite.getMaxU() - sprite.getMinU(), dv = sprite.getMaxV() - sprite.getMinV();
+                if (du > 0 && dv > 0 && frame != null && frame.length > 0
+                    && frame[0] != null
+                    && frame[0].length == width * height) {
+                    SpriteAverage average = new SpriteAverage();
+                    for (int y = 0; y < 8; y++) {
+                        for (int x = 0; x < 8; x++) {
+                            float u = quad[0] + (quad[2] - quad[0]) * (x + 0.5F) / 8;
+                            float v = quad[1] + (quad[3] - quad[1]) * (y + 0.5F) / 8;
+                            int px = Math.max(0, Math.min(width - 1, (int) ((u - sprite.getMinU()) / du * width)));
+                            int py = Math.max(0, Math.min(height - 1, (int) ((v - sprite.getMinV()) / dv * height)));
+                            average.add(frame[0][py * width + px]);
+                        }
+                    }
+                    return average.finish(64);
+                }
+            }
+            return this.average(sprite, true);
+        } catch (IOException | RuntimeException | LinkageError unsupported) {
+            return null;
         }
     }
 

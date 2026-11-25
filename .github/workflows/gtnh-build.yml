@@ -26,7 +26,7 @@ jobs:
         working-directory: versions/1.7.10-forge
         run: |
           bash gradlew spotlessApply
-          git diff --no-ext-diff > "$RUNNER_TEMP/format.patch"
+          git diff --no-ext-diff | tee "$RUNNER_TEMP/format.patch"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
