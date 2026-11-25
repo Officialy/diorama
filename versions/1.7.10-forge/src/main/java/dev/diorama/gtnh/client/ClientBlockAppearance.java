@@ -2,6 +2,8 @@ package dev.diorama.gtnh.client;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
@@ -13,6 +15,8 @@ import net.minecraft.block.BlockGrass;
 import net.minecraft.block.BlockNewLeaf;
 import net.minecraft.block.BlockOldLeaf;
 import net.minecraft.block.BlockSnow;
+import net.minecraft.block.BlockSlab;
+import net.minecraft.block.BlockStairs;
 import net.minecraft.block.BlockStaticLiquid;
 import net.minecraft.block.BlockTallGrass;
 import net.minecraft.block.material.Material;
@@ -30,7 +34,9 @@ import net.minecraft.world.IBlockAccess;
 
 import org.jspecify.annotations.Nullable;
 
+import dev.diorama.bake.Looks;
 import dev.diorama.bake.PreparedBlockLooks;
+import dev.diorama.bake.SpriteAverage;
 import dev.diorama.gtnh.capture.GrassContext;
 import dev.diorama.gtnh.capture.LegacyLeaves;
 import dev.diorama.gtnh.capture.OpaquePng;
@@ -52,6 +58,7 @@ public final class ClientBlockAppearance {
     private final TextureMap atlas;
     private final BooleanSupplier generationCurrent;
     private final PreparedBlockLooks looks;
+    private final Map<IIcon, float[]> fallbackSprites = new IdentityHashMap<>();
     private boolean active = true;
 
     public ClientBlockAppearance(Object session, int capacity, BooleanSupplier generationCurrent) {
@@ -123,7 +130,7 @@ public final class ClientBlockAppearance {
             return metadata == 1 || metadata == 2 ? this.prepareOverworld(rawId, metadata, block, false) : -1;
         if (block == Blocks.snow_layer && block.getClass() == BlockSnow.class)
             return metadata <= 7 ? this.prepareOverworld(rawId, metadata, block, true) : -1;
-        return StaticCubeAppearance.prepare(this.looks, rawId, metadata, new StaticCubeAppearance.Access() {
+        int strict = StaticCubeAppearance.prepare(this.looks, rawId, metadata, new StaticCubeAppearance.Access() {
 
             @Override
             public boolean eligible() {
@@ -135,6 +142,98 @@ public final class ClientBlockAppearance {
                 return ClientBlockAppearance.this.average(block.getIcon(side, metadata));
             }
         }, this::current);
+        return strict >= 0 ? strict : this.prepareApproximate(rawId, metadata, block);
+    }
+
+    /** State-only fallback: never invokes a world renderer or reads neighbouring chunks. */
+    private int prepareApproximate(int rawId, int metadata, Block block) {
+        if (!this.current() || block.getMaterial() == Material.air) return -1;
+        try {
+            int renderType = block.getRenderType();
+            if (renderType < 0) return -1;
+            Material material = block.getMaterial();
+            byte kind = material == Material.lava ? Looks.LAVA
+                : material == Material.glass && !block.isOpaqueCube() ? Looks.GLASS
+                    : renderType == 1 || renderType == 6 || renderType == 40 ? Looks.PLANT : Looks.SOLID;
+            float[] top = this.fallbackFace(block, metadata, 1);
+            float[] side = this.fallbackFace(block, metadata, 3);
+            if (top == null) top = side;
+            if (side == null) side = top;
+            if (top == null) {
+                int color = block.getMapColor(metadata).colorValue;
+                top = rgb(color);
+                side = top;
+            }
+            int tint = block.getRenderColor(metadata);
+            top = multiply(top, tint);
+            side = multiply(side, tint);
+            float[] boxes = kind == Looks.SOLID ? legacyBoxes(block, metadata) : null;
+            int light = Math.max(0, Math.min(15, block.getLightValue()));
+            return this.current() ? this.looks.approximate(rawId, metadata, top, side, light, kind, boxes) : -1;
+        } catch (RuntimeException | LinkageError unsupported) {
+            return -1;
+        }
+    }
+
+    private static float[] rgb(int color) {
+        return new float[] { ((color >> 16) & 255) / 255F, ((color >> 8) & 255) / 255F, (color & 255) / 255F, 1 };
+    }
+
+    private static float[] multiply(float[] face, int tint) {
+        float[] color = rgb(tint);
+        return new float[] { face[0] * color[0], face[1] * color[1], face[2] * color[2], face[3] };
+    }
+
+    private float @Nullable [] fallbackFace(Block block, int metadata, int side) {
+        try {
+            IIcon icon = block.getIcon(side, metadata);
+            if (icon == null) return null;
+            float[] cached = this.fallbackSprites.get(icon);
+            if (cached != null) return cached;
+            float[] result = null;
+            if (icon instanceof TextureAtlasSprite sprite && !"missingno".equals(sprite.getIconName())
+                && sprite.getFrameCount() > 0) {
+                int width = sprite.getIconWidth(), height = sprite.getIconHeight();
+                if (width > 0 && height > 0 && (long) width * height <= 1048576L) {
+                    int[][] frame = sprite.getFrameTextureData(0);
+                    if (frame != null && frame.length > 0 && frame[0] != null && frame[0].length == width * height) {
+                        SpriteAverage average = new SpriteAverage();
+                        for (int pixel : frame[0]) average.add(pixel);
+                        result = average.finish(frame[0].length);
+                    }
+                }
+            }
+            if (result == null || result[3] <= 0) result = this.average(icon, true);
+            if (result != null && result[3] > 0 && this.current()) {
+                if (this.fallbackSprites.size() < 8192) this.fallbackSprites.put(icon, result);
+                return result;
+            }
+        } catch (IOException | RuntimeException | LinkageError unsupported) {
+            // A map colour is preferable to dropping a known state when texture sampling fails.
+        }
+        return null;
+    }
+
+    /** Metadata-only straight stair/slab outlines. Connected corners need a contextual capture. */
+    private static float @Nullable [] legacyBoxes(Block block, int metadata) {
+        if (block instanceof BlockSlab && !block.isOpaqueCube()) {
+            float low = (metadata & 8) == 0 ? 0 : 0.5F;
+            return new float[] { 0, low, 0, 1, low + 0.5F, 1 };
+        }
+        if (block instanceof BlockStairs) {
+            float low = (metadata & 4) == 0 ? 0 : 0.5F;
+            float step = 0.5F - low;
+            float[] boxes = { 0, low, 0, 1, low + 0.5F, 1, 0, step, 0, 1, step + 0.5F, 1 };
+            switch (metadata & 3) {
+                case 0 -> boxes[6] = 0.5F;
+                case 1 -> boxes[9] = 0.5F;
+                case 2 -> boxes[8] = 0.5F;
+                case 3 -> boxes[11] = 0.5F;
+                default -> throw new IllegalStateException("Invalid stair direction");
+            }
+            return boxes;
+        }
+        return null;
     }
 
     public boolean isGrass(int rawId, int metadata) {

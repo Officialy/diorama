@@ -173,6 +173,37 @@ public final class PreparedBlockLooks extends Looks {
         return this.commit(key, face, face, 0, -1, TINT_NONE, SOLID, shapeIndex);
     }
 
+    /** Publish approximate legacy geometry and colours; the caller owns no retained arrays. */
+    public int approximate(int rawId, int metadata, float[] top, float[] side, int emission, byte kind,
+        float @Nullable [] boxes) {
+        this.requireOwner();
+        long key = key(rawId, metadata);
+        int existing = this.existingId(key);
+        if (existing != 0) return existing;
+        checkAverage(top);
+        checkAverage(side);
+        if (emission < 0 || emission > 15 || kind < SOLID || kind > PLANT || kind == WATER)
+            throw new IllegalArgumentException("Invalid approximate material");
+        if (boxes != null) {
+            if (kind != SOLID || boxes.length == 0 || boxes.length % 6 != 0 || boxes.length > 96)
+                throw new IllegalArgumentException("Invalid approximate shape");
+            for (int i = 0; i < boxes.length; i += 6) {
+                for (int axis = 0; axis < 3; axis++) {
+                    float lo = boxes[i + axis], hi = boxes[i + axis + 3];
+                    if (!Float.isFinite(lo) || !Float.isFinite(hi) || lo < 0 || hi > 1 || lo >= hi)
+                        throw new IllegalArgumentException("Invalid approximate bounds");
+                }
+            }
+        }
+        if (this.next == this.kind.length) return -1;
+        int shapeIndex = boxes == null ? 0 : this.internShape(boxes.clone());
+        FaceColor topFace = new FaceColor();
+        FaceColor sideFace = new FaceColor();
+        topFace.add(top, -1);
+        sideFace.add(side, -1);
+        return this.commit(key, topFace, sideFace, emission, -1, TINT_NONE, kind, shapeIndex);
+    }
+
     // Zero is reserved air, so it can signal a new key without allocating or changing payload.
     private int existingId(long key) {
         if (!this.active) return -1;
