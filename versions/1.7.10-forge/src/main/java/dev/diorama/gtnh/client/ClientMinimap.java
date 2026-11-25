@@ -246,10 +246,10 @@ public final class ClientMinimap {
         for (var entry : tiles.entrySet()) {
             if (!DirtyTerrainTiles.intersectsChunk(entry.getKey(), cx, cz)) continue;
             entry.getValue()
-            .invalidate(
-                DirtyTerrainTiles.chunk(entry.getKey(), cx, cz),
-                entry.getKey()
-                    .isCave());
+                .invalidate(
+                    DirtyTerrainTiles.chunk(entry.getKey(), cx, cz),
+                    entry.getKey()
+                        .isCave());
         }
     }
 
@@ -278,9 +278,15 @@ public final class ClientMinimap {
         ClientMinimap hud = installed;
         TerrainWindow input = hud == null ? null : hud.window;
         if (input == null) return "Terrain capture window not initialized";
-        return "Capture radius: " + input.radius() + "; ready chunks: " + input.ready()
-            + "; pending: " + input.pendingCount() + "; missing: " + input.missing()
-            + "; resident tiles: " + hud.tiles.size();
+        return "Capture radius: " + input.radius()
+            + "; ready chunks: "
+            + input.ready()
+            + "; pending: "
+            + input.pendingCount()
+            + "; missing: "
+            + input.missing()
+            + "; resident tiles: "
+            + hud.tiles.size();
     }
 
     private static int captureRadius(Minecraft mc) {
@@ -359,14 +365,15 @@ public final class ClientMinimap {
             }
             if (map != null && map.viewport()
                 .preferredLod() == 1) buildOverview(visible);
-            if (retryTicks > 0 || job != null || TerrainPreviewJob.isBusy() || window.ready() == 0)
-                return;
+            if (retryTicks > 0 || job != null || TerrainPreviewJob.isBusy() || window.ready() == 0) return;
             // Visible tiles first, then pre-bake the rest of the received render-distance footprint.
             List<TileKey> background = window.candidates(layer);
             double playerU = Projection.u(player.posX, player.posZ);
             double playerV = Projection.v(player.posX, player.boundingBox.minY, player.posZ);
-            background.sort(Comparator.comparingDouble(key -> Math.hypot(
-                key.minU() + key.units() * .5 - playerU, key.minV() + key.units() * .5 - playerV)));
+            background.sort(
+                Comparator.comparingDouble(
+                    key -> Math
+                        .hypot(key.minU() + key.units() * .5 - playerU, key.minV() + key.units() * .5 - playerV)));
             LinkedHashSet<TileKey> ordered = new LinkedHashSet<>(live);
             for (TileKey key : background) if (window.hasReady(key)) ordered.add(key);
             TileKey selected = choose(live, window);

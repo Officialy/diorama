@@ -50,8 +50,7 @@ public final class TerrainPreview {
     }
 
     /** Full render-distance input: detached snapshot validation is deferred to the bake worker. */
-    public static Work prepareExtended(PreparedBlockLooks looks, Object token, TileKey key,
-        ChunkSnapshot[] snapshots) {
+    public static Work prepareExtended(PreparedBlockLooks looks, Object token, TileKey key, ChunkSnapshot[] snapshots) {
         return new Work(looks, token, key, Objects.requireNonNull(snapshots, "snapshots"), true);
     }
 
@@ -124,7 +123,8 @@ public final class TerrainPreview {
                 n++;
                 if (!extended) validate(snapshot);
                 else if (snapshot.lookDomain() != this.looks || snapshot.airId() != this.looks.airId()
-                    || snapshot.minSectionY != 0 || snapshot.sectionCount() != 16)
+                    || snapshot.minSectionY != 0
+                    || snapshot.sectionCount() != 16)
                     throw new IllegalArgumentException("Invalid extended snapshot domain or height");
                 if (this.byCoordinate.put(snapshot.key(), snapshot) != null)
                     throw new IllegalArgumentException("Duplicate preview chunk coordinate");

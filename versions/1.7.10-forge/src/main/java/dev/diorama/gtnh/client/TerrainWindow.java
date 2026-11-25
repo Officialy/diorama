@@ -118,7 +118,8 @@ final class TerrainWindow {
         for (ChunkSnapshot snapshot : snapshots) {
             if (snapshot != null && intersects(key, snapshot)) input.add(snapshot);
         }
-        return TerrainPreview.prepareExtended(session.looks(), session.token(), key, input.toArray(new ChunkSnapshot[0]));
+        return TerrainPreview
+            .prepareExtended(session.looks(), session.token(), key, input.toArray(new ChunkSnapshot[0]));
     }
 
     private static boolean intersects(TileKey key, ChunkSnapshot snapshot) {
@@ -170,15 +171,17 @@ final class TerrainWindow {
             }
         }
         // Poll missing slots incrementally; packet notifications still accelerate new arrivals.
-        int probes = Math.max(1, (refresh.slots() + TerrainPreviewRefresh.DISCOVERY_TICKS - 1)
-            / TerrainPreviewRefresh.DISCOVERY_TICKS);
+        int probes = Math.max(
+            1,
+            (refresh.slots() + TerrainPreviewRefresh.DISCOVERY_TICKS - 1) / TerrainPreviewRefresh.DISCOVERY_TICKS);
         for (int i = 0; i < probes; i++) {
             int slot = discoveryCursor++ % refresh.slots();
             if (discoveryCursor == refresh.slots()) discoveryCursor = 0;
             if (refresh.queued(slot)) continue;
             if (statuses[slot] != ChunkCapture.Status.MISSING_CHUNK
                 && statuses[slot] != ChunkCapture.Status.PENDING_APPEARANCE) continue;
-            if (session.access().hasLoadedChunk(refresh.x(slot), refresh.z(slot))) refresh.request(slot, now, 0);
+            if (session.access()
+                .hasLoadedChunk(refresh.x(slot), refresh.z(slot))) refresh.request(slot, now, 0);
             requireCurrent();
         }
         BitSet attempted = new BitSet();

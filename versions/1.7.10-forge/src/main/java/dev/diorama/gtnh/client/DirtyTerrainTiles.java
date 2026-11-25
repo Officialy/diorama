@@ -55,7 +55,8 @@ final class DirtyTerrainTiles {
         double v0 = (z - 1 - NORTH) * SIN - (LAST_Y + 2 + LIGHT_REACH) * COS - OUTLINE_HALO;
         double v1 = (z + 17 + AROUND) * SIN + (1 + DOWN) * COS + OUTLINE_HALO;
         return u0 < tile.minU() + tile.units() && u1 >= tile.minU()
-            && v0 < tile.minV() + tile.units() && v1 >= tile.minV();
+            && v0 < tile.minV() + tile.units()
+            && v1 >= tile.minV();
     }
 
     private static BitSet project(TileKey tile, long x0, long y0, long z0, long x1, long y1, long z1) {
