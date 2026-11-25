@@ -76,7 +76,7 @@ public final class ClientBlockAppearance {
         this.atlas = this.minecraft.getTextureMapBlocks();
         this.looks = new PreparedBlockLooks(session, capacity);
         if (!this.current()) throw new IllegalStateException("Appearance resource epoch is not ready");
-        LegacyGeometryCapture.reset();
+        LegacyGeometryCapture.reset(this.minecraft.theWorld);
     }
 
     public PreparedBlockLooks looks() {

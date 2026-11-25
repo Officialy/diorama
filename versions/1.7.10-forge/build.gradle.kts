@@ -251,7 +251,9 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/mixins/client/RenderBlocksCaptureMixin" to mapOf(
                     "renderBlockByRenderType(Lnet/minecraft/block/Block;III)Z" to "Lnet/minecraft/client/renderer/RenderBlocks;func_147805_b(Lnet/minecraft/block/Block;III)Z"),
                 "dev/diorama/gtnh/mixins/client/TessellatorCaptureMixin" to mapOf(
-                    "addVertexWithUV(DDDDD)V" to "Lnet/minecraft/client/renderer/Tessellator;func_78374_a(DDDDD)V"),
+                    "addVertexWithUV(DDDDD)V" to "Lnet/minecraft/client/renderer/Tessellator;func_78374_a(DDDDD)V",
+                    "setTextureUV(DD)V" to "Lnet/minecraft/client/renderer/Tessellator;func_78385_a(DD)V",
+                    "addVertex(DDD)V" to "Lnet/minecraft/client/renderer/Tessellator;func_78377_a(DDD)V"),
                 "dev/diorama/gtnh/mixins/client/ChunkMutationMixin" to mapOf(
                     "setBlockMetadata(IIII)Z" to "Lnet/minecraft/world/chunk/Chunk;func_76589_b(IIII)Z",
                     "fillChunk([BIIZ)V" to "Lnet/minecraft/world/chunk/Chunk;func_76607_a([BIIZ)V",
@@ -268,7 +270,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             }
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
-            val expectedNested = setOf("dev/diorama/gtnh/client/LegacyWaypointBook\$Point.class",
+            val expectedNested = setOf("dev/diorama/gtnh/client/LegacyGeometryCapture\$Capture.class", "dev/diorama/gtnh/client/LegacyWaypointBook\$Point.class",
                 "dev/diorama/gtnh/capture/TerrainPreview\$Work.class",
                 "dev/diorama/gtnh/client/SharedTileIo\$Read.class",
                 "dev/diorama/gtnh/client/SharedTileIo\$Request.class",
