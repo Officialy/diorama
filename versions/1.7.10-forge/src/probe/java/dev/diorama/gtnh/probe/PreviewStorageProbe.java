@@ -140,25 +140,44 @@ public final class PreviewStorageProbe {
         require(first.equals(again) && !first.equals(second) && !first.equals(otherServer), "namespace isolation");
         PreviewTileStore original = PreviewTileStore.forSave(first, "dim-7-surface");
         original.write(CHILD, pixels);
-        require(Arrays.equals(pixels, PreviewTileStore.forSave(again, "dim-7-surface").read(CHILD)),
+        require(
+            Arrays.equals(
+                pixels,
+                PreviewTileStore.forSave(again, "dim-7-surface")
+                    .read(CHILD)),
             "remote reconnect restores tile");
-        require(PreviewTileStore.forSave(second, "dim-7-surface").read(CHILD) == null, "new world isolated");
-        require(PreviewTileStore.forSave(first, "dim-8-surface").read(CHILD) == null, "dimension isolated");
-        require(PreviewTileStore.forSave(first, "dim-7-cave").read(CHILD) == null, "projection isolated");
-        require(PreviewTileStore.forSave(otherServer, "dim-7-surface").read(CHILD) == null, "server isolated");
+        require(
+            PreviewTileStore.forSave(second, "dim-7-surface")
+                .read(CHILD) == null,
+            "new world isolated");
+        require(
+            PreviewTileStore.forSave(first, "dim-8-surface")
+                .read(CHILD) == null,
+            "dimension isolated");
+        require(
+            PreviewTileStore.forSave(first, "dim-7-cave")
+                .read(CHILD) == null,
+            "projection isolated");
+        require(
+            PreviewTileStore.forSave(otherServer, "dim-7-surface")
+                .read(CHILD) == null,
+            "server isolated");
         long previous;
         try (DataInputStream in = new DataInputStream(Files.newInputStream(first.resolve("session.lock")))) {
             previous = in.readLong();
         }
         writeSessionLock(first.resolve("session.lock"), previous ^ 1L);
         expect(IOException.class, () -> original.write(CHILD, pixels));
-        require(MapDimensionIdentity.supportsHeight(256) && !MapDimensionIdentity.supportsHeight(128),
+        require(
+            MapDimensionIdentity.supportsHeight(256) && !MapDimensionIdentity.supportsHeight(128),
             "only audited height accepted");
-        require(MapDimensionIdentity.surface(7, false, false) && !MapDimensionIdentity.surface(7, true, false),
+        require(
+            MapDimensionIdentity.surface(7, false, false) && !MapDimensionIdentity.surface(7, true, false),
             "modded dimensions use sky policy");
         require(MapDimensionIdentity.surface(1, true, true), "End remains surface");
         for (int id : new int[] { Integer.MIN_VALUE, -7, 0, 1, 7, Integer.MAX_VALUE }) {
-            require(MapDimensionIdentity.validSuffix(MapDimensionIdentity.suffix(id, false, false)),
+            require(
+                MapDimensionIdentity.validSuffix(MapDimensionIdentity.suffix(id, false, false)),
                 "signed dimension id roundtrips");
         }
         for (String bad : new String[] { "dim-07-surface", "dim-2147483648-cave", "../other", "dim--0-cave" })
