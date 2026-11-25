@@ -187,8 +187,9 @@ final class SharedTerrainMapScreen extends GuiScreen {
         drawWaypoints(mouseX, mouseY);
         if (belongsTo(mc.theWorld)) {
             String status = dimension == null ? I18n.format("diorama.map.unsupported_dimension")
-                : dimension.suffix().startsWith("dim-") ? I18n.format("diorama.map.dimension.custom", dimension.id())
-                    : I18n.format("diorama.map.dimension." + dimension.suffix());
+                : dimension.suffix()
+                    .startsWith("dim-") ? I18n.format("diorama.map.dimension.custom", dimension.id())
+                        : I18n.format("diorama.map.dimension." + dimension.suffix());
             int bottom = height - fontRendererObj.FONT_HEIGHT - 6;
             drawString(fontRendererObj, status, 6, bottom, 0xFFDDDDDD);
             int layer = ClientMinimap.layer(mc);
