@@ -274,6 +274,15 @@ public final class ClientMinimap {
             && world == mc.theWorld;
     }
 
+    static String coverageStatus() {
+        ClientMinimap hud = installed;
+        TerrainWindow input = hud == null ? null : hud.window;
+        if (input == null) return "Terrain capture window not initialized";
+        return "Capture radius: " + input.radius() + "; ready chunks: " + input.ready()
+            + "; pending: " + input.pendingCount() + "; missing: " + input.missing()
+            + "; resident tiles: " + hud.tiles.size();
+    }
+
     private static int captureRadius(Minecraft mc) {
         int configured = Integer.getInteger("diorama.captureRadius", mc.gameSettings.renderDistanceChunks);
         return Math.max(1, Math.min(TerrainPreviewRefresh.MAX_RADIUS, configured));
@@ -360,7 +369,8 @@ public final class ClientMinimap {
                 key.minU() + key.units() * .5 - playerU, key.minV() + key.units() * .5 - playerV)));
             LinkedHashSet<TileKey> ordered = new LinkedHashSet<>(live);
             for (TileKey key : background) if (window.hasReady(key)) ordered.add(key);
-            TileKey selected = choose(new ArrayList<>(ordered), window);
+            TileKey selected = choose(live, window);
+            if (selected == null) selected = choose(new ArrayList<>(ordered), window);
             if (selected == null) return;
             CachedTile entry = detail(selected);
             if (entry == null || !current(mc)) return;
@@ -370,6 +380,7 @@ public final class ClientMinimap {
             BitSet patches = !selected.isCave() && entry.pixels != null
                 && !entry.needsFull
                 && entry.top == work.topY()
+                && !entry.dirty.isEmpty()
                 && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
             job = patches == null ? TerrainPreviewJob.startDetail(work, entry.pixels)
                 : TerrainPreviewJob.startDetailPatches(work, entry.pixels, patches);
@@ -390,7 +401,7 @@ public final class ClientMinimap {
         TileKey stale = null;
         for (TileKey key : wanted) {
             CachedTile entry = tiles.get(key);
-            if (entry == null || entry.pixels == null) return key;
+            if (entry == null || (entry.pixels == null && entry.needsFull)) return key;
             if (stale == null && (entry.needsFull || !entry.dirty.isEmpty() || entry.top != input.topY(key)))
                 stale = key;
         }

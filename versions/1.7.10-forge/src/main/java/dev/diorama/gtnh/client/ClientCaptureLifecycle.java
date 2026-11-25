@@ -251,6 +251,7 @@ public final class ClientCaptureLifecycle {
                 + LegacyGeometryCapture.sampleCount()
                 + "; unresolved sampled states: "
                 + session.missing.size());
+        lines.add(ClientMinimap.coverageStatus());
         if (missing) session.describeMissing(lines);
         return lines;
     }

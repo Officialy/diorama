@@ -114,7 +114,6 @@ final class TerrainWindow {
 
     TerrainPreview.Work prepare(TileKey key) {
         requireCurrent();
-        if (radius() == 1) return TerrainPreview.prepare(session.looks(), session.token(), key, snapshots);
         List<ChunkSnapshot> input = new ArrayList<>();
         for (ChunkSnapshot snapshot : snapshots) {
             if (snapshot != null && intersects(key, snapshot)) input.add(snapshot);
@@ -165,9 +164,8 @@ final class TerrainWindow {
         if (appearanceCooldown == 0 && LegacyGeometryCapture.consumeChanged()) {
             appearanceCooldown = 20;
             for (int slot = 0; slot < refresh.slots(); slot++) {
-                if (statuses[slot] != ChunkCapture.Status.MISSING_CHUNK) {
+                if (snapshots[slot] != null) {
                     refresh.request(slot, now, TerrainPreviewRefresh.CHANGE);
-                    if (availabilityChanged != null) availabilityChanged.accept(refresh.x(slot), refresh.z(slot));
                 }
             }
         }
@@ -177,7 +175,9 @@ final class TerrainWindow {
         for (int i = 0; i < probes; i++) {
             int slot = discoveryCursor++ % refresh.slots();
             if (discoveryCursor == refresh.slots()) discoveryCursor = 0;
-            if (statuses[slot] != ChunkCapture.Status.MISSING_CHUNK || refresh.queued(slot)) continue;
+            if (refresh.queued(slot)) continue;
+            if (statuses[slot] != ChunkCapture.Status.MISSING_CHUNK
+                && statuses[slot] != ChunkCapture.Status.PENDING_APPEARANCE) continue;
             if (session.access().hasLoadedChunk(refresh.x(slot), refresh.z(slot))) refresh.request(slot, now, 0);
             requireCurrent();
         }
