@@ -20,7 +20,7 @@ jobs:
           java-version: '25'
       - name: Build and verify
         working-directory: versions/1.7.10-forge
-        run: bash gradlew assemble verifyBaseline
+        run: bash gradlew assemble verifyBaseline --continue
       - uses: actions/upload-artifact@v4
         with:
           name: diorama-gtnh
