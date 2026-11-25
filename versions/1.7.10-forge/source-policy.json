@@ -416,6 +416,14 @@
     {
       "path": "dev/diorama/gtnh/client/LegacyGeometrySample.java",
       "fqn": "dev.diorama.gtnh.client.LegacyGeometrySample"
+    },
+    {
+      "path": "dev/diorama/gtnh/capture/MapDimensionIdentity.java",
+      "fqn": "dev.diorama.gtnh.capture.MapDimensionIdentity"
+    },
+    {
+      "path": "dev/diorama/gtnh/capture/RemoteWorldIdentity.java",
+      "fqn": "dev.diorama.gtnh.capture.RemoteWorldIdentity"
     }
   ],
   "deferred": [

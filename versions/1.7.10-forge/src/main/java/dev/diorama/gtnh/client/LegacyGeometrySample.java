@@ -6,7 +6,8 @@ import org.jspecify.annotations.Nullable;
 final class LegacyGeometrySample {
 
     final float[] vertices;
-    @Nullable Object token;
+    @Nullable
+    Object token;
     long key;
     int x, y, z, count;
     double u, v;

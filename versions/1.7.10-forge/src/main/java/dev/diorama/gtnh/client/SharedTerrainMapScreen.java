@@ -36,7 +36,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
     }
 
     boolean belongsTo(WorldClient current) {
-        return initialized && current == world && ClientMapDimension.of(current) == dimension;
+        return initialized && current == world && java.util.Objects.equals(ClientMapDimension.of(current), dimension);
     }
 
     MapViewportController viewport() {
@@ -154,7 +154,8 @@ final class SharedTerrainMapScreen extends GuiScreen {
         drawWaypoints(mouseX, mouseY);
         if (belongsTo(mc.theWorld)) {
             String status = dimension == null ? I18n.format("diorama.map.unsupported_dimension")
-                : I18n.format("diorama.map.dimension." + dimension.suffix());
+                : dimension.suffix().startsWith("dim-") ? I18n.format("diorama.map.dimension.custom", dimension.id())
+                    : I18n.format("diorama.map.dimension." + dimension.suffix());
             int bottom = height - fontRendererObj.FONT_HEIGHT - 6;
             drawString(fontRendererObj, status, 6, bottom, 0xFFDDDDDD);
             int layer = ClientMinimap.layer(mc);

@@ -14,8 +14,31 @@ Put the 1.7.10 Forge jar in the client's `mods` folder. The server does not need
 
 - CPU terrain baking, an isometric minimap and a fullscreen map with drag, scroll zoom and recentering.
 - `M` opens the fullscreen map, `B` adds a waypoint and `U` lists waypoints. Rebind these under Minecraft's Controls; the minimap visibility key is unbound by default.
-- Surface and cave views, with a cave slice that follows the player. Singleplayer surface tiles and waypoints are saved per dimension. Cave tiles and multiplayer maps and waypoints are session-only.
+- Surface and cave views, with a cave slice that follows the player. Singleplayer surface tiles and waypoints are saved per dimension. Multiplayer surface tiles and waypoints can optionally persist with an explicit identity; cave tiles remain session-only.
 - New terrain is drawn from nearby, loaded chunks as you explore; panning does not load distant chunks. Some block appearances are incomplete. The newer versions' HUD zoom, manual cave depth, radar, drawing and GPU baking are not included.
+
+## Modded dimensions and multiplayer persistence
+
+All client dimensions with the audited 256-block storage height are accepted. Sky-visible dimensions
+use the surface map, no-sky dimensions use cave mapping (the vanilla End retains surface mapping).
+Modded dimension IDs have independent cache folders; other heights remain unsupported.
+
+Multiplayer persistence is disabled by default. For a single, stable world on a server, add both JVM
+arguments (replace the example values with the exact address in the Multiplayer menu and a unique
+world label):
+
+```text
+-Ddiorama.remoteServer=example.org:25565
+-Ddiorama.remoteWorld=main-world-2026
+```
+
+Only the exact configured endpoint can persist. The local namespace is a hash of endpoint and
+world label; map tiles and waypoints are separated by dimension. Changing the label creates a new
+namespace, so use a new label after a server reset or when changing sub-worlds. Do not enable
+this on proxy networks that switch worlds under the same endpoint unless you can guarantee
+that the label identifies the current world. The server provides no reliable sub-world ID.
+Do not run two client instances against the same cache simultaneously. No server installation is
+required. Cave tiles are still session-only.
 
 ## Experimental legacy geometry capture
 

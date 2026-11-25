@@ -30,3 +30,4 @@ diorama.waypoint.session_only=Session only; not saved on this server
 diorama.waypoint.unavailable=Waypoint storage unavailable
 diorama.waypoint.invalid=Enter a name and valid Overworld coordinates
 diorama.waypoint.save_failed=Could not save waypoints
+diorama.map.dimension.custom=Dimension %s

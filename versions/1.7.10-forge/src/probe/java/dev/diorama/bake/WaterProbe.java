@@ -89,7 +89,8 @@ public final class WaterProbe {
             WaterPng.averageSpriteFrame(new ByteArrayInputStream(data), 3, 1, true),
             average(pixels, 3),
             "rectangular animated sprite first frame");
-        require(WaterPng.averageSpriteFrame(new ByteArrayInputStream(data), 3, 1, false) == null,
+        require(
+            WaterPng.averageSpriteFrame(new ByteArrayInputStream(data), 3, 1, false) == null,
             "unanimated sprite cannot silently accept extra frames");
         require(decode(data, 3, 1, true) == null, "strict water contract unchanged");
     }

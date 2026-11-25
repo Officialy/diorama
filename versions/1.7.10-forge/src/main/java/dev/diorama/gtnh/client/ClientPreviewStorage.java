@@ -6,12 +6,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.server.integrated.IntegratedServer;
 
 import org.jspecify.annotations.Nullable;
 
 import dev.diorama.gtnh.capture.PreviewTileStore;
+import dev.diorama.gtnh.capture.RemoteWorldIdentity;
 
 /** Resolves an integrated save without opening its world data or keeping a server reference on the worker. */
 final class ClientPreviewStorage {
@@ -21,7 +23,7 @@ final class ClientPreviewStorage {
     static @Nullable PreviewTileStore forWorld(Minecraft minecraft, WorldClient world) {
         ClientMapDimension dimension = ClientMapDimension.of(world);
         if (dimension == null) return null;
-        Path save = integratedSavePath(minecraft, world);
+        Path save = savePath(minecraft, world);
         if (save == null) return null;
         try {
             return PreviewTileStore.forSave(save, dimension.suffix());
@@ -31,7 +33,19 @@ final class ClientPreviewStorage {
     }
 
     static @Nullable Path savePath(Minecraft minecraft, WorldClient world) {
-        return ClientMapDimension.of(world) == null ? null : integratedSavePath(minecraft, world);
+        if (ClientMapDimension.of(world) == null || minecraft.theWorld != world) return null;
+        if (minecraft.isIntegratedServerRunning()) return integratedSavePath(minecraft, world);
+        ServerData server = minecraft.getCurrentServerData();
+        if (server == null) return null;
+        try {
+            return RemoteWorldIdentity.open(
+                minecraft.mcDataDir.toPath(),
+                server.serverIP,
+                System.getProperty("diorama.remoteServer"),
+                System.getProperty("diorama.remoteWorld"));
+        } catch (IOException | RuntimeException invalid) {
+            return null;
+        }
     }
 
     private static @Nullable Path integratedSavePath(Minecraft minecraft, WorldClient world) {

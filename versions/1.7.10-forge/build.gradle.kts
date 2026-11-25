@@ -51,7 +51,7 @@ val probe = sourceSets.create("probe") {
             "dev/diorama/gtnh/capture/ChunkCapture.java", "dev/diorama/bake/PreparedBlockLooks.java",
             "dev/diorama/gtnh/capture/OpaquePng.java", "dev/diorama/gtnh/capture/EpochFence.java",
             "dev/diorama/gtnh/capture/StaticCubeAppearance.java", "dev/diorama/gtnh/capture/LegacyGeometryMath.java", "dev/diorama/gtnh/capture/TerrainMetrics.java",
-            "dev/diorama/gtnh/capture/PreviewOverview.java", "dev/diorama/gtnh/capture/PreviewTileStore.java",
+            "dev/diorama/gtnh/capture/PreviewOverview.java", "dev/diorama/gtnh/capture/PreviewTileStore.java", "dev/diorama/gtnh/capture/MapDimensionIdentity.java", "dev/diorama/gtnh/capture/RemoteWorldIdentity.java",
             "dev/diorama/gtnh/client/TerrainPreviewFrame.java", "dev/diorama/gtnh/client/TerrainPreviewRefresh.java",
             "dev/diorama/gtnh/client/LegacyWaypointBook.java", "dev/diorama/gtnh/client/MinimapOptions.java", "dev/diorama/gtnh/client/MinimapViewport.java", "dev/diorama/gtnh/client/MapViewportController.java", "dev/diorama/gtnh/client/SharedTileIo.java", "dev/diorama/gtnh/client/DirtyTerrainTiles.java", "dev/diorama/gtnh/client/HudTexturePatchPixels.java",
             "dev/diorama/gtnh/capture/SectionBlocks.java", "dev/diorama/gtnh/capture/TintCapture.java",

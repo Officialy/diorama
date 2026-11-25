@@ -54,8 +54,8 @@ final class ClientWaypoints {
     }
 
     static void observe(Minecraft mc) {
-        // Remote worlds have no reliable sub-world identity (a proxy can keep the play handler).
-        // Do not carry a RAM book into a replacement WorldClient, even across a dimension change.
+        // Remote persistence requires a deliberate endpoint/world label; never reuse a live RAM book
+        // across a replacement WorldClient, even across a dimension change.
         if (current != null && !current.valid(mc)) current = null;
         ClientMapDimension dimension = ClientMapDimension.of(mc.theWorld);
         if (current == null && dimension != null && mc.thePlayer != null) {

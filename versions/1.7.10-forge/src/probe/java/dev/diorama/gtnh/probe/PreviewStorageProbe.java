@@ -18,8 +18,10 @@ import dev.diorama.Projection;
 import dev.diorama.bake.BlockLight;
 import dev.diorama.bake.Mipmaps;
 import dev.diorama.bake.TileKey;
+import dev.diorama.gtnh.capture.MapDimensionIdentity;
 import dev.diorama.gtnh.capture.PreviewOverview;
 import dev.diorama.gtnh.capture.PreviewTileStore;
+import dev.diorama.gtnh.capture.RemoteWorldIdentity;
 
 /** Offline fixtures for the bounded preview's canonical pixel kernel and isolated storage subset. */
 public final class PreviewStorageProbe {
@@ -39,6 +41,7 @@ public final class PreviewStorageProbe {
             merged = persistence(temp, overview);
             saveSession(temp, merged);
             dimensionStores(temp, merged);
+            remoteStores(temp, merged);
         } finally {
             Path[] paths;
             try (Stream<Path> tree = Files.walk(temp)) {
@@ -123,6 +126,43 @@ public final class PreviewStorageProbe {
                         .read(CHILD)),
                 "reopened dimension root preserves its own raster: " + suffixes[i]);
         }
+    }
+
+    private static void remoteStores(Path temp, int[] pixels) throws Exception {
+        require(RemoteWorldIdentity.open(temp, "a", null, "world") == null, "opt-in required");
+        require(RemoteWorldIdentity.open(temp, "a", "b", "world") == null, "endpoint must match");
+        require(RemoteWorldIdentity.open(temp, "a", "a", "") == null, "explicit world required");
+        require(RemoteWorldIdentity.open(temp, "a", "a", "bad\nlabel") == null, "control characters rejected");
+        Path first = RemoteWorldIdentity.open(temp, "a", "a", "world");
+        Path again = RemoteWorldIdentity.open(temp, "a", "a", "world");
+        Path second = RemoteWorldIdentity.open(temp, "a", "a", "world-2");
+        Path otherServer = RemoteWorldIdentity.open(temp, "b", "b", "world");
+        require(first.equals(again) && !first.equals(second) && !first.equals(otherServer), "namespace isolation");
+        PreviewTileStore original = PreviewTileStore.forSave(first, "dim-7-surface");
+        original.write(CHILD, pixels);
+        require(Arrays.equals(pixels, PreviewTileStore.forSave(again, "dim-7-surface").read(CHILD)),
+            "remote reconnect restores tile");
+        require(PreviewTileStore.forSave(second, "dim-7-surface").read(CHILD) == null, "new world isolated");
+        require(PreviewTileStore.forSave(first, "dim-8-surface").read(CHILD) == null, "dimension isolated");
+        require(PreviewTileStore.forSave(first, "dim-7-cave").read(CHILD) == null, "projection isolated");
+        require(PreviewTileStore.forSave(otherServer, "dim-7-surface").read(CHILD) == null, "server isolated");
+        long previous;
+        try (DataInputStream in = new DataInputStream(Files.newInputStream(first.resolve("session.lock")))) {
+            previous = in.readLong();
+        }
+        writeSessionLock(first.resolve("session.lock"), previous ^ 1L);
+        expect(IOException.class, () -> original.write(CHILD, pixels));
+        require(MapDimensionIdentity.supportsHeight(256) && !MapDimensionIdentity.supportsHeight(128),
+            "only audited height accepted");
+        require(MapDimensionIdentity.surface(7, false, false) && !MapDimensionIdentity.surface(7, true, false),
+            "modded dimensions use sky policy");
+        require(MapDimensionIdentity.surface(1, true, true), "End remains surface");
+        for (int id : new int[] { Integer.MIN_VALUE, -7, 0, 1, 7, Integer.MAX_VALUE }) {
+            require(MapDimensionIdentity.validSuffix(MapDimensionIdentity.suffix(id, false, false)),
+                "signed dimension id roundtrips");
+        }
+        for (String bad : new String[] { "dim-07-surface", "dim-2147483648-cave", "../other", "dim--0-cave" })
+            require(!MapDimensionIdentity.validSuffix(bad), "noncanonical path rejected");
     }
 
     private static void writeSessionLock(Path path, long id) throws IOException {

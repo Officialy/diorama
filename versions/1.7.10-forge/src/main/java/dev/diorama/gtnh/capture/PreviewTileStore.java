@@ -68,8 +68,8 @@ public final class PreviewTileStore {
 
     /** Bind the dimension-specific cache to vanilla's single lock at the integrated save root. */
     public static PreviewTileStore forSave(Path directory, String dimensionSuffix) throws IOException {
-        if (!"overworld".equals(dimensionSuffix) && !"nether".equals(dimensionSuffix) && !"end".equals(dimensionSuffix))
-            throw new IllegalArgumentException("Expected a vanilla map dimension suffix");
+        if (!MapDimensionIdentity.validSuffix(dimensionSuffix))
+            throw new IllegalArgumentException("Expected a valid map dimension suffix");
         Path save = directory.toAbsolutePath()
             .normalize();
         Path lock = save.resolve("session.lock");
@@ -80,7 +80,7 @@ public final class PreviewTileStore {
     }
 
     private static long readSession(Path lock) throws IOException {
-        try (DataInputStream in = new DataInputStream(Files.newInputStream(lock))) {
+        try (DataInputStream in = new DataInputStream(Files.newInputStream(lock, LinkOption.NOFOLLOW_LINKS))) {
             long id = in.readLong();
             if (in.read() != -1) throw new IOException("Invalid save session lock");
             return id;
