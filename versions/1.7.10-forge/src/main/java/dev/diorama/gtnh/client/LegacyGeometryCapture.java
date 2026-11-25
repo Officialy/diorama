@@ -86,11 +86,7 @@ public final class LegacyGeometryCapture {
         x -= originX;
         y -= originY;
         z -= originZ;
-        if (count == MAX_VERTICES || !local(x)
-            || !local(y)
-            || !local(z)
-            || !local(u)
-            || !local(v)) {
+        if (count == MAX_VERTICES || !local(x) || !local(y) || !local(z) || !local(u) || !local(v)) {
             collecting = false;
             return;
         }

@@ -199,8 +199,9 @@ public final class ClientBlockAppearance {
                 if (colours[7] > 0) side = new float[] { colours[4], colours[5], colours[6], 1 };
             }
             if (observed != null && kind != Looks.SOLID) return -1;
-            float[] boxes = kind == Looks.SOLID ? observed != null ? LegacyGeometryMath.bounds(observed)
-                : legacyBoxes(block, metadata) : null;
+            float[] boxes = kind == Looks.SOLID
+                ? observed != null ? LegacyGeometryMath.bounds(observed) : legacyBoxes(block, metadata)
+                : null;
             if (observed != null && boxes == null) return -1;
             int light = Math.max(0, Math.min(15, block.getLightValue()));
             return this.current()
@@ -223,7 +224,7 @@ public final class ClientBlockAppearance {
                 field = TextureMap.class.getDeclaredField("field_94252_e");
             }
             field.setAccessible(true);
-            if (!(field.get(this.atlas) instanceof Map<?, ?> uploaded) || uploaded.size() > 65536) return;
+            if (!(field.get(this.atlas) instanceof Map<?, ?>uploaded) || uploaded.size() > 65536) return;
             int count = 0;
             for (Object value : uploaded.values()) {
                 if (!(value instanceof TextureAtlasSprite sprite) || "missingno".equals(sprite.getIconName())) continue;
@@ -253,8 +254,8 @@ public final class ClientBlockAppearance {
     /** Resolve a quad to one stitched sprite, rejecting ambiguous/multi-sprite UVs. */
     private @Nullable TextureAtlasSprite sprite(float[] quad) {
         this.indexAtlas();
-        List<TextureAtlasSprite> candidates = this.atlasBins.get(
-            bin((quad[1] + quad[3]) * 0.5F) * 32 + bin((quad[0] + quad[2]) * 0.5F));
+        List<TextureAtlasSprite> candidates = this.atlasBins
+            .get(bin((quad[1] + quad[3]) * 0.5F) * 32 + bin((quad[0] + quad[2]) * 0.5F));
         if (candidates == null) return null;
         TextureAtlasSprite match = null;
         for (TextureAtlasSprite sprite : candidates) {
@@ -299,7 +300,9 @@ public final class ClientBlockAppearance {
             if (width > 0 && height > 0 && (long) width * height <= 1048576L && sprite.getFrameCount() > 0) {
                 int[][] frame = sprite.getFrameTextureData(0);
                 float du = sprite.getMaxU() - sprite.getMinU(), dv = sprite.getMaxV() - sprite.getMinV();
-                if (du > 0 && dv > 0 && frame != null && frame.length > 0
+                if (du > 0 && dv > 0
+                    && frame != null
+                    && frame.length > 0
                     && frame[0] != null
                     && frame[0].length == width * height) {
                     SpriteAverage average = new SpriteAverage();
