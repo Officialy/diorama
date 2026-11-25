@@ -25,9 +25,10 @@ stair outlines. Unknown registry states remain unknown. The optional JVM flag
 custom render types and some connected vanilla blocks on the client appearance owner's thread.
 It does not invoke renderers, draw anything or modify vertex buffers. A bounded sample of up to
 256 textured vertices per state is reduced to up to sixteen local cuboids or an enclosing box.
-UV coordinates are observed but not yet used to recover per-quad texture colours. Geometry is a
-representative state approximation, not a per-position neighbour or tile-entity model. Previously
-baked tiles may need to refresh. Angelica may bypass these hooks; no compatibility or visual quality
+UV rectangles are resolved against the stitched atlas; available CPU frame data is sampled on a
+bounded 8x8 grid, otherwise full-sprite colour is used. Projected quad areas weight top/side colour.
+No GPU readback is performed; renderer vertex lighting/tints are not applied. Geometry is a
+representative state approximation, not a per-position neighbour or tile-entity model. New observations request a coalesced recapture of nearby tiles at most once per second. Angelica may bypass these hooks; no compatibility or visual quality
 claim is made without client testing. The option defaults off.
 
 ## Known compatibility issue

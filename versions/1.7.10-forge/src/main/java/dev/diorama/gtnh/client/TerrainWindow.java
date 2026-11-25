@@ -25,6 +25,7 @@ final class TerrainWindow {
     private final ChunkSnapshot[] snapshots = new ChunkSnapshot[TerrainPreviewRefresh.SLOTS];
     private final ChunkCapture.Status[] statuses = new ChunkCapture.Status[TerrainPreviewRefresh.SLOTS];
     private int discoveryTicks, ready, pending, missing;
+    private int appearanceCooldown;
 
     TerrainWindow(ClientCaptureLifecycle.Session session, int cx, int cz, BooleanSupplier accepts,
         @Nullable TerrainWindow from) {
@@ -39,6 +40,7 @@ final class TerrainWindow {
         this.refresh = new TerrainPreviewRefresh(cx, cz, System.nanoTime());
         if (from != null && from.session == session) {
             discoveryTicks = from.discoveryTicks;
+            appearanceCooldown = from.appearanceCooldown;
             for (int slot = 0; slot < TerrainPreviewRefresh.SLOTS; slot++) {
                 int old = from.refresh.slot(refresh.x(slot), refresh.z(slot));
                 if (old < 0) continue;
@@ -98,6 +100,16 @@ final class TerrainWindow {
     boolean tick(int budget) {
         requireCurrent();
         long now = System.nanoTime();
+        if (appearanceCooldown > 0) appearanceCooldown--;
+        if (appearanceCooldown == 0 && LegacyGeometryCapture.consumeChanged()) {
+            appearanceCooldown = 20;
+            for (int slot = 0; slot < TerrainPreviewRefresh.SLOTS; slot++) {
+                if (statuses[slot] != ChunkCapture.Status.MISSING_CHUNK) {
+                    refresh.request(slot, now, TerrainPreviewRefresh.CHANGE);
+                    if (availabilityChanged != null) availabilityChanged.accept(refresh.x(slot), refresh.z(slot));
+                }
+            }
+        }
         if (++discoveryTicks == TerrainPreviewRefresh.DISCOVERY_TICKS) {
             discoveryTicks = 0;
             for (int slot = 0; slot < TerrainPreviewRefresh.SLOTS; slot++) {
