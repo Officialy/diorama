@@ -1,7 +1,5 @@
 name: GTNH build
 on:
-  push:
-    branches: [ci/gtnh-renderer-uv]
   workflow_dispatch:
 permissions:
   contents: read
