@@ -90,12 +90,12 @@ public final class LegacyGeometryMath {
                 };
             }
             case 8 -> switch (metadata) {
-                case 2 -> new float[] { 0, 0, 0.875F, 1, 1, 1 };
-                case 3 -> new float[] { 0, 0, 0, 1, 1, 0.125F };
-                case 4 -> new float[] { 0.875F, 0, 0, 1, 1, 1 };
-                case 5 -> new float[] { 0, 0, 0, 0.125F, 1, 1 };
-                default -> null;
-            };
+                    case 2 -> new float[] { 0, 0, 0.875F, 1, 1, 1 };
+                    case 3 -> new float[] { 0, 0, 0, 1, 1, 0.125F };
+                    case 4 -> new float[] { 0.875F, 0, 0, 1, 1, 1 };
+                    case 5 -> new float[] { 0, 0, 0, 0.125F, 1, 1 };
+                    default -> null;
+                };
             case 11 -> new float[] { 0.375F, 0, 0.375F, 0.625F, 1, 0.625F };
             case 13 -> new float[] { thin, 0, thin, 1 - thin, 1, 1 - thin };
             case 14 -> new float[] { 0, 0, 0, 1, 0.5625F, 1 };
@@ -105,12 +105,11 @@ public final class LegacyGeometryMath {
                 : new float[] { 0.375F, 0.25F, 0, 0.625F, 1, 1 };
             case 22 -> new float[] { thin, 0, thin, 1 - thin, 0.875F, 1 - thin };
             case 23 -> new float[] { 0, 0, 0, 1, thin, 1 };
-            case 24 -> new float[] { 0, 0, 0, 1, 0.3125F, 1, 0, 0.3125F, 0, 0.125F, 1, 1,
-                0.875F, 0.3125F, 0, 1, 1, 1, 0.125F, 0.3125F, 0, 0.875F, 1, 0.125F,
-                0.125F, 0.3125F, 0.875F, 0.875F, 1, 1 };
+            case 24 -> new float[] { 0, 0, 0, 1, 0.3125F, 1, 0, 0.3125F, 0, 0.125F, 1, 1, 0.875F, 0.3125F, 0, 1, 1, 1,
+                0.125F, 0.3125F, 0, 0.875F, 1, 0.125F, 0.125F, 0.3125F, 0.875F, 0.875F, 1, 1 };
             case 32 -> new float[] { 0.25F, 0, 0.25F, 0.75F, 1, 0.75F };
-            case 35 -> new float[] { 0, 0.625F, 0, 1, 1, 1, 0.25F, 0.25F, 0.25F, 0.75F, 0.625F, 0.75F,
-                0.375F, 0, 0.375F, 0.625F, 0.25F, 0.625F };
+            case 35 -> new float[] { 0, 0.625F, 0, 1, 1, 1, 0.25F, 0.25F, 0.25F, 0.75F, 0.625F, 0.75F, 0.375F, 0,
+                0.375F, 0.625F, 0.25F, 0.625F };
             default -> null;
         };
     }

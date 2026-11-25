@@ -270,7 +270,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             }
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
-            val expectedNested = setOf("dev/diorama/gtnh/client/LegacyGeometryCapture\$Capture.class", "dev/diorama/gtnh/client/LegacyWaypointBook\$Point.class",
+            val expectedNested = setOf("dev/diorama/gtnh/client/LegacyWaypointBook\$Point.class",
                 "dev/diorama/gtnh/capture/TerrainPreview\$Work.class",
                 "dev/diorama/gtnh/client/SharedTileIo\$Read.class",
                 "dev/diorama/gtnh/client/SharedTileIo\$Request.class",
@@ -376,7 +376,9 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/client/ClientCaptureAccess\$LiveChunk.class",
                 "dev/diorama/gtnh/client/ClientCaptureAccess\$LiveSection.class")
                 .map { "META-INF/versions/21/$it" }.toSet()
-            require(classes.keys.filter { it.startsWith("META-INF/versions/") }.toSet() == expectedMr) { "Unexpected MR classes" }
+            require(classes.keys.filter { it.startsWith("META-INF/versions/") }.toSet() == expectedMr) {
+                "Unexpected MR classes: extra=${classes.keys.filter { it.startsWith(\"META-INF/versions/\") }.toSet() - expectedMr}, missing=${expectedMr - classes.keys}"
+            }
             require(expectedMr.all { classes[it] == 65 }) { "Expected Java21 MR bytecode" }
         }
         report.get().asFile.apply {

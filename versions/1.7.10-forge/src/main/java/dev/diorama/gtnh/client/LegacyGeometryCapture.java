@@ -29,7 +29,7 @@ public final class LegacyGeometryCapture {
     private static final int MAX_STATES = 512;
     private static final String ANGELICA_SLICE = "com.gtnewhorizons.angelica.rendering.celeritas.world.WorldSlice";
     private static final Map<Long, float[]> SAMPLES = new ConcurrentHashMap<>();
-    private static final ThreadLocal<Capture> CAPTURE = new ThreadLocal<>();
+    private static final ThreadLocal<LegacyGeometrySample> CAPTURE = new ThreadLocal<>();
     private static final Map<Class<?>, Method> WORLD_METHODS = new ConcurrentHashMap<>();
     private static volatile @Nullable Thread owner;
     private static volatile @Nullable Object epoch;
@@ -107,7 +107,7 @@ public final class LegacyGeometryCapture {
 
     public static void begin(Block block, @Nullable IBlockAccess access, int x, int y, int z) {
         if (!eligibleThread()) return;
-        Capture capture = CAPTURE.get();
+        LegacyGeometrySample capture = CAPTURE.get();
         if (capture != null) capture.active = false;
         Object token = epoch;
         WorldClient expected = world;
@@ -120,7 +120,7 @@ public final class LegacyGeometryCapture {
             long state = key(rawId, metadata);
             if (SAMPLES.containsKey(state) || !sameWorld(access, expected) || epoch != token) return;
             if (capture == null) {
-                capture = new Capture();
+                capture = new LegacyGeometrySample(MAX_VERTICES);
                 CAPTURE.set(capture);
             }
             capture.token = token;
@@ -137,15 +137,15 @@ public final class LegacyGeometryCapture {
         }
     }
 
-    private static @Nullable Capture current() {
+    private static @Nullable LegacyGeometrySample current() {
         if (!eligibleThread()) return null;
-        Capture capture = CAPTURE.get();
+        LegacyGeometrySample capture = CAPTURE.get();
         return capture != null && capture.active && capture.token == epoch ? capture : null;
     }
 
     /** Observe setTextureUV/addVertex as well as addVertexWithUV without double-counting. */
     public static void texture(double u, double v) {
-        Capture capture = current();
+        LegacyGeometrySample capture = current();
         if (capture == null) return;
         capture.u = u;
         capture.v = v;
@@ -153,19 +153,19 @@ public final class LegacyGeometryCapture {
     }
 
     public static void vertexWithUv(double x, double y, double z, double u, double v) {
-        Capture capture = current();
+        LegacyGeometrySample capture = current();
         if (capture == null) return;
         capture.explicitUv = true;
         vertex(capture, x, y, z, u, v);
     }
 
     public static void vertexWithUvEnd() {
-        Capture capture = current();
+        LegacyGeometrySample capture = current();
         if (capture != null) capture.explicitUv = false;
     }
 
     public static void directVertex(double x, double y, double z) {
-        Capture capture = current();
+        LegacyGeometrySample capture = current();
         if (capture == null || capture.explicitUv) return;
         if (!capture.directUv) {
             capture.active = false;
@@ -174,15 +174,11 @@ public final class LegacyGeometryCapture {
         vertex(capture, x, y, z, capture.u, capture.v);
     }
 
-    private static void vertex(Capture capture, double x, double y, double z, double u, double v) {
+    private static void vertex(LegacyGeometrySample capture, double x, double y, double z, double u, double v) {
         x -= capture.x;
         y -= capture.y;
         z -= capture.z;
-        if (capture.count == MAX_VERTICES || !local(x)
-            || !local(y)
-            || !local(z)
-            || !local(u)
-            || !local(v)) {
+        if (capture.count == MAX_VERTICES || !local(x) || !local(y) || !local(z) || !local(u) || !local(v)) {
             capture.active = false;
             return;
         }
@@ -203,7 +199,7 @@ public final class LegacyGeometryCapture {
     }
 
     public static void end(Block block, int x, int y, int z, boolean rendered) {
-        Capture capture = current();
+        LegacyGeometrySample capture = current();
         if (capture == null) return;
         capture.active = false;
         if (!rendered || x != capture.x
@@ -216,9 +212,9 @@ public final class LegacyGeometryCapture {
         if (LegacyGeometryMath.bounds(sample) != null) publish(capture, sample);
     }
 
-    private static synchronized void publish(Capture capture, float[] sample) {
-        if (capture.token != epoch || SAMPLES.size() >= MAX_STATES
-            || SAMPLES.putIfAbsent(capture.key, sample) != null) return;
+    private static synchronized void publish(LegacyGeometrySample capture, float[] sample) {
+        if (capture.token != epoch || SAMPLES.size() >= MAX_STATES || SAMPLES.putIfAbsent(capture.key, sample) != null)
+            return;
         changed = true;
         if (TerrainMetrics.ENABLED) {
             TerrainMetrics.add(TerrainMetrics.Counter.GEOMETRY_OBSERVED, 1);
@@ -226,13 +222,4 @@ public final class LegacyGeometryCapture {
         }
     }
 
-    private static final class Capture {
-
-        final float[] vertices = new float[MAX_VERTICES * 5];
-        @Nullable Object token;
-        long key;
-        int x, y, z, count;
-        double u, v;
-        boolean active, directUv, explicitUv;
-    }
 }

@@ -34,6 +34,7 @@ public final class WaterProbe {
     public static void main(String[] args) throws Exception {
         pngs();
         rejectedPngs();
+        rectangularSprite();
         payloads();
         captureAndBaker();
         StringBuilder hex = new StringBuilder();
@@ -79,6 +80,18 @@ public final class WaterProbe {
             new float[4],
             "invisible first frame stays empty despite visible later frame");
         require(ImageIO.getUseCache() == cache, "no global ImageIO cache mutation");
+    }
+
+    private static void rectangularSprite() throws IOException {
+        int[] pixels = { 0xFFFF0000, 0x8000FF00, 0xFF0000FF, 0xFFFFFFFF, 0, 0 };
+        byte[] data = png(3, 2, pixels);
+        floats(
+            WaterPng.averageSpriteFrame(new ByteArrayInputStream(data), 3, 1, true),
+            average(pixels, 3),
+            "rectangular animated sprite first frame");
+        require(WaterPng.averageSpriteFrame(new ByteArrayInputStream(data), 3, 1, false) == null,
+            "unanimated sprite cannot silently accept extra frames");
+        require(decode(data, 3, 1, true) == null, "strict water contract unchanged");
     }
 
     private static void rejectedPngs() throws IOException {

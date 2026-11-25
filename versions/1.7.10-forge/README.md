@@ -52,3 +52,12 @@ Building requires JDK 25 even if you play on Java 8. From the repository root (u
 The reobfuscated installable jar is in `versions/1.7.10-forge/build/libs/`; do not distribute the dev, probe, sources or pre-downgrade jars. `verifyBaseline` checks the artifact and offline baseline; the full build adds strict compatibility checks. Neither command launches Minecraft or replaces client acceptance testing.
 
 Build inputs are pinned in the [build script](build.gradle.kts), [Gradle properties](gradle.properties) and [dependency file](dependencies.gradle). The [source policy](source-policy.json) selects canonical sources and platform adapters. The optional EndlessIDs adapter compiles against version 1.7.4 without bundling it. See the [port design](../docs/gtnh-port-design.md) for architecture and scope.
+
+### Client acceptance checklist
+
+Use the same area and camera angle on the GTNH server before and after installing the build.
+Test the default fallback first, then enable experimental geometry and finally worker capture.
+Use F3+A to request chunk remeshing if the initial meshes predate the map session. With terrain
+metrics enabled, compare unknown-look cells and observed-state counters, and check frame time,
+resource reload, world switch and reconnect. This is not a substitute for testing actual modded
+blocks and Angelica versions in game.

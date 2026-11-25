@@ -26,6 +26,16 @@ jobs:
       - name: Build and verify
         working-directory: versions/1.7.10-forge
         run: bash gradlew assemble verifyBaseline --continue
+      - name: List JAR bytecode products on failure
+        if: failure()
+        working-directory: versions/1.7.10-forge
+        run: |
+          for jar in build/libs/*.jar; do
+            if [ -f "$jar" ]; then
+              echo "$jar"
+              unzip -Z1 "$jar" | grep '^META-INF/versions/' || true
+            fi
+          done
       - name: Save formatter patch on failure
         if: failure()
         working-directory: versions/1.7.10-forge
