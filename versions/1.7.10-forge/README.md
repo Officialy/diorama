@@ -17,6 +17,19 @@ Put the 1.7.10 Forge jar in the client's `mods` folder. The server does not need
 - Surface and cave views, with a cave slice that follows the player. Singleplayer surface tiles and waypoints are saved per dimension. Cave tiles and multiplayer maps and waypoints are session-only.
 - New terrain is drawn from nearby, loaded chunks as you explore; panning does not load distant chunks. Some block appearances are incomplete. The newer versions' HUD zoom, manual cave depth, radar, drawing and GPU baking are not included.
 
+## Experimental legacy geometry capture
+
+The fallback appearance path uses atlas-frame colours, map colours and metadata-based slab/straight
+stair outlines. Unknown registry states remain unknown. The optional JVM flag
+`-Ddiorama.experimentalGeometry=true` enables a passive RenderBlocks/Tessellator observer, sampling
+custom render types and some connected vanilla blocks on the client appearance owner's thread.
+It does not invoke renderers, draw anything or modify vertex buffers. A bounded sample of up to
+256 textured vertices per state is reduced to up to sixteen local cuboids or an enclosing box.
+UV coordinates are observed but not yet used to recover per-quad texture colours. Geometry is a
+representative state approximation, not a per-position neighbour or tile-entity model. Previously
+baked tiles may need to refresh. Angelica may bypass these hooks; no compatibility or visual quality
+claim is made without client testing. The option defaults off.
+
 ## Known compatibility issue
 
 Strict JVM downgrade probes report differences in nested record `toString()` and `List.of(null)` behavior. No in-game impact has been observed in the Java 8 smoke test. The strict checks remain enabled.

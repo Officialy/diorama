@@ -53,7 +53,7 @@ public final class PreparedBlockLooks extends Looks {
     }
 
     private static long key(int rawId, int metadata, int context) {
-        if (rawId < 0 || metadata < 0 || metadata > 65535 || context < 0 || context > 2)
+        if (rawId < 0 || metadata < 0 || metadata > 65535 || context < 0 || context > 3)
             throw new IllegalArgumentException("Invalid raw block ID or 16-bit metadata");
         // Widen before shifting: 31 raw-ID bits, 16 metadata bits and explicit context never collide.
         return ((long) rawId << 18) | ((long) metadata << 2) | context;
@@ -176,8 +176,15 @@ public final class PreparedBlockLooks extends Looks {
     /** Publish approximate legacy geometry and colours; the caller owns no retained arrays. */
     public int approximate(int rawId, int metadata, float[] top, float[] side, int emission, byte kind,
         float @Nullable [] boxes) {
+        return this.approximate(rawId, metadata, 0, top, side, emission, kind, boxes);
+    }
+
+    /** Context 3 is the experimental renderer-observed representative geometry. */
+    public int approximate(int rawId, int metadata, int context, float[] top, float[] side, int emission, byte kind,
+        float @Nullable [] boxes) {
         this.requireOwner();
-        long key = key(rawId, metadata);
+        if (context != 0 && context != 3) throw new IllegalArgumentException("Invalid approximation context");
+        long key = key(rawId, metadata, context);
         int existing = this.existingId(key);
         if (existing != 0) return existing;
         checkAverage(top);

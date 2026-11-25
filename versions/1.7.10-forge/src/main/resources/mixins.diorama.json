@@ -8,7 +8,9 @@
   "client": [
     "client.ResourceReloadMixin",
     "client.BlockAtlasMixin",
-    "client.ChunkMutationMixin"
+    "client.ChunkMutationMixin",
+    "client.RenderBlocksCaptureMixin",
+    "client.TessellatorCaptureMixin"
   ],
   "server": [],
   "injectors": {

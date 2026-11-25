@@ -396,6 +396,18 @@
     {
       "path": "dev/diorama/gtnh/mixins/client/BlockAtlasMixin.java",
       "fqn": "dev.diorama.gtnh.mixins.client.BlockAtlasMixin"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/LegacyGeometryCapture.java",
+      "fqn": "dev.diorama.gtnh.client.LegacyGeometryCapture"
+    },
+    {
+      "path": "dev/diorama/gtnh/mixins/client/RenderBlocksCaptureMixin.java",
+      "fqn": "dev.diorama.gtnh.mixins.client.RenderBlocksCaptureMixin"
+    },
+    {
+      "path": "dev/diorama/gtnh/mixins/client/TessellatorCaptureMixin.java",
+      "fqn": "dev.diorama.gtnh.mixins.client.TessellatorCaptureMixin"
     }
   ],
   "deferred": [

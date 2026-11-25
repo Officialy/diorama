@@ -69,6 +69,7 @@ public final class ClientBlockAppearance {
         this.atlas = this.minecraft.getTextureMapBlocks();
         this.looks = new PreparedBlockLooks(session, capacity);
         if (!this.current()) throw new IllegalStateException("Appearance resource epoch is not ready");
+        LegacyGeometryCapture.reset();
     }
 
     public PreparedBlockLooks looks() {
@@ -87,6 +88,7 @@ public final class ClientBlockAppearance {
             || this.minecraft.getTextureMapBlocks() != this.atlas) {
             this.active = false;
             this.looks.invalidate();
+            LegacyGeometryCapture.clear();
             return false;
         }
         return true;
@@ -103,6 +105,8 @@ public final class ClientBlockAppearance {
         if (rawId < 0 || metadata < 0 || metadata > 65535) return -1;
         Block block = Block.getBlockById(rawId);
         if (block == null || Block.getIdFromBlock(block) != rawId) return -1;
+        int geometry = context == 0 ? this.looks.find(rawId, metadata, 3) : -1;
+        if (geometry >= 0) return geometry;
         int id = block == Blocks.air && block.getClass() == BlockAir.class && context == 0 ? this.looks.airId()
             : grass(block, metadata) && context != 0 ? this.looks.find(rawId, metadata, context)
                 : context == 0 ? this.looks.find(rawId, metadata) : -1;
@@ -118,6 +122,16 @@ public final class ClientBlockAppearance {
         if (!this.current()) return -1;
         if (context < 0 || context > GrassContext.SNOWY) return -1;
         if (rawId < 0 || metadata < 0 || metadata > 65535) return -1;
+        if (context == 0 && this.looks.find(rawId, metadata, 3) < 0) {
+            float[] observed = LegacyGeometryCapture.boxes(rawId, metadata);
+            if (observed != null) {
+                Block candidate = Block.getBlockById(rawId);
+                if (candidate != null && Block.getIdFromBlock(candidate) == rawId && !grass(candidate, metadata)) {
+                    int captured = this.prepareApproximate(rawId, metadata, candidate, observed);
+                    if (captured >= 0) return captured;
+                }
+            }
+        }
         int existing = this.find(rawId, metadata, context);
         if (existing >= 0) return existing;
         Block block = Block.getBlockById(rawId);
@@ -147,6 +161,10 @@ public final class ClientBlockAppearance {
 
     /** State-only fallback: never invokes a world renderer or reads neighbouring chunks. */
     private int prepareApproximate(int rawId, int metadata, Block block) {
+        return this.prepareApproximate(rawId, metadata, block, null);
+    }
+
+    private int prepareApproximate(int rawId, int metadata, Block block, float @Nullable [] observed) {
         if (!this.current() || block.getMaterial() == Material.air) return -1;
         try {
             int renderType = block.getRenderType();
@@ -167,9 +185,10 @@ public final class ClientBlockAppearance {
             int tint = block.getRenderColor(metadata);
             top = multiply(top, tint);
             side = multiply(side, tint);
-            float[] boxes = kind == Looks.SOLID ? legacyBoxes(block, metadata) : null;
+            if (observed != null && kind != Looks.SOLID) return -1;
+            float[] boxes = kind == Looks.SOLID ? observed != null ? observed : legacyBoxes(block, metadata) : null;
             int light = Math.max(0, Math.min(15, block.getLightValue()));
-            return this.current() ? this.looks.approximate(rawId, metadata, top, side, light, kind, boxes) : -1;
+            return this.current() ? this.looks.approximate(rawId, metadata, observed == null ? 0 : 3, top, side, light, kind, boxes) : -1;
         } catch (RuntimeException | LinkageError unsupported) {
             return -1;
         }

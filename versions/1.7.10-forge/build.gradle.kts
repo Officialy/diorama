@@ -237,7 +237,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             require(mixinConfig == mapOf("required" to true, "minVersion" to "0.8.5-GTNH",
                 "package" to "dev.diorama.gtnh.mixins", "refmap" to "mixins.diorama.refmap.json",
                 "compatibilityLevel" to "JAVA_8", "mixins" to emptyList<String>(),
-                "client" to listOf("client.ResourceReloadMixin", "client.BlockAtlasMixin", "client.ChunkMutationMixin"),
+                "client" to listOf("client.ResourceReloadMixin", "client.BlockAtlasMixin", "client.ChunkMutationMixin", "client.RenderBlocksCaptureMixin", "client.TessellatorCaptureMixin"),
                 "server" to emptyList<String>(), "injectors" to mapOf("defaultRequire" to 1))) { "Client hook configuration drift" }
             @Suppress("UNCHECKED_CAST")
             val refmap = JsonSlurper().parse(zip.getInputStream(zip.getEntry("mixins.diorama.refmap.json"))) as Map<String, Any>
@@ -248,6 +248,10 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/mixins/client/BlockAtlasMixin" to mapOf(
                     "loadTexture(Lnet/minecraft/client/resources/IResourceManager;)V" to "Lnet/minecraft/client/renderer/texture/TextureMap;func_110551_a(Lnet/minecraft/client/resources/IResourceManager;)V",
                     "loadTextureAtlas(Lnet/minecraft/client/resources/IResourceManager;)V" to "Lnet/minecraft/client/renderer/texture/TextureMap;func_110571_b(Lnet/minecraft/client/resources/IResourceManager;)V"),
+                "dev/diorama/gtnh/mixins/client/RenderBlocksCaptureMixin" to mapOf(
+                    "renderBlockByRenderType(Lnet/minecraft/block/Block;III)Z" to "Lnet/minecraft/client/renderer/RenderBlocks;func_147805_b(Lnet/minecraft/block/Block;III)Z"),
+                "dev/diorama/gtnh/mixins/client/TessellatorCaptureMixin" to mapOf(
+                    "addVertexWithUV(DDDDD)V" to "Lnet/minecraft/client/renderer/Tessellator;func_78374_a(DDDDD)V"),
                 "dev/diorama/gtnh/mixins/client/ChunkMutationMixin" to mapOf(
                     "setBlockMetadata(IIII)Z" to "Lnet/minecraft/world/chunk/Chunk;func_76589_b(IIII)Z",
                     "fillChunk([BIIZ)V" to "Lnet/minecraft/world/chunk/Chunk;func_76607_a([BIIZ)V",
