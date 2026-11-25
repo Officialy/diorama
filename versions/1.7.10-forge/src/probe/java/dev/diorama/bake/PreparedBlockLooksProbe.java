@@ -55,7 +55,8 @@ public final class PreparedBlockLooksProbe {
         require(table.shape[id] != 0 && table.emission[id] == 7, "shape and light retained");
         boxes[4] = 1;
         require(table.shapes[table.shape[id]][4] == 0.5F, "shape input copied");
-        expect(IllegalArgumentException.class,
+        expect(
+            IllegalArgumentException.class,
             () -> table.approximate(6, 0, TOP, SIDE, 0, Looks.SOLID, new float[] { 0, 0, 0, 2, 1, 1 }));
         require(table.find(6, 0) == -1, "invalid geometry not published");
         require(table.approximate(6, 0, TOP, SIDE, 0, Looks.GLASS, null) == 2, "glass fallback");
