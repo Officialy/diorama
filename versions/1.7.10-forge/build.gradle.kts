@@ -377,7 +377,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/client/ClientCaptureAccess\$LiveSection.class")
                 .map { "META-INF/versions/21/$it" }.toSet()
             require(classes.keys.filter { it.startsWith("META-INF/versions/") }.toSet() == expectedMr) {
-                "Unexpected MR classes: extra=${classes.keys.filter { it.startsWith(\"META-INF/versions/\") }.toSet() - expectedMr}, missing=${expectedMr - classes.keys}"
+                "Unexpected MR classes: extra=${classes.keys.filter { it.startsWith("META-INF/versions/") }.toSet() - expectedMr}, missing=${expectedMr - classes.keys}"
             }
             require(expectedMr.all { classes[it] == 65 }) { "Expected Java21 MR bytecode" }
         }
