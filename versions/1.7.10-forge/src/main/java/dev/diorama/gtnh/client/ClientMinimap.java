@@ -48,8 +48,8 @@ public final class ClientMinimap {
     private static final int OVERVIEW_TILES = 16;
     private static final int PATCH_FALLBACK = 160;
     private static final int PATCH_SIDE = Projection.TILE_PIXELS / TileImage.BLOCK;
-    private static final int CAPTURES_PER_TICK = 8;
-    private static final long CAPTURE_BUDGET_NS = 3_000_000L;
+    private static final int CAPTURES_PER_TICK = Math.max(1, Math.min(24, Integer.getInteger("diorama.capturesPerTick", 12)));
+    private static final long CAPTURE_BUDGET_NS = Math.max(1, Math.min(12, Integer.getInteger("diorama.captureBudgetMs", 4))) * 1_000_000L;
     private static @Nullable ClientMinimap installed;
 
     private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(CACHE_TILES + 1, 0.75f, true);
@@ -67,11 +67,8 @@ public final class ClientMinimap {
     private float[] sunTint, shadowTint;
     private int centerX, centerZ;
     private long textureGeneration;
-    private @Nullable TerrainPreviewJob job;
-    private @Nullable TileKey jobKey;
-    private long jobRevision;
-    private int jobTop;
-    private @Nullable BitSet jobPatches;
+    private int activeBakes;
+    private long completedBakes, provisionalBakes, bakeSequence;
     private @Nullable ProbeGlState drawing;
     private boolean updating;
     private @Nullable WorldClient lastFrameWorld;
@@ -286,7 +283,13 @@ public final class ClientMinimap {
             + "; missing: "
             + input.missing()
             + "; resident tiles: "
-            + hud.tiles.size();
+            + hud.tiles.size()
+            + "; active bakes: "
+            + hud.activeBakes
+            + "; completed: "
+            + hud.completedBakes
+            + "; provisional: "
+            + hud.provisionalBakes;
     }
 
     private static int captureRadius(Minecraft mc) {
@@ -306,9 +309,8 @@ public final class ClientMinimap {
             }
             SharedTerrainMapScreen map = mc.currentScreen instanceof SharedTerrainMapScreen screen
                 && screen.belongsTo(mc.theWorld) ? screen : null;
-            if (map == null && !canShow(mc)) {
-                return; // Never schedule terrain under unrelated GUIs.
-            }
+            // Continue mapping while playing, even with HUD hidden or an inventory open.
+            if (map == null && !options.visible && !Boolean.getBoolean("diorama.backgroundCapture")) return;
             WorldClient active = mc.theWorld;
             EntityClientPlayerMP player = mc.thePlayer;
             ClientMapDimension dimension = ClientMapDimension.of(active);
@@ -338,9 +340,9 @@ public final class ClientMinimap {
                 centerZ = cz;
                 window = new TerrainWindow(session, cx, cz, radius, () -> current(mc), window, this::dirtyChunk);
             }
-            window.tick(CAPTURES_PER_TICK, CAPTURE_BUDGET_NS);
-            if (!current(mc)) return;
             finish(mc);
+            if (!current(mc)) return;
+            window.tick(CAPTURES_PER_TICK, CAPTURE_BUDGET_NS);
             if (!current(mc)) return;
             io.drain(this::restore);
             flushWrites();
@@ -365,7 +367,7 @@ public final class ClientMinimap {
             }
             if (map != null && map.viewport()
                 .preferredLod() == 1) buildOverview(visible);
-            if (retryTicks > 0 || job != null || TerrainPreviewJob.isBusy() || window.ready() == 0) return;
+            if (retryTicks > 0 || TerrainPreviewJob.availableDetailSlots() == 0 || window.ready() == 0) return;
             // Visible tiles first, then pre-bake the rest of the received render-distance footprint.
             List<TileKey> background = window.candidates(layer);
             double playerU = Projection.u(player.posX, player.posZ);
@@ -376,26 +378,33 @@ public final class ClientMinimap {
                         .hypot(key.minU() + key.units() * .5 - playerU, key.minV() + key.units() * .5 - playerV)));
             LinkedHashSet<TileKey> ordered = new LinkedHashSet<>(live);
             for (TileKey key : background) if (window.hasReady(key)) ordered.add(key);
-            TileKey selected = choose(live, window);
-            if (selected == null) selected = choose(new ArrayList<>(ordered), window);
-            if (selected == null) return;
-            CachedTile entry = detail(selected);
-            if (entry == null || !current(mc)) return;
-            long revision = entry.revision;
-            TerrainPreview.Work work = window.prepare(selected);
-            if (!current(mc) || entry.revision != revision) return;
-            BitSet patches = !selected.isCave() && entry.pixels != null
-                && !entry.needsFull
-                && entry.top == work.topY()
-                && !entry.dirty.isEmpty()
-                && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
-            job = patches == null ? TerrainPreviewJob.startDetail(work, entry.pixels)
-                : TerrainPreviewJob.startDetailPatches(work, entry.pixels, patches);
-            if (job != null) {
-                jobKey = selected;
-                jobRevision = revision;
-                jobTop = work.topY();
-                jobPatches = patches;
+            // All first renders take priority over repeat refinements. Avoid holding a queue of
+            // obsolete Work objects: only prepare when a worker is available.
+            List<TileKey> candidates = new ArrayList<>(ordered);
+            if (candidates.size() > CACHE_TILES - 8) candidates = candidates.subList(0, CACHE_TILES - 8);
+            for (int slots = TerrainPreviewJob.availableDetailSlots(); slots > 0; slots--) {
+                TileKey selected = choose(candidates, window);
+                if (selected == null) break;
+                CachedTile entry = detail(selected);
+                if (entry == null || !current(mc)) return;
+                long revision = entry.revision;
+                TerrainPreview.Work work = window.prepare(selected);
+                if (!current(mc) || entry.revision != revision) return;
+                BitSet patches = !selected.isCave() && entry.pixels != null
+                    && !entry.needsFull
+                    && entry.top == work.topY()
+                    && !entry.dirty.isEmpty()
+                    && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
+                TerrainPreviewJob job = patches == null ? TerrainPreviewJob.startDetail(work, entry.pixels)
+                    : TerrainPreviewJob.startDetailPatches(work, entry.pixels, patches);
+                if (job == null) break;
+                entry.job = job;
+                entry.jobRevision = revision;
+                entry.jobTop = work.topY();
+                entry.jobPatches = patches;
+                entry.jobHistory = entry.pixels;
+                entry.lastAttempt = ++bakeSequence;
+                activeBakes++;
             }
         } catch (RuntimeException failure) {
             backoff(failure);
@@ -406,49 +415,80 @@ public final class ClientMinimap {
 
     private @Nullable TileKey choose(List<TileKey> wanted, TerrainWindow input) {
         TileKey stale = null;
+        long oldest = Long.MAX_VALUE;
         for (TileKey key : wanted) {
             CachedTile entry = tiles.get(key);
-            if (entry == null || (entry.pixels == null && entry.needsFull)) return key;
-            if (stale == null && (entry.needsFull || !entry.dirty.isEmpty() || entry.top != input.topY(key)))
+            if (entry == null) return key;
+            if (entry.job != null) continue;
+            if (entry.lastAttempt == 0 && entry.needsFull) return key;
+            if (entry.lastAttempt < oldest
+                && (entry.needsFull || !entry.dirty.isEmpty() || entry.top != input.topY(key))) {
                 stale = key;
+                oldest = entry.lastAttempt;
+            }
         }
         return stale;
     }
 
     private void finish(Minecraft mc) {
-        TerrainPreviewJob finished = job;
-        TileKey key = jobKey;
-        if (finished == null || key == null || !finished.done()) return;
-        TerrainPreviewFrame frame = finished.takeFrame();
-        String failure = finished.failure();
-        BitSet patches = jobPatches;
-        discardJob();
         if (!current(mc)) return;
-        CachedTile entry = tiles.get(key);
-        if (entry == null || jobRevision != entry.revision || key.layer() != layer || window.topY(key) != jobTop)
-            return;
-        if (failure != null || frame == null) {
-            retryTicks = 100;
-            entry.needsFull = true;
-            LOG.warn("Diorama minimap tile bake failed: {}", failure == null ? "missing result" : failure);
-            return;
-        }
-        entry.dirty.clear();
-        entry.needsFull = false;
-        entry.top = jobTop;
-        if (frame.detail() != null && frame.detail() != entry.pixels) {
-            entry.pixels = frame.detail();
-            entry.savePending = persistent && !key.isCave();
-            if (patches == null) entry.pendingUpload = null;
-            else if (entry.pendingUpload != null) entry.pendingUpload.or(patches);
+        for (var item : tiles.entrySet()) {
+            CachedTile entry = item.getValue();
+            TerrainPreviewJob finished = entry.job;
+            if (finished == null || !finished.done()) continue;
+            TileKey key = item.getKey();
+            TerrainPreviewFrame frame = finished.takeFrame();
+            String failure = finished.failure();
+            BitSet patches = entry.jobPatches;
+            finished.close();
+            entry.job = null;
+            entry.jobPatches = null;
+            activeBakes--;
+            boolean sameHistory = entry.jobHistory == entry.pixels;
+            entry.jobHistory = null;
+            if (key.layer() != layer || !sameHistory) {
+                entry.needsFull = true;
+                continue;
+            }
+            if (failure != null || frame == null) {
+                entry.needsFull = true;
+                LOG.warn("Diorama minimap tile bake failed: {}", failure == null ? "missing result" : failure);
+                continue;
+            }
+            // A newer chunk snapshot no longer throws away visible progress. Publish the
+            // completed raster provisionally, retain dirty flags, and schedule a refinement.
+            // The session and history checks above still fence world changes and disk restores.
+            boolean stable = entry.jobRevision == entry.revision && window.topY(key) == entry.jobTop;
+            if (stable) {
+                entry.dirty.clear();
+                entry.needsFull = false;
+                completedBakes++;
+            } else {
+                entry.needsFull = true;
+                provisionalBakes++;
+            }
+            entry.top = entry.jobTop;
+            if (frame.detail() != null && frame.detail() != entry.pixels) {
+                entry.pixels = frame.detail();
+                if (stable) entry.savePending = persistent && !key.isCave();
+                if (!stable || patches == null) entry.pendingUpload = null;
+                else if (entry.pendingUpload != null) entry.pendingUpload.or(patches);
+            } else if (stable && entry.pixels != null && persistent && !key.isCave()) {
+                entry.savePending = true;
+            }
         }
     }
 
     private void discardJob() {
-        if (job != null) job.close();
-        job = null;
-        jobKey = null;
-        jobPatches = null;
+        for (CachedTile entry : tiles.values()) {
+            if (entry.job == null) continue;
+            entry.job.close();
+            entry.job = null;
+            entry.jobHistory = null;
+            entry.jobPatches = null;
+            entry.needsFull = true;
+        }
+        activeBakes = 0;
     }
 
     private @Nullable CachedTile detail(TileKey key) {
@@ -466,8 +506,7 @@ public final class ClientMinimap {
         while (entries.hasNext()) {
             var entry = entries.next();
             CachedTile oldest = entry.getValue();
-            if (detail && (entry.getKey()
-                .equals(jobKey) || oldest.savePending)) continue;
+            if (detail && (oldest.job != null || oldest.savePending)) continue;
             entries.remove();
             textureGeneration++;
             if (oldest.texture != null) try (ProbeGlState state = new ProbeGlState()) {
@@ -541,6 +580,7 @@ public final class ClientMinimap {
         io.reset(null);
         persistent = false;
         discardJob();
+        completedBakes = provisionalBakes = bakeSequence = 0;
         window = null;
         session = null;
         world = null;
@@ -822,7 +862,11 @@ public final class ClientMinimap {
     private static final class CachedTile {
 
         private final BitSet dirty = new BitSet();
-        private long revision;
+        private long revision, lastAttempt, jobRevision;
+        private int jobTop;
+        private @Nullable TerrainPreviewJob job;
+        private int @Nullable [] jobHistory;
+        private @Nullable BitSet jobPatches;
         private boolean readRequested, savePending;
         private int[][] children;
         private int top;

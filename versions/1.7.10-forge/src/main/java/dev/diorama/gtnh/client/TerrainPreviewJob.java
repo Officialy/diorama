@@ -2,7 +2,9 @@ package dev.diorama.gtnh.client;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -18,6 +20,7 @@ import dev.diorama.gtnh.capture.TerrainPreview;
 public final class TerrainPreviewJob implements AutoCloseable {
 
     private static Thread busy;
+    private static final List<Thread> detailWorkers = new ArrayList<>();
     private Supplier<TerrainPreviewFrame> task;
     private final boolean acceptedWrite;
     private final Thread thread;
@@ -46,13 +49,47 @@ public final class TerrainPreviewJob implements AutoCloseable {
 
     /** HUD requests just L0; it does not build/restore an overview or write storage. */
     static @Nullable TerrainPreviewJob startDetail(TerrainPreview.Work work, int @Nullable [] history) {
-        return startTask(() -> detailFrame(() -> work.bakeDetail(history)));
+        return startParallel(() -> detailFrame(() -> work.bakeDetail(history)), workerLimit());
     }
 
     /** The client retains its own mask for upload; the worker gets an independent copy. */
     static @Nullable TerrainPreviewJob startDetailPatches(TerrainPreview.Work work, int[] history, BitSet patches) {
         BitSet detached = (BitSet) patches.clone();
-        return startTask(() -> detailFrame(() -> work.bakeDetailPatches(history, detached)));
+        return startParallel(() -> detailFrame(() -> work.bakeDetailPatches(history, detached)), workerLimit());
+    }
+
+    static int workerLimit() {
+        int recommended = Math.max(1, Math.min(3, Runtime.getRuntime().availableProcessors() / 4));
+        return Math.max(1, Math.min(4, Integer.getInteger("diorama.bakeWorkers", recommended)));
+    }
+
+    static synchronized int availableDetailSlots() {
+        pruneWorkers();
+        return Math.max(0, workerLimit() - detailWorkers.size());
+    }
+
+    private static void pruneWorkers() {
+        detailWorkers.removeIf(thread -> !thread.isAlive());
+    }
+
+    /** Independent bounded detail jobs, sharing only immutable snapshots and published looks. */
+    static synchronized @Nullable TerrainPreviewJob startParallel(Supplier<TerrainPreviewFrame> task, int limit) {
+        Objects.requireNonNull(task, "task");
+        if (limit < 1 || limit > 4) throw new IllegalArgumentException("Invalid detail worker limit");
+        pruneWorkers();
+        if (detailWorkers.size() >= limit || (busy != null && busy.isAlive())) return null;
+        TerrainPreviewJob job = new TerrainPreviewJob(task, false);
+        detailWorkers.add(job.thread);
+        try {
+            if (TerrainMetrics.ENABLED) job.submittedAt = System.nanoTime();
+            job.thread.setPriority(Thread.NORM_PRIORITY - 1);
+            job.thread.start();
+        } catch (RuntimeException | Error error) {
+            detailWorkers.remove(job.thread);
+            job.task = null;
+            throw error;
+        }
+        return job;
     }
 
     private static TerrainPreviewFrame detailFrame(Supplier<int @Nullable []> bake) {
@@ -92,7 +129,8 @@ public final class TerrainPreviewJob implements AutoCloseable {
     private static synchronized @Nullable TerrainPreviewJob startTask(Supplier<TerrainPreviewFrame> task,
         boolean acceptedWrite) {
         Objects.requireNonNull(task, "task");
-        if (isBusy()) return null;
+        pruneWorkers();
+        if (isBusy() || !detailWorkers.isEmpty()) return null;
         TerrainPreviewJob job = new TerrainPreviewJob(task, acceptedWrite);
         busy = job.thread;
         try {
@@ -109,7 +147,8 @@ public final class TerrainPreviewJob implements AutoCloseable {
     public static synchronized boolean isBusy() {
         // Only a truly terminated thread frees the slot, not done/discard/interrupt.
         if (busy != null && !busy.isAlive()) busy = null;
-        return busy != null;
+        pruneWorkers();
+        return busy != null || !detailWorkers.isEmpty();
     }
 
     private void run() {

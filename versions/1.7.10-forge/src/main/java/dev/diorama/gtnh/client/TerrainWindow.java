@@ -235,7 +235,7 @@ final class TerrainWindow {
 
     private void requestRecorded(int cx, int cz, long now, long delay) {
         int slot = refresh.slot(cx, cz);
-        if (slot >= 0 && statuses[slot] != ChunkCapture.Status.MISSING_CHUNK) refresh.request(slot, now, delay);
+        if (slot >= 0 && snapshots[slot] != null) refresh.request(slot, now, delay);
     }
 
     private boolean captureSlot(int slot) {
@@ -271,8 +271,13 @@ final class TerrainWindow {
             case PENDING_APPEARANCE -> TerrainMetrics.Counter.CAPTURE_PENDING;
             case STALE_SESSION -> TerrainMetrics.Counter.CAPTURE_STALE;
         }, 1);
-        if (availabilityChanged != null && (snapshots[slot] != null || snapshot != null))
-            availabilityChanged.accept(cx, cz);
+        // A transient unresolved appearance must not remove the last usable snapshot.
+        if (outcome == ChunkCapture.Status.PENDING_APPEARANCE && snapshots[slot] != null) {
+            statuses[slot] = outcome;
+            count();
+            return false;
+        }
+        if (availabilityChanged != null && snapshot != null) availabilityChanged.accept(cx, cz);
         snapshots[slot] = snapshot;
         statuses[slot] = outcome;
         count();
@@ -281,10 +286,10 @@ final class TerrainWindow {
 
     private void count() {
         ready = pending = missing = 0;
-        for (ChunkCapture.Status state : statuses) {
-            if (state == ChunkCapture.Status.READY) ready++;
-            else if (state == ChunkCapture.Status.MISSING_CHUNK) missing++;
-            else pending++;
+        for (int slot = 0; slot < statuses.length; slot++) {
+            if (snapshots[slot] != null) ready++;
+            if (statuses[slot] == ChunkCapture.Status.MISSING_CHUNK) missing++;
+            else if (statuses[slot] != ChunkCapture.Status.READY) pending++;
         }
     }
 

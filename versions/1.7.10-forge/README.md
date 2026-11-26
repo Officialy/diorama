@@ -92,3 +92,13 @@ Use F3+A to request chunk remeshing if the initial meshes predate the map sessio
 metrics enabled, compare unknown-look cells and observed-state counters, and check frame time,
 resource reload, world switch and reconnect. This is not a substitute for testing actual modded
 blocks and Angelica versions in game.
+
+### Progressive render-distance baking
+
+Completed tile bakes can be displayed provisionally when newer chunks arrive. Dirty tiles are
+refined after first renders, and only stable frames are written to persistent storage. Detached
+tile jobs run concurrently (default 1–3 workers depending on logical CPUs; cap 4). Set
+`-Ddiorama.bakeWorkers=3` to override. Capture remains owner-thread-only; defaults to a soft
+4 ms budget, up to 12 chunk attempts per tick. Optional `-Ddiorama.captureBudgetMs=6` and
+`-Ddiorama.capturesPerTick=16` increase throughput at the cost of frame time.
+`-Ddiorama.backgroundCapture=true` keeps capture enabled with the minimap disabled.

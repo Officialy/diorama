@@ -87,6 +87,7 @@ public final class TerrainPreviewJobProbe {
         expectNull(() -> TerrainPreviewJob.startTask(null));
         expectNull(() -> TerrainPreviewJob.start(null, null, null, null));
         workerRoundTrip();
+        parallelSlots(image);
         require(!TerrainPreviewJob.isBusy(), "all workers terminated");
         StringBuilder hex = new StringBuilder();
         for (byte value : hash.digest()) {
@@ -97,6 +98,35 @@ public final class TerrainPreviewJobProbe {
         System.out.println(
             "PASS terrain job: " + assertions
                 + " assertions; one worker, busy after discard, daemon, release, error; native screen/GL UNTESTED");
+    }
+
+    private static void parallelSlots(TerrainPreviewFrame image) throws Exception {
+        CountDownLatch entered = new CountDownLatch(2), release = new CountDownLatch(1);
+        TerrainPreviewJob first = TerrainPreviewJob.startParallel(() -> {
+            entered.countDown();
+            await(release);
+            return image;
+        }, 2);
+        TerrainPreviewJob second = TerrainPreviewJob.startParallel(() -> {
+            entered.countDown();
+            await(release);
+            return image;
+        }, 2);
+        try {
+            require(first != null && second != null, "two independent detail workers");
+            await(entered);
+            require(TerrainPreviewJob.startParallel(() -> image, 2) == null, "parallel capacity bounded");
+            first.close();
+            require(TerrainPreviewJob.startParallel(() -> image, 2) == null, "discarded running job occupies slot");
+            require(TerrainPreviewJob.startTask(() -> image) == null, "legacy worker cannot overlap detail pool");
+        } finally {
+            release.countDown();
+            if (first != null) first.awaitTermination();
+            if (second != null) second.awaitTermination();
+        }
+        require(first.takeFrame() == null && second.takeFrame() == image, "parallel results isolated");
+        require(!TerrainPreviewJob.isBusy(), "parallel slots released after termination");
+        second.close();
     }
 
     private static void workerRoundTrip() throws Exception {
