@@ -19,6 +19,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
+      - name: Format test checkout and preserve exact patch
+        working-directory: versions/1.7.10-forge
+        run: |
+          bash gradlew spotlessApply --build-cache
+          git diff --no-ext-diff | tee "$RUNNER_TEMP/format.patch"
       - name: Build and verify
         working-directory: versions/1.7.10-forge
         run: bash gradlew assemble verifyBaseline --build-cache --continue
@@ -39,7 +44,7 @@ jobs:
           bash gradlew spotlessApply
           git diff --no-ext-diff | tee "$RUNNER_TEMP/format.patch"
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: format-patch
           path: ${{ runner.temp }}/format.patch

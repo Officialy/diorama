@@ -48,8 +48,12 @@ public final class ClientMinimap {
     private static final int OVERVIEW_TILES = 16;
     private static final int PATCH_FALLBACK = 160;
     private static final int PATCH_SIDE = Projection.TILE_PIXELS / TileImage.BLOCK;
-    private static final int CAPTURES_PER_TICK = Math.max(1, Math.min(24, Integer.getInteger("diorama.capturesPerTick", 12)));
-    private static final long CAPTURE_BUDGET_NS = Math.max(1, Math.min(12, Integer.getInteger("diorama.captureBudgetMs", 4))) * 1_000_000L;
+    private static final int CAPTURES_PER_TICK = Math.max(
+        1,
+        Math.min(24, Integer.getInteger("diorama.capturesPerTick", 12)));
+    private static final long CAPTURE_BUDGET_NS = Math.max(
+        1,
+        Math.min(12, Integer.getInteger("diorama.captureBudgetMs", 4))) * 1_000_000L;
     private static @Nullable ClientMinimap installed;
 
     private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(CACHE_TILES + 1, 0.75f, true);
@@ -470,7 +474,7 @@ public final class ClientMinimap {
             entry.top = entry.jobTop;
             if (frame.detail() != null && frame.detail() != entry.pixels) {
                 entry.pixels = frame.detail();
-                if (stable) entry.savePending = persistent && !key.isCave();
+                entry.savePending = stable && persistent && !key.isCave();
                 if (!stable || patches == null) entry.pendingUpload = null;
                 else if (entry.pendingUpload != null) entry.pendingUpload.or(patches);
             } else if (stable && entry.pixels != null && persistent && !key.isCave()) {
@@ -692,16 +696,23 @@ public final class ClientMinimap {
         int drawnLayer = layer;
         try (ProbeGlState state = new ProbeGlState()) {
             drawing = state;
-            Map<TileKey, CachedTile> cache = view.preferredLod() == 0 ? tiles : overviews;
-            for (TileKey key : mapWanted(view, drawnLayer)) {
-                CachedTile tile = cache.get(key);
+            int preferred = view.preferredLod();
+            // Keep the previous resolution visible until its replacement has actually uploaded.
+            List<TileKey> uploadKeys = new ArrayList<>(mapWanted(view, drawnLayer));
+            for (TileKey key : tiles.keySet()) {
+                if (key.layer() == drawnLayer && view.clip(key) != null && !uploadKeys.contains(key))
+                    uploadKeys.add(key);
+            }
+            for (TileKey key : uploadKeys) {
+                CachedTile tile = tileFor(key);
                 if (tile != null && tile.pixels != null
                     && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
                     if (!uploadPatch(mc, key, tile, state, true)) upload(mc, key, tile, state, true);
                     break;
                 }
             }
-            var keys = List.copyOf(cache.keySet());
+            List<TileKey> keys = new ArrayList<>(overviews.keySet());
+            keys.addAll(tiles.keySet());
             long shownTextures = textureGeneration;
             GL11.glDisable(GL11.GL_DEPTH_TEST);
             GL11.glDisable(GL11.GL_LIGHTING);
@@ -715,8 +726,14 @@ public final class ClientMinimap {
                 if (key.layer() != drawnLayer) continue;
                 MapViewportController.Tile part = view.clip(key);
                 if (part == null) continue;
-                CachedTile tile = cache.get(key);
+                CachedTile tile = tileFor(key);
                 if (tile == null || tile.id <= 0) continue;
+                if (preferred == 1 && key.lod() == 0) {
+                    CachedTile parent = overviews.get(key.parent());
+                    if (parent != null && parent.id > 0 && parent.pixels == parent.uploaded
+                        && parent.children != null && parent.children[PreviewOverview.childIndex(key)] == tile.pixels)
+                        continue;
+                }
                 if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, tile.id);
                 if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
