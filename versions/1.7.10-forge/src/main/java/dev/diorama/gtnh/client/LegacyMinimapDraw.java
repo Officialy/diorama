@@ -3,6 +3,7 @@ package dev.diorama.gtnh.client;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.ToIntFunction;
+import java.util.function.Function;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.EntityLivingBase;
@@ -31,18 +32,18 @@ final class LegacyMinimapDraw {
      * The caller owns the current {@link ProbeGlState}. Lookup returns a live, published raw ID or
      * -1, and valid must become false if this draw's ownership is revoked while a callback runs.
      */
-    static void draw(Minecraft mc, int width, int height, MinimapViewport viewport, ToIntFunction<TileKey> textureId,
+    static void draw(Minecraft mc, int width, int height, MinimapViewport viewport, ToIntFunction<TileKey> textureId, Function<TileKey,int[]> raster,
         List<Point> points, int size, float yaw, String coords, BooleanSupplier valid) {
         MinimapViewport.Bounds bounds = MinimapViewport.fit(width, height, size);
         if (bounds.size() == 0 || !valid.getAsBoolean()) return;
         Tessellator mesh = spare == null ? new Tessellator() : spare;
         spare = null;
-        if (drawContents(mc, height, bounds, viewport, textureId, points, yaw, coords, valid, mesh))
+        if (drawContents(mc, height, bounds, viewport, textureId, raster, points, yaw, coords, valid, mesh))
             spare = mesh;
     }
 
     private static boolean drawContents(Minecraft mc, int height, MinimapViewport.Bounds bounds,
-        MinimapViewport viewport, ToIntFunction<TileKey> textureId, List<Point> points, float yaw, String coords,
+        MinimapViewport viewport, ToIntFunction<TileKey> textureId, Function<TileKey,int[]> raster, List<Point> points, float yaw, String coords,
         BooleanSupplier valid, Tessellator mesh) {
         FontRenderer font = mc.fontRenderer;
         int x = bounds.x(), y = bounds.y(), size = bounds.size(), right = x + size, bottom = y + size;
@@ -59,6 +60,7 @@ final class LegacyMinimapDraw {
         fog(mesh, x, y, size, size, viewport.centerU() - MinimapViewport.HALF,
             viewport.centerV() - MinimapViewport.HALF, MinimapViewport.SPAN / size,
             !viewport.tiles().isEmpty() && viewport.tiles().get(0).key().isCave());
+        LegacyFogShader.begin(x,y,size,size);
         for (MinimapViewport.Tile tile : viewport.tiles()) {
             if (!valid.getAsBoolean()) return false;
             int id = textureId.applyAsInt(tile.key());
@@ -75,10 +77,12 @@ final class LegacyMinimapDraw {
             clippedQuad(mesh, bounds, tile);
             if (!valid.getAsBoolean()) return false;
             mesh.draw();
-            LegacyFogShader.edge(x + tile.x0()*size,y + tile.y0()*size,x + tile.x1()*size,y + tile.y1()*size,
-                tile.u0(),tile.v0(),tile.u1(),tile.v1(),tile.key().minU(),tile.key().minV(),tile.key().units(),tile.key().isCave());
+            LegacyFogShader.cover(raster.apply(tile.key()),x+tile.x0()*size,y+tile.y0()*size,x+tile.x1()*size,y+tile.y1()*size,
+                tile.u0(),tile.v0(),tile.u1(),tile.v1());
         }
 
+        LegacyFogShader.finish(viewport.centerU()-MinimapViewport.HALF,viewport.centerV()-MinimapViewport.HALF,
+            MinimapViewport.SPAN/size,!viewport.tiles().isEmpty()&&viewport.tiles().get(0).key().isCave());
         if (!valid.getAsBoolean()) return false;
         OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
         GL11.glDisable(GL11.GL_TEXTURE_2D);
@@ -219,7 +223,6 @@ final class LegacyMinimapDraw {
             GL11.glColor4f(1, 1, 1, 1);
             return;
         }
-        if (LegacyFogShader.background(x,y,width,height,u,v,unit,cave)) return;
         int previousShade = GL11.glGetInteger(GL11.GL_SHADE_MODEL);
         GL11.glShadeModel(GL11.GL_SMOOTH);
         int step = Math.max(12, Math.max(width, height) / 48);

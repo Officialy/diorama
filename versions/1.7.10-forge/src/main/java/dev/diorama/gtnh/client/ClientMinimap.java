@@ -891,7 +891,7 @@ public final class ClientMinimap {
                     CachedTile tile = tiles.get(key);
                     if (tile != null) tile.lastViewed = ++viewSequence;
                     return tile == null || tile.pixels == null ? -1 : tile.id;
-                },
+                }, key -> { CachedTile tile=tiles.get(key); return tile==null?null:tile.uploaded; },
                     ClientWaypoints.visibleBook(mc),
                     options.size(),
                     yaw,
@@ -973,6 +973,7 @@ public final class ClientMinimap {
                 view.projectedU(0), view.projectedV(0), 1.0 / view.pixelsPerUnit(), drawnLayer != TileKey.SURFACE);
             GL11.glEnable(GL11.GL_TEXTURE_2D);
             GL11.glColor4f(1, 1, 1, 1);
+            LegacyFogShader.begin(0,0,screen.mapWidth(),screen.mapHeight());
             for (TileKey key : keys) {
                 if (key.layer() != drawnLayer) continue;
                 MapViewportController.Tile part = view.clip(key);
@@ -997,10 +998,10 @@ public final class ClientMinimap {
                 mesh.addVertexWithUV(part.x0(), part.y0(), 0, part.u0(), part.v0());
                 if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 mesh.draw();
-                LegacyFogShader.edge(part.x0(),part.y0(),part.x1(),part.y1(),part.u0(),part.v0(),part.u1(),part.v1(),
-                    key.minU(),key.minV(),key.units(),key.isCave());
+                LegacyFogShader.cover(tile.uploaded,part.x0(),part.y0(),part.x1(),part.y1(),part.u0(),part.v0(),part.u1(),part.v1());
             }
             if (options.highResolution && view.pixelsPerUnit() >= 6) drawHighResolution(mc, view, state, mesh, drawnLayer);
+            LegacyFogShader.finish(view.projectedU(0),view.projectedV(0),1.0/view.pixelsPerUnit(),drawnLayer!=TileKey.SURFACE);
         } catch (RuntimeException failure) {
             drawing = null;
             backoff(failure);
@@ -1045,6 +1046,7 @@ public final class ClientMinimap {
             mesh.addVertexWithUV(part.x1(), part.y0(), 0, part.u1(), part.v0());
             mesh.addVertexWithUV(part.x0(), part.y0(), 0, part.u0(), part.v0());
             mesh.draw();
+            LegacyFogShader.cover(hd.uploaded,part.x0(),part.y0(),part.x1(),part.y1(),part.u0(),part.v0(),part.u1(),part.v1());
         }
     }
 

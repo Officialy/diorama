@@ -24,7 +24,7 @@ final class MinimapOptions {
     boolean radar = Boolean.getBoolean("diorama.entityRadar");
     boolean playerRadar = Boolean.getBoolean("diorama.playerRadar");
     boolean beams = Boolean.getBoolean("diorama.waypointBeams");
-    boolean volumetricFog = Boolean.getBoolean("diorama.volumetricFog");
+    boolean volumetricFog = Boolean.parseBoolean(System.getProperty("diorama.volumetricFog", "true"));
     boolean highResolution = Boolean.parseBoolean(System.getProperty("diorama.highResolution", "true"));
     volatile int workers = clamp(Integer.getInteger("diorama.bakeWorkers", Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()/4))), 1, 4);
     volatile int stride = clamp(Integer.getInteger("diorama.coarseStride", 4), 2, 8);

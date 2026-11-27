@@ -228,3 +228,5 @@ preview/refinement completions, fallbacks and disable status are reported by `/d
 The first large texture upload and driver execution are still on the render thread and need profiling.
 
 The screen-space rotation control has been removed. Terrain texture sampling clamps to edge rather than wrapping to the opposite edge of a tile. Rendering settings are persisted and applied in-game; JVM flags seed defaults only. Existing confirmed terrain is retained when adjusting settings.
+
+Fog now follows upstream's eight elevated layers, seeded tileable noise, shadow colours, and blurred known-share coverage. A single viewport-wide mask is composed from uploaded tiles (including HD), so banks can cross tile boundaries. The legacy implementation does not yet reproduce upstream's half-resolution compositing, remembered-map smoke or zoom-dependent mask hierarchy. GL fallback remains the simple cloud background.
