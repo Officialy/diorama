@@ -28,6 +28,9 @@ public final class LegacyWaypointBookProbe {
             LegacyWaypointBook book = new LegacyWaypointBook();
             Point home = new Point("家 🗺", -29_999_984, 0, 29_999_983, true);
             Point cave = new Point("Mine", -12, 255, -500, false);
+            Point death = new Point("Death @ 12,64,-9", 12, 64, -9, true);
+            require(death.death() && death.markerColor() == 0xFF6262, "death marker classification");
+            require(!home.death() && home.markerColor() == 0xFFC53D, "normal marker classification");
             expect(IOException.class, () -> book.save(file, FIRST));
             require(!Files.exists(save), "missing save was not created");
             Files.createDirectory(save);

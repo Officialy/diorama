@@ -86,9 +86,7 @@ final class TerrainWindow {
     int topY(TileKey key) {
         if (key.isCave()) return TerrainPreview.caveCeiling(key);
         int top = Integer.MIN_VALUE;
-        for (ChunkSnapshot snapshot : snapshots) {
-            if (snapshot != null && intersects(key, snapshot)) top = Math.max(top, snapshot.maxY);
-        }
+        for (ChunkSnapshot snapshot : inputs(key)) top = Math.max(top, snapshot.maxY);
         return top == Integer.MIN_VALUE ? 0 : top + 1;
     }
 
@@ -114,21 +112,32 @@ final class TerrainWindow {
 
     TerrainPreview.Work prepare(TileKey key) {
         requireCurrent();
-        List<ChunkSnapshot> input = new ArrayList<>();
-        for (ChunkSnapshot snapshot : snapshots) {
-            if (snapshot != null && intersects(key, snapshot)) input.add(snapshot);
-        }
-        return TerrainPreview
-            .prepareExtended(session.looks(), session.token(), key, input.toArray(new ChunkSnapshot[0]));
+        return TerrainPreview.prepareExtended(session.looks(), session.token(), key, inputs(key));
     }
 
-    private static boolean intersects(TileKey key, ChunkSnapshot snapshot) {
-        return DirtyTerrainTiles.intersectsChunk(key, snapshot.chunkX, snapshot.chunkZ);
+    private final java.util.Map<TileKey, ChunkSnapshot[]> inputCache = new java.util.HashMap<>();
+
+    private ChunkSnapshot[] inputs(TileKey key) {
+        ChunkSnapshot[] cached = inputCache.get(key);
+        if (cached != null) return cached;
+        int[] bounds = DirtyTerrainTiles.chunkBounds(key);
+        int minX = Math.max(bounds[0], refresh.x(0));
+        int minZ = Math.max(bounds[1], refresh.z(0));
+        int maxX = Math.min(bounds[2], refresh.x(refresh.slots() - 1));
+        int maxZ = Math.min(bounds[3], refresh.z(refresh.slots() - 1));
+        List<ChunkSnapshot> input = new ArrayList<>();
+        for (int z = minZ; z <= maxZ; z++) for (int x = minX; x <= maxX; x++) {
+            ChunkSnapshot snapshot = snapshots[refresh.slot(x, z)];
+            if (snapshot != null && DirtyTerrainTiles.intersectsChunk(key, x, z)) input.add(snapshot);
+        }
+        ChunkSnapshot[] result = input.toArray(new ChunkSnapshot[0]);
+        if (inputCache.size() >= 512) inputCache.clear();
+        inputCache.put(key, result);
+        return result;
     }
 
     boolean hasReady(TileKey key) {
-        for (ChunkSnapshot snapshot : snapshots) if (snapshot != null && intersects(key, snapshot)) return true;
-        return false;
+        return inputs(key).length != 0;
     }
 
     /** Conservative projected footprint of captured chunks, including the vertical ray span. */
@@ -193,6 +202,7 @@ final class TerrainWindow {
             attempted.set(slot);
             changed |= captureSlot(slot);
         }
+        if (changed) inputCache.clear();
         if (!attempted.isEmpty()) count();
         return changed;
     }

@@ -148,3 +148,7 @@ This is not upstream's volumetric mask shader. Disable with `-Ddiorama.mapFog=fa
 At native resolution and above, magnification is nearest-neighbour to preserve crisp lines;
 `-Ddiorama.smoothZoom=true` selects linear magnification instead. The canonical full tile remains
 512x512 (four pixels per map unit), so filtering does not invent detail above the source resolution.
+
+Snapshot selection now inverts the tile's projected lighting/ray bounds and visits only candidate
+chunk slots, caching detached input arrays until a capture changes. Minimap off-screen bearings use
+horizontal displacement rather than waypoint height, with a nearest-waypoint distance label.

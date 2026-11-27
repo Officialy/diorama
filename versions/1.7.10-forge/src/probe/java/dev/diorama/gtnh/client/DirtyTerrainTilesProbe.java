@@ -91,6 +91,16 @@ public final class DirtyTerrainTilesProbe {
             15,
             "huge box still fits 256 patch bits");
 
+        for (int v = -3; v <= 3; v++) for (int u = -3; u <= 3; u++) {
+            TileKey key = tile(u, v);
+            int[] bounds = DirtyTerrainTiles.chunkBounds(key);
+            boolean safe = true;
+            for (int z = -64; z <= 64; z++) for (int x = -64; x <= 64; x++) {
+                if (DirtyTerrainTiles.intersectsChunk(key, x, z)
+                    && (x < bounds[0] || x > bounds[2] || z < bounds[1] || z > bounds[3])) safe = false;
+            }
+            check(safe, "inverse projection bounds cover every intersecting chunk");
+        }
         section.clear();
         rect(DirtyTerrainTiles.section(origin, 3, 4, 7), 3, 12, 1, 11, "caller owns every mask");
         StringBuilder hex = new StringBuilder();

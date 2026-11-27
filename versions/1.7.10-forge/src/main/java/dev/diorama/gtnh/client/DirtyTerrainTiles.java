@@ -59,6 +59,18 @@ final class DirtyTerrainTiles {
             && v1 >= tile.minV();
     }
 
+    /** Conservative inverse projection, inclusive chunk bounds: minX,minZ,maxX,maxZ.
+     * A one-chunk rounding margin is filtered by intersectsChunk at the caller. */
+    static int[] chunkBounds(TileKey tile) {
+        double x0 = tile.minU() - 17 - EAST - OUTLINE_HALO;
+        double x1 = tile.minU() + tile.units() + 1 + AROUND + OUTLINE_HALO;
+        double z0 = (tile.minV() - (1 + DOWN) * COS - OUTLINE_HALO) / SIN - 17 - AROUND;
+        double z1 = (tile.minV() + tile.units() + (LAST_Y + 2 + LIGHT_REACH) * COS + OUTLINE_HALO) / SIN
+            + 1 + NORTH;
+        return new int[] { (int) Math.floor(x0 / 16) - 1, (int) Math.floor(z0 / 16) - 1,
+            (int) Math.floor(x1 / 16) + 1, (int) Math.floor(z1 / 16) + 1 };
+    }
+
     private static BitSet project(TileKey tile, long x0, long y0, long z0, long x1, long y1, long z1) {
         BitSet mask = new BitSet();
         if (tile.isCave() || tile.lod() != 0 || x0 > x1 || y0 > y1 || z0 > z1 || y1 < 0 || y0 > LAST_Y) return mask;

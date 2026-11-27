@@ -34,13 +34,14 @@ final class LegacyMinimapDraw {
         if (bounds.size() == 0 || !valid.getAsBoolean()) return;
         Tessellator mesh = spare == null ? new Tessellator() : spare;
         spare = null;
-        if (drawContents(mc.fontRenderer, height, bounds, viewport, textureId, points, yaw, coords, valid, mesh))
+        if (drawContents(mc, height, bounds, viewport, textureId, points, yaw, coords, valid, mesh))
             spare = mesh;
     }
 
-    private static boolean drawContents(FontRenderer font, int height, MinimapViewport.Bounds bounds,
+    private static boolean drawContents(Minecraft mc, int height, MinimapViewport.Bounds bounds,
         MinimapViewport viewport, ToIntFunction<TileKey> textureId, List<Point> points, float yaw, String coords,
         BooleanSupplier valid, Tessellator mesh) {
+        FontRenderer font = mc.fontRenderer;
         int x = bounds.x(), y = bounds.y(), size = bounds.size(), right = x + size, bottom = y + size;
         OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
         GL11.glDisable(GL11.GL_DEPTH_TEST);
@@ -77,7 +78,7 @@ final class LegacyMinimapDraw {
         OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
         GL11.glDisable(GL11.GL_TEXTURE_2D);
         if (size >= 8 && !points.isEmpty()) {
-            drawWaypoints(mesh, viewport, bounds, points);
+            drawWaypoints(mesh, viewport, bounds, points, mc.thePlayer.posX, mc.thePlayer.posZ);
         }
         if (size >= 8 && Float.isFinite(yaw)) {
             if (!valid.getAsBoolean()) return false;
@@ -102,11 +103,32 @@ final class LegacyMinimapDraw {
                 font.drawStringWithShadow(coords, left, textY, 0xFFFFFFFF);
             }
         }
+        Point nearest = null;
+        double distance = Double.POSITIVE_INFINITY;
+        for (Point point : points) {
+            if (!point.enabled()) continue;
+            double d = Math.hypot(point.x() + .5 - mc.thePlayer.posX, point.z() + .5 - mc.thePlayer.posZ);
+            if (d < distance) {
+                nearest = point;
+                distance = d;
+            }
+        }
+        if (nearest != null) {
+            int labelY = textY + (coords == null || coords.isEmpty() ? 0 : font.FONT_HEIGHT + 2);
+            if (labelY + font.FONT_HEIGHT <= height - MinimapViewport.MARGIN) {
+                String label = font.trimStringToWidth(nearest.name() + " " + Math.round(distance) + "m", size + 24);
+                int left = right - font.getStringWidth(label);
+                if (left >= MinimapViewport.MARGIN && valid.getAsBoolean()) {
+                    GL11.glEnable(GL11.GL_TEXTURE_2D);
+                    font.drawStringWithShadow(label, left, labelY, 0xFF000000 | nearest.markerColor());
+                }
+            }
+        }
         return true;
     }
 
     private static void drawWaypoints(Tessellator mesh, MinimapViewport viewport, MinimapViewport.Bounds bounds,
-        List<Point> points) {
+        List<Point> points, double playerX, double playerZ) {
         boolean started = false;
         int size = bounds.size();
         for (Point point : points) {
@@ -130,7 +152,12 @@ final class LegacyMinimapDraw {
             double sx = viewport.normalizedX(Projection.u(point.x() + .5, point.z() + .5)) * size;
             double sy = viewport.normalizedY(Projection.v(point.x() + .5, point.y(), point.z() + .5)) * size;
             if (sx >= 5 && sx <= size - 5 && sy >= 5 && sy <= size - 5) continue;
-            double dx = sx - size / 2.0, dy = sy - size / 2.0;
+            double dx = Projection.u(point.x() + .5, point.z() + .5) - Projection.u(playerX, playerZ);
+            double dy = Projection.v(point.x() + .5, 0, point.z() + .5) - Projection.v(playerX, 0, playerZ);
+            if (Math.abs(dx) + Math.abs(dy) < 1e-6) {
+                dx = sx - size / 2.0;
+                dy = sy - size / 2.0;
+            }
             double length = Math.hypot(dx, dy);
             if (length == 0) continue;
             double reach = (size / 2.0 - 6) / Math.max(Math.abs(dx), Math.abs(dy));
