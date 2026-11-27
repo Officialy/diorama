@@ -18,8 +18,8 @@ final class RenderSettingsScreen extends GuiScreen {
     }
 
     @Override public void initGui() {
-        int[] ids = page == 0 ? new int[] {0,1,2,3,4,5,6,7,20,21}
-            : new int[] {8,9,10,11,12,13,14,15,20,21};
+        int[] ids = page == 0 ? new int[] {0,1,2,3,4,5,6,7,22,20,21}
+            : new int[] {8,9,10,11,12,13,14,15,22,20,21};
         int columns = width >= 300 ? 2 : 1;
         int cell = Math.min(200, (width - 16 - (columns-1)*4)/columns);
         int rows = (ids.length+columns-1)/columns;
@@ -50,6 +50,7 @@ final class RenderSettingsScreen extends GuiScreen {
             case 13 -> "Uploads per frame: "+options.uploads;
             case 14 -> "Smooth zoom: "+on(options.smoothZoom);
             case 15 -> "Volumetric clouds: "+on(options.volumetricFog);
+            case 22 -> "Benchmark / Auto-config";
             case 20 -> page==0?"Capture and cache settings":"Quality and backend settings";
             default -> "Done";
         };
@@ -77,6 +78,7 @@ final class RenderSettingsScreen extends GuiScreen {
             case 13 -> options.uploads=cycle(options.uploads,1,2,3,4);
             case 14 -> options.smoothZoom=!options.smoothZoom;
             case 15 -> options.volumetricFog=!options.volumetricFog;
+            case 22 -> {mc.displayGuiScreen(new RenderBenchmarkScreen(map,this));return;}
             case 20 -> {page=1-page;buttonList.clear();initGui();return;}
             case 21 -> {mc.displayGuiScreen(parent);return;}
             default -> {return;}

@@ -444,6 +444,14 @@
     {
       "path": "dev/diorama/gtnh/client/RenderSettingsScreen.java",
       "fqn": "dev.diorama.gtnh.client.RenderSettingsScreen"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/RenderBenchmark.java",
+      "fqn": "dev.diorama.gtnh.client.RenderBenchmark"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/RenderBenchmarkScreen.java",
+      "fqn": "dev.diorama.gtnh.client.RenderBenchmarkScreen"
     }
   ],
   "deferred": [

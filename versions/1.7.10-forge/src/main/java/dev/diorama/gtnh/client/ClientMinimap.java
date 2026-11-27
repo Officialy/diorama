@@ -96,6 +96,25 @@ public final class ClientMinimap {
         return java.util.Objects.requireNonNull(installed).options;
     }
 
+    /** Freeze a bounded, representative surface workload without loading any new chunks. */
+    static List<TerrainPreview.Work> benchmarkInputs(Minecraft mc) {
+        ClientMinimap owner = installed;
+        if (owner == null || owner.window == null || !owner.current(mc) || mc.thePlayer == null)
+            return List.of();
+        if (!ClientMapDimension.of(mc.theWorld).surfaceTerrain()) return List.of();
+        double u = Projection.u(mc.thePlayer.posX, mc.thePlayer.posZ);
+        double v = Projection.v(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
+        List<TileKey> keys = new ArrayList<>(owner.window.candidates(TileKey.SURFACE));
+        keys.sort(Comparator.comparingDouble(key -> Math.hypot(key.minU()+key.units()*.5-u,
+            key.minV()+key.units()*.5-v)));
+        List<TerrainPreview.Work> work = new ArrayList<>();
+        for (TileKey key : keys) {
+            if (owner.window.hasReady(key) && owner.window.topY(key) > 0) work.add(owner.window.prepare(key));
+            if (work.size() == 4) break;
+        }
+        return List.copyOf(work);
+    }
+
     static void applyRenderOptions() {
         ClientMinimap hud = installed;
         if (hud == null) return;
@@ -369,7 +388,7 @@ public final class ClientMinimap {
             }
             finish(mc);
             finishHighResolution(mc);
-            if (!current(mc)) return;
+            if (!current(mc) || RenderBenchmark.active()) return;
             window.tick(options.captures, options.captureMs * 1_000_000L);
             if (!current(mc)) return;
             io.drain(this::restore);

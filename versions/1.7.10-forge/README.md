@@ -230,3 +230,15 @@ The first large texture upload and driver execution are still on the render thre
 The screen-space rotation control has been removed. Terrain texture sampling clamps to edge rather than wrapping to the opposite edge of a tile. Rendering settings are persisted and applied in-game; JVM flags seed defaults only. Existing confirmed terrain is retained when adjusting settings.
 
 Fog now follows upstream's eight elevated layers, seeded tileable noise, shadow colours, and blurred known-share coverage. A single viewport-wide mask is composed from uploaded tiles (including HD), so banks can cross tile boundaries. The legacy implementation does not yet reproduce upstream's half-resolution compositing, remembered-map smoke or zoom-dependent mask hierarchy. GL fallback remains the simple cloud background.
+
+### In-game render benchmark
+
+Open Map > Minimap Settings > Advanced > Rendering / performance > Benchmark / Auto-config.
+It pauses normal map scheduling, freezes up to four captured surface tile inputs, warms the renderer,
+builds full-quality CPU references and tests CPU worker counts 1–4 with full quality and preview strides
+2/4/8, then GPU preview and one/four-sample GPU refinement. Each candidate runs two passes; actual GPU
+failure is rejected rather than timed as CPU fallback. Tile time, frame p95, coverage recall/precision and
+RGB error are shown. The recommendation is quality-gated and frame-time penalized. Apply explicitly to
+persist the suggested bake settings. Results never enter map storage. Capture budgets, radius and cache
+sizes remain independently adjustable; this controlled benchmark does not measure server chunk delivery,
+exploration capture throughput or every combined CPU/GPU scheduling profile. Escape cancels the test.
