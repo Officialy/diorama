@@ -27,7 +27,7 @@ final class MinimapOptions {
     boolean volumetricFog = Boolean.parseBoolean(System.getProperty("diorama.volumetricFog", "true"));
     boolean highResolution = Boolean.parseBoolean(System.getProperty("diorama.highResolution", "true"));
     volatile int workers = clamp(Integer.getInteger("diorama.bakeWorkers", Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()/4))), 1, 4);
-    volatile int stride = clamp(Integer.getInteger("diorama.coarseStride", 4), 2, 8);
+    volatile int stride = normalizeStride(Integer.getInteger("diorama.coarseStride", 4));
     volatile int captureMs = clamp(Integer.getInteger("diorama.captureBudgetMs", 4), 1, 12);
     volatile int captures = clamp(Integer.getInteger("diorama.capturesPerTick", 12), 1, 24);
     volatile int radius = clamp(Integer.getInteger("diorama.captureRadius", 0), 0, 32);
@@ -40,6 +40,8 @@ final class MinimapOptions {
     volatile boolean gpuRefine = Boolean.parseBoolean(System.getProperty("diorama.gpuRefine", "false"));
     volatile boolean gpuFour = Boolean.parseBoolean(System.getProperty("diorama.gpuFourSamples", "false"));
     private int size = DEFAULT_SIZE;
+
+    private static int normalizeStride(int value) { return value == 2 || value == 8 ? value : 4; }
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
@@ -88,7 +90,7 @@ final class MinimapOptions {
         resident = number(props, "resident", resident, 96, 512);
         history = number(props, "history", history, 0, 512);
         uploads = number(props, "uploads", uploads, 1, 4);
-        stride = stride == 2 || stride == 8 ? stride : 4;
+        stride = normalizeStride(stride);
         progressive = Boolean.parseBoolean(props.getProperty("progressive", Boolean.toString(progressive)));
         fast = Boolean.parseBoolean(props.getProperty("fast", Boolean.toString(fast)));
         gpuPreview = Boolean.parseBoolean(props.getProperty("gpuPreview", Boolean.toString(gpuPreview)));

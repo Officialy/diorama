@@ -101,7 +101,8 @@ public final class ClientMinimap {
         ClientMinimap owner = installed;
         if (owner == null || owner.window == null || !owner.current(mc) || mc.thePlayer == null)
             return List.of();
-        if (!ClientMapDimension.of(mc.theWorld).surfaceTerrain()) return List.of();
+        ClientMapDimension dimension = ClientMapDimension.of(mc.theWorld);
+        if (dimension == null || !dimension.surfaceTerrain()) return List.of();
         double u = Projection.u(mc.thePlayer.posX, mc.thePlayer.posZ);
         double v = Projection.v(mc.thePlayer.posX, mc.thePlayer.posY, mc.thePlayer.posZ);
         List<TileKey> keys = new ArrayList<>(owner.window.candidates(TileKey.SURFACE));
@@ -119,7 +120,16 @@ public final class ClientMinimap {
         ClientMinimap hud = installed;
         if (hud == null) return;
         TerrainPreviewJob.setWorkerLimit(hud.options.workers);
+        boolean qualityChanged = TileBaker.fast() != hud.options.fast;
         TileBaker.setFast(hud.options.fast);
+        for (var item : hud.tiles.entrySet()) {
+            CachedTile tile = item.getValue();
+            if ((!hud.options.gpuRefine && tile.gpuApproximate) ||
+                (qualityChanged && !hud.options.progressive && hud.visibleKeys.contains(item.getKey()))) {
+                tile.needsFull = true;
+                tile.revision++;
+            }
+        }
         // Changing render quality is applied to new jobs. Previously accepted canonical pixels
         // remain valid; pending results are fenced by the existing revision and style checks.
     }
@@ -641,6 +651,10 @@ public final class ClientMinimap {
                     entry.pendingUpload = null;
                 }
                 coarseBakes++;
+                continue;
+            }
+            if (frame.gpuApproximate() && !options.gpuRefine) {
+                entry.needsFull = true;
                 continue;
             }
             if (frame.gpuApproximate()) {

@@ -114,6 +114,21 @@ final class RenderBenchmark {
                     if(score<bestRefine){bestRefine=score;refinement=r;}
                 }
             }
+            if (refinement != null) {
+                // The chosen CPU preview must be measured at the actual worker count. GPU is serial.
+                Result compatible = null;
+                double best = Double.POSITIVE_INFINITY;
+                for (Result r : results()) {
+                    if (!r.valid() || !(r.stride()>0 || r.mode().equals("GPU preview"))) continue;
+                    if (r.stride()>0 && r.workers()!=refinement.workers()) continue;
+                    if (r.recall()<.85 || r.precision()<.88 || r.error()>.18) continue;
+                    double score=r.ms()*(r.stride()==8?1.25:1);
+                    if (Double.isFinite(r.p95()) && Double.isFinite(baselineMs))
+                        score*=1+Math.max(0,r.p95()-baselineMs-3)/Math.max(8,baselineMs);
+                    if(score<best){best=score;compatible=r;}
+                }
+                preview=compatible;
+            }
             status=refinement==null?"No reliable recommendation; keep your current settings":"Complete - review and apply recommendation";
         }catch(InterruptedException interrupted){status="Benchmark cancelled or terrain invalidated";}
         catch(RuntimeException|LinkageError failure){status="Benchmark failed: "+failure.getClass().getSimpleName();}
@@ -144,8 +159,8 @@ final class RenderBenchmark {
                     int[] image;
                     try{image=pending.get(i).get();}
                     catch(java.util.concurrent.ExecutionException failure){valid=false;continue;}
-                    if(image==null){valid=false;continue;}
                     if(coverage(reference[i])<=.08)continue;
+                    if(image==null){valid=false;continue;}
                     double[] metrics=compare(reference[i],image);
                     coverage+=metrics[0];precision+=metrics[1];error+=metrics[2];measured++;
                 }
@@ -195,14 +210,14 @@ final class RenderBenchmark {
 
     /** Apply only tested bake knobs; capture/cache settings need a separate live exploration test. */
     boolean apply(MinimapOptions opts){
-        if(!done||refinement==null)return false;
+        if(!done||cancelled||refinement==null)return false;
         opts.progressive=true;opts.workers=refinement.workers();
         opts.gpuRefine=refinement.mode().startsWith("GPU");
         opts.gpuFour=refinement.mode().equals("GPU 4 samples");
         if(preview!=null){
             opts.gpuPreview=preview.mode().equals("GPU preview");
             if(preview.stride()>0)opts.stride=preview.stride();
-            if(!opts.gpuRefine)opts.workers=Math.max(opts.workers,preview.workers());
+
         }
         return ClientMinimap.saveOptions();
     }

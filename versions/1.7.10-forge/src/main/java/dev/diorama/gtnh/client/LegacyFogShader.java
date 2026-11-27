@@ -53,7 +53,7 @@ final class LegacyFogShader {
         + "vec3 color=vec3(0.0);float alpha=0.0;vec2 toSun=vec2(-9.0,-3.6)/span();"
         + "for(int i=0;i<8;i++){float h=hmax*(1.0-(float(i)+.5+jitter*.6)/8.0);"
         + "vec2 ground=uv+vec2(0.0,h*.643)/span();float th=thickness(ground,soft(ground));"
-        + "float a=smoothstep(h-1.4,h+1.4,th);if(a<=.002)continue;"
+        + "if(th<=.001)continue;float a=smoothstep(h-1.4,h+1.4,th);if(a<=.002)continue;"
         + "vec2 probe=ground+toSun;float toward=thickness(probe,knownAt(probe));"
         + "float occ=clamp((toward-th)/hmax*2.2,0.0,1.0);"
         + "float light=clamp(.5+.7*h/hmax-occ*.7,0.0,1.0);float la=a*.45;"
