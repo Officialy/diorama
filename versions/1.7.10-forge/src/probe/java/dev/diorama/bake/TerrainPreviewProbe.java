@@ -30,6 +30,7 @@ public final class TerrainPreviewProbe {
             inputs();
             styles();
             realBake();
+            progressiveBake();
             patchBake();
             caveBake();
             partialAppearanceBake();
@@ -47,6 +48,30 @@ public final class TerrainPreviewProbe {
         System.out.println(
             "PASS bounded terrain preview: " + assertions
                 + " assertions; numeric identity/bounds/detachment, fail-closed style, full/patch surface and fixed-cut cave canonical ABGR bake; native capture/screen/epoch acceptance UNTESTED");
+    }
+
+    private static void progressiveBake() {
+        PreparedBlockLooks looks = table();
+        TerrainPreview.Work work = TerrainPreview.prepare(
+            looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, false) });
+        int[] full = work.bakeDetail(null, true);
+        int[] coarse = work.bakeCoarse(null);
+        require(full != null && coarse != null && full.length == coarse.length, "coarse keeps full raster extent");
+        int edge = Projection.TILE_PIXELS;
+        for (int y = 0; y < edge; y += 4) for (int x = 0; x < edge; x += 4) {
+            int index = y * edge + x;
+            require(coarse[index] == coarse[index + 3] && coarse[index] == coarse[index + 3 * edge + 3],
+                "coarse ray expands over a four-pixel square");
+        }
+        int[] previous = new int[edge * edge];
+        Arrays.fill(previous, 0xff123456);
+        require(Arrays.equals(previous, work.bakeCoarse(previous)), "coarse never replaces confirmed pixels");
+        TileBaker.setFast(true);
+        TerrainPreview.Work fast = TerrainPreview.prepare(
+            looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, false) });
+        require(Arrays.equals(full, fast.bakeDetail(null, true)), "refinement ignores global fast setting");
+        require(fast.stillCurrent(), "quality is not changed globally by refinement");
+        TileBaker.setFast(false);
     }
 
     private static void keys() {

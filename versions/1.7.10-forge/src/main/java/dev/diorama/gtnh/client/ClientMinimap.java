@@ -45,6 +45,7 @@ public final class ClientMinimap {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
     private static final int CACHE_TILES = 128;
+    private static final boolean PROGRESSIVE = Boolean.parseBoolean(System.getProperty("diorama.progressiveBake", "true"));
     private static final int MAP_TILES = 24;
     private static final int OVERVIEW_TILES = 16;
     private static final int PATCH_FALLBACK = 160;
@@ -73,7 +74,7 @@ public final class ClientMinimap {
     private int centerX, centerZ;
     private long textureGeneration;
     private int activeBakes;
-    private long completedBakes, provisionalBakes, bakeSequence;
+    private long completedBakes, provisionalBakes, coarseBakes, bakeSequence;
     private @Nullable ProbeGlState drawing;
     private boolean updating;
     private @Nullable WorldClient lastFrameWorld;
@@ -248,6 +249,7 @@ public final class ClientMinimap {
     private void dirtyChunk(int cx, int cz) {
         for (var entry : tiles.entrySet()) {
             if (!DirtyTerrainTiles.intersectsChunk(entry.getKey(), cx, cz)) continue;
+            entry.getValue().coverageChanged = true;
             entry.getValue()
                 .invalidate(
                     DirtyTerrainTiles.chunk(entry.getKey(), cx, cz),
@@ -291,7 +293,9 @@ public final class ClientMinimap {
             + "; resident tiles: "
             + hud.tiles.size()
             + "; quality: "
-            + (TileBaker.fast() ? "fast" : "full")
+            + (PROGRESSIVE ? "progressive" : TileBaker.fast() ? "fast" : "full")
+            + "; coarse previews: "
+            + hud.coarseBakes
             + "; active bakes: "
             + hud.activeBakes
             + "; completed: "
@@ -392,7 +396,12 @@ public final class ClientMinimap {
             if (candidates.size() > CACHE_TILES - 8) candidates = candidates.subList(0, CACHE_TILES - 8);
             int freeSlots = TerrainPreviewJob.availableDetailSlots();
             for (int slots = freeSlots; slots > 0; slots--) {
-                TileKey selected = slots == freeSlots ? choose(live, window) : null;
+                // Reserve the first available slot for visible coverage, then give visible
+                // refinements a turn before filling the remaining background slots.
+                TileKey selected = PROGRESSIVE && slots == freeSlots ? chooseCoarse(live) : null;
+                if (selected == null && slots == freeSlots) selected = choose(live, window);
+                if (selected == null && PROGRESSIVE && slots == freeSlots - 1) selected = chooseRefinement(live);
+                if (selected == null && PROGRESSIVE) selected = chooseCoarse(candidates);
                 if (selected == null) selected = choose(candidates, window);
                 if (selected == null) break;
                 CachedTile entry = detail(selected);
@@ -400,15 +409,20 @@ public final class ClientMinimap {
                 long revision = entry.revision;
                 TerrainPreview.Work work = window.prepare(selected);
                 if (!current(mc) || entry.revision != revision) return;
-                BitSet patches = !selected.isCave() && entry.pixels != null
+                boolean coarse = PROGRESSIVE && needsCoarse(entry);
+                int[] history = entry.coarseShown ? entry.confirmedPixels : entry.pixels;
+                BitSet patches = !coarse && !entry.coarseShown && !selected.isCave() && history != null
                     && !entry.needsFull
                     && entry.top == work.topY()
                     && !entry.dirty.isEmpty()
                     && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
-                TerrainPreviewJob job = patches == null ? TerrainPreviewJob.startDetail(work, entry.pixels)
-                    : TerrainPreviewJob.startDetailPatches(work, entry.pixels, patches);
+                TerrainPreviewJob job = coarse ? TerrainPreviewJob.startCoarse(work, history)
+                    : PROGRESSIVE ? TerrainPreviewJob.startRefined(work, history, patches)
+                        : patches == null ? TerrainPreviewJob.startDetail(work, history)
+                            : TerrainPreviewJob.startDetailPatches(work, history, patches);
                 if (job == null) break;
                 entry.job = job;
+                entry.jobCoarse = coarse;
                 entry.jobRevision = revision;
                 entry.jobTop = work.topY();
                 entry.jobPatches = patches;
@@ -421,6 +435,31 @@ public final class ClientMinimap {
         } finally {
             updating = false;
         }
+    }
+
+    private static boolean needsCoarse(CachedTile entry) {
+        return !entry.coarseShown && entry.coarseRevision != entry.revision
+            && (entry.lastAttempt == 0 || entry.coverageChanged);
+    }
+
+    private @Nullable TileKey chooseCoarse(List<TileKey> wanted) {
+        TileKey refresh = null;
+        for (TileKey key : wanted) {
+            CachedTile entry = tiles.get(key);
+            if (entry == null) return key;
+            if (entry.job != null || !needsCoarse(entry)) continue;
+            if (entry.pixels == null) return key;
+            if (refresh == null) refresh = key;
+        }
+        return refresh;
+    }
+
+    private @Nullable TileKey chooseRefinement(List<TileKey> wanted) {
+        for (TileKey key : wanted) {
+            CachedTile entry = tiles.get(key);
+            if (entry != null && entry.job == null && entry.coarseShown) return key;
+        }
+        return null;
     }
 
     private @Nullable TileKey choose(List<TileKey> wanted, TerrainWindow input) {
@@ -450,6 +489,7 @@ public final class ClientMinimap {
             TerrainPreviewFrame frame = finished.takeFrame();
             String failure = finished.failure();
             BitSet patches = entry.jobPatches;
+            boolean coarse = entry.jobCoarse;
             finished.close();
             entry.job = null;
             entry.jobPatches = null;
@@ -462,6 +502,7 @@ public final class ClientMinimap {
             }
             if (failure != null || frame == null) {
                 entry.needsFull = true;
+                if (coarse) entry.coarseRevision = entry.jobRevision;
                 LOG.warn("Diorama minimap tile bake failed: {}", failure == null ? "missing result" : failure);
                 continue;
             }
@@ -469,7 +510,25 @@ public final class ClientMinimap {
             // completed raster provisionally, retain dirty flags, and schedule a refinement.
             // The session and history checks above still fence world changes and disk restores.
             boolean stable = entry.jobRevision == entry.revision && window.topY(key) == entry.jobTop;
+            if (coarse) {
+                entry.confirmedPixels = entry.pixels;
+                entry.coarseShown = true;
+                entry.coarseRevision = entry.jobRevision;
+                entry.coverageChanged = !stable;
+                entry.needsFull = true;
+                entry.savePending = false;
+                if (frame.detail() != null) {
+                    entry.pixels = frame.detail();
+                    entry.pendingUpload = null;
+                }
+                coarseBakes++;
+                continue;
+            }
+            boolean wasCoarse = entry.coarseShown;
+            entry.coarseShown = false;
+            entry.confirmedPixels = null;
             if (stable) {
+                entry.coverageChanged = false;
                 entry.dirty.clear();
                 entry.needsFull = false;
                 completedBakes++;
@@ -478,9 +537,9 @@ public final class ClientMinimap {
                 provisionalBakes++;
             }
             entry.top = entry.jobTop;
-            if (frame.detail() != null && frame.detail() != entry.pixels) {
+            if ((frame.detail() != null || wasCoarse) && frame.detail() != entry.pixels) {
                 entry.pixels = frame.detail();
-                entry.savePending = stable && persistent && !key.isCave();
+                entry.savePending = entry.pixels != null && stable && persistent && !key.isCave();
                 if (!stable || patches == null) entry.pendingUpload = null;
                 else if (entry.pendingUpload != null) entry.pendingUpload.or(patches);
             } else if (stable && entry.pixels != null && persistent && !key.isCave()) {
@@ -537,12 +596,15 @@ public final class ClientMinimap {
             return;
         }
         if (result.pixels() == null) return;
-        int[] merged = PreviewTileStore.retain(result.pixels(), tile.pixels);
+        int[] merged = PreviewTileStore.retain(result.pixels(), tile.coarseShown ? tile.confirmedPixels : tile.pixels);
         if (merged != tile.pixels) {
             // A patch worker may hold the earlier history raster. Reject that job rather than
             // letting it overwrite pixels restored after its submission.
             tile.revision++;
             tile.pixels = merged;
+            tile.coarseShown = false;
+            tile.confirmedPixels = null;
+            tile.needsFull = true;
             tile.pendingUpload = null;
         }
     }
@@ -590,7 +652,7 @@ public final class ClientMinimap {
         io.reset(null);
         persistent = false;
         discardJob();
-        completedBakes = provisionalBakes = bakeSequence = 0;
+        completedBakes = provisionalBakes = coarseBakes = bakeSequence = 0;
         window = null;
         session = null;
         world = null;
@@ -653,7 +715,7 @@ public final class ClientMinimap {
             LegacyMinimapDraw
                 .draw(mc, event.resolution.getScaledWidth(), event.resolution.getScaledHeight(), view, key -> {
                     CachedTile tile = tiles.get(key);
-                    return tile == null ? -1 : tile.id;
+                    return tile == null || tile.pixels == null ? -1 : tile.id;
                 },
                     ClientWaypoints.visibleBook(mc),
                     options.size(),
@@ -733,7 +795,7 @@ public final class ClientMinimap {
                 MapViewportController.Tile part = view.clip(key);
                 if (part == null) continue;
                 CachedTile tile = tileFor(key);
-                if (tile == null || tile.id <= 0) continue;
+                if (tile == null || tile.pixels == null || tile.id <= 0) continue;
                 if (preferred == 1 && key.lod() == 0) {
                     CachedTile parent = overviews.get(key.parent());
                     if (parent != null && parent.id > 0 && parent.pixels == parent.uploaded
@@ -891,6 +953,9 @@ public final class ClientMinimap {
         private int @Nullable [] jobHistory;
         private @Nullable BitSet jobPatches;
         private boolean readRequested, savePending;
+        private boolean coarseShown, jobCoarse, coverageChanged;
+        private long coarseRevision = -1;
+        private int @Nullable [] confirmedPixels;
         private int[][] children;
         private int top;
         private boolean needsFull = true, anaglyph;

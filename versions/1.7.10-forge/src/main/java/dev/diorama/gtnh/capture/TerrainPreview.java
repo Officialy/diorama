@@ -200,9 +200,13 @@ public final class TerrainPreview {
 
         /** Full HUD L0 refresh. An existing raster can become explicitly transparent, not absent. */
         public int @Nullable [] bakeDetail(int @Nullable [] history) {
+            return this.bakeDetail(history, false);
+        }
+
+        public int @Nullable [] bakeDetail(int @Nullable [] history, boolean refined) {
             if (history != null) checkRaster(history);
             int[] fresh = Objects.requireNonNull(
-                this.bake()
+                this.bake(null, refined)
                     .mips(),
                 "full tile")[0];
             if (history == null || this.top != this.minY()) return PreviewTileStore.retain(history, fresh);
@@ -216,12 +220,16 @@ public final class TerrainPreview {
          * L0 raster is detached from read-only history; it can be paired with the same mask.
          */
         public int[] bakeDetailPatches(int[] history, BitSet patches) {
+            return this.bakeDetailPatches(history, patches, false);
+        }
+
+        public int[] bakeDetailPatches(int[] history, BitSet patches, boolean refined) {
             if (this.key.isCave()) throw new IllegalArgumentException("Cave previews require a full tile refresh");
             checkRaster(history);
             int perRow = Projection.TILE_PIXELS / TileImage.BLOCK;
             if (patches.isEmpty() || patches.length() > perRow * perRow)
                 throw new IllegalArgumentException("Expected nonempty preview patch mask within the tile");
-            TileImage image = this.bake(patches);
+            TileImage image = this.bake(patches, refined);
             int[] merged = history.clone();
             for (TileImage.Patch patch : image.patches()) {
                 this.mergeDetail(
@@ -234,12 +242,30 @@ public final class TerrainPreview {
             return merged;
         }
 
-        private TileImage bake(@Nullable BitSet patches) {
+        /** Only fill gaps in existing confirmed detail; provisional samples must never replace it. */
+        public int @Nullable [] bakeCoarse(int @Nullable [] history) {
+            if (history != null) checkRaster(history);
+            this.validateForBake();
+            int[] fresh = TileBaker.bakeCoarse(this.key, this, this.looks, 4);
+            if (!this.stillCurrent()) throw new IllegalStateException("Preview projection/style changed while baking");
+            return PreviewTileStore.retain(fresh, history);
+        }
+
+        private void validateForBake() {
             if (!this.stillCurrent()) throw new IllegalStateException("Stale preview projection/style");
             if (this.extended) for (ChunkSnapshot snapshot : this.snapshots) if (snapshot != null) validate(snapshot);
+        }
+
+        private TileImage bake(@Nullable BitSet patches) {
+            return this.bake(patches, false);
+        }
+
+        private TileImage bake(@Nullable BitSet patches, boolean refined) {
+            this.validateForBake();
             // Cave keys take the canonical fixed cut path. There is no visited-voxel mask or
             // artificial roof/lift here; missing chunks remain unknown to the baker.
-            TileImage image = TileBaker.bake(this.key, this, this.looks, patches, false);
+            TileImage image = refined ? TileBaker.bakeRefined(this.key, this, this.looks, patches)
+                : TileBaker.bake(this.key, this, this.looks, patches, false);
             if (!this.stillCurrent()) throw new IllegalStateException("Preview projection/style changed while baking");
             return image;
         }

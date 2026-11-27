@@ -587,6 +587,40 @@ public final class TileBaker {
 	 * {@code fogOfWar} is the cave mode when the bake was scheduled, so it matches its generation.
 	 */
 	/** Whether bakes take one sample per pixel instead of four. Set from the Quality setting. */
+	/**
+	 * A provisional, full-extent raster using one ray per stride-square pixel group. The
+	 * caller must not persist this approximate image as authoritative terrain.
+	 */
+	public static int[] bakeCoarse(TileKey key, ChunkSource source, Looks looks, int stride) {
+		int size = Projection.TILE_PIXELS;
+		if (stride < 2 || stride > 8 || size % stride != 0) {
+			throw new IllegalArgumentException("Invalid coarse pixel stride");
+		}
+		TileBaker baker = new TileBaker(key, source, looks, false, null);
+		int[] pixels = new int[size * size];
+		if (baker.startY <= baker.limitY) return pixels;
+		double unit = 1.0 / Projection.PIXELS_PER_UNIT;
+		for (int y = 0; y < size; y += stride) {
+			double v = key.minV() + (y + stride * 0.5) * unit;
+			for (int x = 0; x < size; x += stride) {
+				double u = key.minU() + (x + stride * 0.5) * unit;
+				baker.surfaceLight = -1;
+				baker.outWater = 0;
+				if (!baker.trace(u, v, 0)) continue;
+				int pixel = baker.abgr(baker.outR, baker.outG, baker.outB, 255);
+				for (int row = 0; row < stride; row++) {
+					java.util.Arrays.fill(pixels, (y + row) * size + x, (y + row) * size + x + stride, pixel);
+				}
+			}
+		}
+		return pixels;
+	}
+
+	/** Full antialiasing independent of the global Fast quality setting. */
+	public static TileImage bakeRefined(TileKey key, ChunkSource source, Looks looks, @Nullable BitSet blocks) {
+		return bakeQuality(key, source, looks, blocks, false, null, null, null, null, true);
+	}
+
 	public static boolean fast() {
 		return fast;
 	}
@@ -626,7 +660,15 @@ public final class TileBaker {
 		int @Nullable [] savedSpots,
 		@Nullable Overlays overlays
 	) {
+		return bakeQuality(key, source, looks, blocks, fogOfWar, saved, savedLight, savedSpots, overlays, false);
+	}
+
+	private static TileImage bakeQuality(
+		TileKey key, ChunkSource source, Looks looks, @Nullable BitSet blocks, boolean fogOfWar, int @Nullable [] saved,
+		byte @Nullable [] savedLight, int @Nullable [] savedSpots, @Nullable Overlays overlays, boolean forceFull
+	) {
 		TileBaker baker = new TileBaker(key, source, looks, fogOfWar, overlays);
+		baker.fourSamples = forceFull;
 		baker.useSavedSpots(savedSpots);
 		int size = Projection.TILE_PIXELS;
 		if (blocks == null) {

@@ -110,3 +110,14 @@ instead of four). Use `-Ddiorama.fastBake=false` to restore full antialiasing. T
 state-to-appearance lookups within each synchronous chunk capture, preserving snow context and epoch
 checks; visible tiles receive the first available bake slot. This does not accelerate server chunk
 transmission or guarantee a fourfold end-to-end speedup.
+
+### Progressive map previews
+
+Enabled by default: each new tile (and changed chunk coverage) first receives a coarse 128x128
+single-ray preview expanded into its normal 512x512 raster. Previously refined pixels are retained.
+Detached background workers then run a full-resolution, four-sample refinement with canonical
+geometry and lighting. The coarse image is never written to the persistent detail cache or used
+as confirmed history by the refinement. Set `-Ddiorama.progressiveBake=false` to restore the old
+single-pass mode; `-Ddiorama.fastBake=true` controls that mode. `/dioramaterrain status` reports
+coarse preview completions. The coarse pass has 16,384 primary rays versus 1,048,576 in the full
+pass, but snapshot validation, shading and other costs mean this is not a measured speed ratio.

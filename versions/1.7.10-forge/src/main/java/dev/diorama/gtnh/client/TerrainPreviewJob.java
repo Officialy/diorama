@@ -52,6 +52,19 @@ public final class TerrainPreviewJob implements AutoCloseable {
         return startParallel(() -> detailFrame(() -> work.bakeDetail(history)), workerLimit());
     }
 
+    static @Nullable TerrainPreviewJob startCoarse(TerrainPreview.Work work, int @Nullable [] history) {
+        return startParallel(() -> detailFrame(() -> work.bakeCoarse(history)), workerLimit());
+    }
+
+    static @Nullable TerrainPreviewJob startRefined(TerrainPreview.Work work, int @Nullable [] history,
+        @Nullable BitSet patches) {
+        BitSet detached = patches == null ? null : (BitSet) patches.clone();
+        return startParallel(
+            () -> detailFrame(() -> detached == null ? work.bakeDetail(history, true)
+                : work.bakeDetailPatches(Objects.requireNonNull(history), detached, true)),
+            workerLimit());
+    }
+
     /** The client retains its own mask for upload; the worker gets an independent copy. */
     static @Nullable TerrainPreviewJob startDetailPatches(TerrainPreview.Work work, int[] history, BitSet patches) {
         BitSet detached = (BitSet) patches.clone();
