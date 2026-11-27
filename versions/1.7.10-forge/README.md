@@ -140,3 +140,11 @@ Death waypoints use the local player's alive-to-dead observation and the existin
 and persistence rules. Instant respawn may bypass this observation. Death markers are red;
 enabled waypoints have minimap edge arrows and in-world camera-facing distance labels.
 Disable these features with `-Ddiorama.deathWaypoints=false` or `-Ddiorama.worldWaypoints=false`.
+
+### Legacy fog and zoom filtering
+
+Unknown areas use world-anchored procedural cloud colouring behind the transparent map raster.
+This is not upstream's volumetric mask shader. Disable with `-Ddiorama.mapFog=false`.
+At native resolution and above, magnification is nearest-neighbour to preserve crisp lines;
+`-Ddiorama.smoothZoom=true` selects linear magnification instead. The canonical full tile remains
+512x512 (four pixels per map unit), so filtering does not invent detail above the source resolution.

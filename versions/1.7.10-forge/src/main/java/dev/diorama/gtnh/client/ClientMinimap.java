@@ -850,10 +850,12 @@ public final class ClientMinimap {
             GL11.glDisable(GL11.GL_LIGHTING);
             GL11.glDisable(GL11.GL_ALPHA_TEST);
             GL11.glEnable(GL11.GL_BLEND);
-            GL11.glEnable(GL11.GL_TEXTURE_2D);
             OpenGlHelper.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+            Tessellator mesh = new Tessellator();
+            LegacyMinimapDraw.fog(mesh, 0, 0, screen.width, screen.height,
+                view.projectedU(0), view.projectedV(0), 1.0 / view.pixelsPerUnit(), drawnLayer != TileKey.SURFACE);
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
             GL11.glColor4f(1, 1, 1, 1);
-            Tessellator mesh = null;
             for (TileKey key : keys) {
                 if (key.layer() != drawnLayer) continue;
                 MapViewportController.Tile part = view.clip(key);
@@ -869,8 +871,8 @@ public final class ClientMinimap {
                 }
                 if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, tile.id);
+                LegacyMinimapDraw.filter(view.pixelsPerUnit() / (1 << key.lod()));
                 if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
-                if (mesh == null) mesh = new Tessellator();
                 mesh.startDrawingQuads();
                 mesh.addVertexWithUV(part.x0(), part.y1(), 0, part.u0(), part.v1());
                 mesh.addVertexWithUV(part.x1(), part.y1(), 0, part.u1(), part.v1());

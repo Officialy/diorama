@@ -52,7 +52,9 @@ final class LegacyMinimapDraw {
         if (!valid.getAsBoolean()) return false;
         rect(mesh, x - 1, y - 1, right + 1, bottom + 1, 0xFF627484);
         if (!valid.getAsBoolean()) return false;
-        rect(mesh, x, y, right, bottom, 0xFF111820);
+        fog(mesh, x, y, size, size, viewport.centerU() - MinimapViewport.HALF,
+            viewport.centerV() - MinimapViewport.HALF, MinimapViewport.SPAN / size,
+            !viewport.tiles().isEmpty() && viewport.tiles().get(0).key().isCave());
         for (MinimapViewport.Tile tile : viewport.tiles()) {
             if (!valid.getAsBoolean()) return false;
             int id = textureId.applyAsInt(tile.key());
@@ -64,6 +66,7 @@ final class LegacyMinimapDraw {
             GL11.glColor4f(1, 1, 1, 1);
             if (!valid.getAsBoolean()) return false;
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, id);
+            filter(size / MinimapViewport.SPAN);
             if (!valid.getAsBoolean()) return false;
             clippedQuad(mesh, bounds, tile);
             if (!valid.getAsBoolean()) return false;
@@ -137,6 +140,75 @@ final class LegacyMinimapDraw {
             arrowLayer(mesh, x, y, dx / length, dy / length, 3.5, 0xFF000000 | point.markerColor());
         }
         mesh.draw();
+    }
+
+    private static final boolean SMOOTH_ZOOM = Boolean.getBoolean("diorama.smoothZoom");
+    private static final boolean MAP_FOG = Boolean.parseBoolean(System.getProperty("diorama.mapFog", "true"));
+
+    /** Texture-native detail remains crisp when magnified; linear filtering reduces distant shimmer. */
+    static void filter(double pixelsPerUnit) {
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER,
+            SMOOTH_ZOOM || pixelsPerUnit < Projection.PIXELS_PER_UNIT ? GL11.GL_LINEAR : GL11.GL_NEAREST);
+    }
+
+    /** World-anchored cloud background: unknown raster alpha exposes it. */
+    static void fog(Tessellator mesh, int x, int y, int width, int height, double u, double v,
+        double unit, boolean cave) {
+        if (width <= 0 || height <= 0) return;
+        GL11.glDisable(GL11.GL_TEXTURE_2D);
+        if (!MAP_FOG) {
+            rect(mesh, x, y, x + width, y + height, 0xFF111820);
+            GL11.glColor4f(1, 1, 1, 1);
+            return;
+        }
+        int previousShade = GL11.glGetInteger(GL11.GL_SHADE_MODEL);
+        GL11.glShadeModel(GL11.GL_SMOOTH);
+        int step = Math.max(12, Math.max(width, height) / 48);
+        try {
+            mesh.startDrawingQuads();
+            for (int row = 0; row < height; row += step) {
+                int bottom = Math.min(height, row + step);
+                for (int col = 0; col < width; col += step) {
+                    int right = Math.min(width, col + step);
+                    fogVertex(mesh, x + col, y + bottom, u + col * unit, v + bottom * unit, cave);
+                    fogVertex(mesh, x + right, y + bottom, u + right * unit, v + bottom * unit, cave);
+                    fogVertex(mesh, x + right, y + row, u + right * unit, v + row * unit, cave);
+                    fogVertex(mesh, x + col, y + row, u + col * unit, v + row * unit, cave);
+                }
+            }
+            mesh.draw();
+        } finally {
+            GL11.glShadeModel(previousShade);
+            GL11.glColor4f(1, 1, 1, 1);
+        }
+    }
+
+    private static void fogVertex(Tessellator mesh, int x, int y, double u, double v, boolean cave) {
+        double n = 0.65 * noise(u / 24, v / 24) + 0.25 * noise(u / 9, v / 9)
+            + 0.10 * noise(u / 3, v / 3);
+        int shade = (int) (cave ? 27 + n * 42 : 111 + n * 88);
+        int rgb = (shade << 16) | ((shade + (cave ? 2 : 4)) << 8) | (shade + (cave ? 5 : 8));
+        mesh.setColorRGBA_I(rgb, 255);
+        mesh.addVertex(x, y, 0);
+    }
+
+    private static double noise(double x, double y) {
+        int ix = (int) Math.floor(x), iy = (int) Math.floor(y);
+        double fx = x - ix, fy = y - iy;
+        fx = fx * fx * (3 - 2 * fx);
+        fy = fy * fy * (3 - 2 * fy);
+        double a = hash(ix, iy) * (1 - fx) + hash(ix + 1, iy) * fx;
+        double b = hash(ix, iy + 1) * (1 - fx) + hash(ix + 1, iy + 1) * fx;
+        return a * (1 - fy) + b * fy;
+    }
+
+    private static double hash(int x, int y) {
+        int h = x * 0x1f123bb5 ^ y * 0x5f356495;
+        h ^= h >>> 16;
+        h *= 0x7feb352d;
+        h ^= h >>> 15;
+        return (h & 65535) / 65535.0;
     }
 
     private static void waypointQuad(Tessellator mesh, int x, int y, int radius, int rgb) {

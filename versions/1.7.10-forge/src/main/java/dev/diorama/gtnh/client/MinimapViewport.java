@@ -52,6 +52,14 @@ final class MinimapViewport {
         return tiles;
     }
 
+    double centerU() {
+        return centerU;
+    }
+
+    double centerV() {
+        return centerV;
+    }
+
     double normalizedX(double u) {
         return .5 + (u - centerU) / SPAN;
     }
