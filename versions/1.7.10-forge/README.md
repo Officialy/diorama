@@ -157,3 +157,7 @@ Repeated chunk refreshes no longer request another coarse preview unless coverag
 unrelated cave tiles no longer invalidate on every block edit. Texture subuploads reuse a fixed
 native staging buffer. For a sharper initial preview, `-Ddiorama.coarseStride=2` traces a 256x256
 preview (four times more primary rays than the default 128x128). `8` selects a 64x64 preview.
+
+The progressive scheduler now permits coalesced coarse gap updates while a tile is still provisional,
+with a 250 ms per-tile throttle and periodic refinement turns. A refinement invalidated by newly
+arriving data retains displayed coarse coverage without writing provisional pixels to storage.

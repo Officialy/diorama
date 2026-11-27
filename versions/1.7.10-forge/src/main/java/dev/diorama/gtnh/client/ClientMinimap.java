@@ -412,14 +412,17 @@ public final class ClientMinimap {
             for (int slots = freeSlots; slots > 0; slots--) {
                 // Reserve the first available slot for visible coverage, then give visible
                 // refinements a turn before filling the remaining background slots.
-                TileKey selected = PROGRESSIVE && slots == freeSlots ? chooseCoarse(live) : null;
+                boolean refinementTurn = PROGRESSIVE && ((bakeSequence & 3) == 3 || slots == freeSlots - 1);
+                TileKey selected = refinementTurn ? chooseRefinement(live) : null;
+                boolean forceRefine = selected != null;
+                if (selected == null && PROGRESSIVE && slots == freeSlots) selected = chooseCoarse(live);
                 if (selected == null && slots == freeSlots) selected = choose(live, window);
-                if (selected == null && PROGRESSIVE && slots == freeSlots - 1) selected = chooseRefinement(live);
                 if (selected == null && PROGRESSIVE) selected = chooseCoarse(candidates);
                 if (selected == null) selected = choose(candidates, window);
                 if (PROGRESSIVE && TerrainPreviewJob.workerLimit() > 1
                     && activeRefinements() >= TerrainPreviewJob.workerLimit() - 1) {
                     selected = chooseCoarse(candidates);
+                    forceRefine = false;
                 }
                 if (selected == null) break;
                 CachedTile entry = detail(selected);
@@ -427,11 +430,11 @@ public final class ClientMinimap {
                 long revision = entry.revision;
                 TerrainPreview.Work work = window.prepare(selected);
                 if (!current(mc) || entry.revision != revision) return;
-                boolean coarse = PROGRESSIVE && needsCoarse(entry);
+                boolean coarse = PROGRESSIVE && !forceRefine && needsCoarse(entry);
                 // With several workers, leave one slot available for newly explored terrain.
                 if (PROGRESSIVE && !coarse && TerrainPreviewJob.workerLimit() > 1
                     && activeRefinements() >= TerrainPreviewJob.workerLimit() - 1) break;
-                int[] history = entry.coarseShown ? entry.confirmedPixels : entry.pixels;
+                int[] history = coarse ? entry.pixels : entry.coarseShown ? entry.confirmedPixels : entry.pixels;
                 BitSet patches = !coarse && !entry.coarseShown && !selected.isCave() && history != null
                     && !entry.needsFull
                     && entry.top == work.topY()
@@ -444,6 +447,7 @@ public final class ClientMinimap {
                 if (job == null) break;
                 entry.job = job;
                 entry.jobCoarse = coarse;
+                if (coarse) entry.lastCoarseNanos = System.nanoTime();
                 entry.jobRevision = revision;
                 entry.jobTop = work.topY();
                 entry.jobPatches = patches;
@@ -465,8 +469,8 @@ public final class ClientMinimap {
     }
 
     private static boolean needsCoarse(CachedTile entry) {
-        return !entry.coarseShown && entry.coarseRevision != entry.revision
-            && (entry.lastAttempt == 0 || entry.coverageChanged);
+        return entry.coarseRevision != entry.revision && (entry.lastAttempt == 0 || entry.coverageChanged)
+            && (!entry.coarseShown || System.nanoTime() - entry.lastCoarseNanos >= 250_000_000L);
     }
 
     private @Nullable TileKey chooseCoarse(List<TileKey> wanted) {
@@ -485,11 +489,16 @@ public final class ClientMinimap {
     }
 
     private @Nullable TileKey chooseRefinement(List<TileKey> wanted) {
+        TileKey selected = null;
+        long oldest = Long.MAX_VALUE;
         for (TileKey key : wanted) {
             CachedTile entry = tiles.get(key);
-            if (entry != null && entry.job == null && entry.coarseShown) return key;
+            if (entry != null && entry.job == null && entry.coarseShown && entry.lastAttempt < oldest) {
+                oldest = entry.lastAttempt;
+                selected = key;
+            }
         }
-        return null;
+        return selected;
     }
 
     private @Nullable TileKey choose(List<TileKey> wanted, TerrainWindow input) {
@@ -541,7 +550,7 @@ public final class ClientMinimap {
             // The session and history checks above still fence world changes and disk restores.
             boolean stable = entry.jobRevision == entry.revision && window.topY(key) == entry.jobTop;
             if (coarse) {
-                entry.confirmedPixels = entry.pixels;
+                if (!entry.coarseShown) entry.confirmedPixels = entry.pixels;
                 entry.coarseShown = true;
                 entry.coarseRevision = entry.jobRevision;
                 entry.coverageChanged = !stable;
@@ -552,6 +561,17 @@ public final class ClientMinimap {
                     entry.pendingUpload = null;
                 }
                 coarseBakes++;
+                continue;
+            }
+            if (!stable && entry.coarseShown) {
+                // The snapshot set changed mid-flight. Keep provisional coverage visible, but retain
+                // only the canonical result as confirmed history for the next refinement.
+                entry.confirmedPixels = frame.detail();
+                entry.pixels = PreviewTileStore.retain(entry.pixels, frame.detail());
+                entry.pendingUpload = null;
+                entry.needsFull = true;
+                entry.savePending = false;
+                provisionalBakes++;
                 continue;
             }
             boolean wasCoarse = entry.coarseShown;
@@ -1043,7 +1063,7 @@ public final class ClientMinimap {
         private @Nullable BitSet jobPatches;
         private boolean readRequested, savePending;
         private boolean coarseShown, jobCoarse, coverageChanged;
-        private long coarseRevision = -1;
+        private long coarseRevision = -1, lastCoarseNanos;
         private int @Nullable [] confirmedPixels;
         private int[][] children;
         private int provisionalChildren;

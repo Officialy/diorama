@@ -312,6 +312,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "Unexpected scaffold base classes: ${classes.keys}"
             }
             val expectedMr = setOf("dev/diorama/gtnh/capture/TerrainPreview.class",
+                "dev/diorama/gtnh/client/ClientProxy.class",
                 "dev/diorama/gtnh/capture/MapDimensionIdentity.class",
                 "dev/diorama/gtnh/client/ClientPreviewStorage.class",
                 "dev/diorama/gtnh/client/SharedTerrainMapScreen.class",

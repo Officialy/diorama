@@ -116,7 +116,7 @@ final class LegacyMinimapDraw {
         if (nearest != null) {
             int labelY = textY + (coords == null || coords.isEmpty() ? 0 : font.FONT_HEIGHT + 2);
             if (labelY + font.FONT_HEIGHT <= height - MinimapViewport.MARGIN) {
-                String label = font.trimStringToWidth(nearest.name() + " " + Math.round(distance) + "m", size + 24);
+                String label = font.trimStringToWidth(new StringBuilder(nearest.name()).append(" ").append(Math.round(distance)).append("m").toString(), size + 24);
                 int left = right - font.getStringWidth(label);
                 if (left >= MinimapViewport.MARGIN && valid.getAsBoolean()) {
                     GL11.glEnable(GL11.GL_TEXTURE_2D);
