@@ -403,6 +403,10 @@ public final class ClientMinimap {
                 if (selected == null && PROGRESSIVE && slots == freeSlots - 1) selected = chooseRefinement(live);
                 if (selected == null && PROGRESSIVE) selected = chooseCoarse(candidates);
                 if (selected == null) selected = choose(candidates, window);
+                if (PROGRESSIVE && TerrainPreviewJob.workerLimit() > 1
+                    && activeRefinements() >= TerrainPreviewJob.workerLimit() - 1) {
+                    selected = chooseCoarse(candidates);
+                }
                 if (selected == null) break;
                 CachedTile entry = detail(selected);
                 if (entry == null || !current(mc)) return;
@@ -410,6 +414,9 @@ public final class ClientMinimap {
                 TerrainPreview.Work work = window.prepare(selected);
                 if (!current(mc) || entry.revision != revision) return;
                 boolean coarse = PROGRESSIVE && needsCoarse(entry);
+                // With several workers, leave one slot available for newly explored terrain.
+                if (PROGRESSIVE && !coarse && TerrainPreviewJob.workerLimit() > 1
+                    && activeRefinements() >= TerrainPreviewJob.workerLimit() - 1) break;
                 int[] history = entry.coarseShown ? entry.confirmedPixels : entry.pixels;
                 BitSet patches = !coarse && !entry.coarseShown && !selected.isCave() && history != null
                     && !entry.needsFull
@@ -435,6 +442,12 @@ public final class ClientMinimap {
         } finally {
             updating = false;
         }
+    }
+
+    private int activeRefinements() {
+        int count = 0;
+        for (CachedTile entry : tiles.values()) if (entry.job != null && !entry.jobCoarse) count++;
+        return count;
     }
 
     private static boolean needsCoarse(CachedTile entry) {
@@ -622,11 +635,20 @@ public final class ClientMinimap {
         for (TileKey key : visible) {
             CachedTile parent = overviews.get(key);
             int[][] children = new int[4][];
+            int provisionalChildren = 0;
+            int retainChildren = 0;
             boolean changed = false;
             for (int i = 0; i < 4; i++) {
                 CachedTile child = tiles.get(PreviewOverview.childKey(key, i));
                 children[i] = child == null ? null : child.pixels;
-                if (children[i] != null && (parent == null || parent.children[i] != children[i])) changed = true;
+                int bit = 1 << i;
+                if (child != null && child.coarseShown) provisionalChildren |= bit;
+                if (child == null && parent != null && (parent.provisionalChildren & bit) == 0) {
+                    retainChildren |= bit;
+                } else if (parent == null ? children[i] != null
+                    : parent.children[i] != children[i] || (parent.provisionalChildren & bit) != (provisionalChildren & bit)) {
+                    changed = true;
+                }
             }
             if (!changed) continue;
             int[] pixels = PreviewOverview.build(key, children);
@@ -634,7 +656,7 @@ public final class ClientMinimap {
                 if (overviews.size() >= OVERVIEW_TILES) evict(overviews, false);
                 parent = new CachedTile();
                 overviews.put(key, parent);
-            } else for (int i = 0; i < 4; i++) if (children[i] == null && parent.children[i] != null) {
+            } else for (int i = 0; i < 4; i++) if ((retainChildren & (1 << i)) != 0 && parent.children[i] != null) {
                 // A child evicted from the detail cache leaves its already known quadrant intact.
                 int start = (i / 2) * half * edge + (i % 2) * half;
                 for (int y = 0; y < half; y++)
@@ -642,6 +664,7 @@ public final class ClientMinimap {
                 children[i] = parent.children[i];
             }
             parent.children = children;
+            parent.provisionalChildren = provisionalChildren;
             parent.pixels = pixels;
             return; // Bound overview composition to one tile per tick, only while zoomed out.
         }
@@ -957,6 +980,7 @@ public final class ClientMinimap {
         private long coarseRevision = -1;
         private int @Nullable [] confirmedPixels;
         private int[][] children;
+        private int provisionalChildren;
         private int top;
         private boolean needsFull = true, anaglyph;
         private @Nullable BitSet pendingUpload;

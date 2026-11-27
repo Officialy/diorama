@@ -53,11 +53,13 @@ public final class TerrainPreviewProbe {
     private static void progressiveBake() {
         PreparedBlockLooks looks = table();
         TerrainPreview.Work work = TerrainPreview.prepare(
-            looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, false) });
+            looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, true) });
         int[] full = work.bakeDetail(null, true);
         int[] coarse = work.bakeCoarse(null);
         require(full != null && coarse != null && full.length == coarse.length, "coarse keeps full raster extent");
         int edge = Projection.TILE_PIXELS;
+        require((coarse[24 * edge + 32] >>> 24) == 255, "coarse covers the known floor");
+        require(coarse[24 * edge + 400] == 0, "coarse leaves distant unknown terrain transparent");
         for (int y = 0; y < edge; y += 4) for (int x = 0; x < edge; x += 4) {
             int index = y * edge + x;
             require(coarse[index] == coarse[index + 3] && coarse[index] == coarse[index + 3 * edge + 3],
@@ -68,7 +70,7 @@ public final class TerrainPreviewProbe {
         require(Arrays.equals(previous, work.bakeCoarse(previous)), "coarse never replaces confirmed pixels");
         TileBaker.setFast(true);
         TerrainPreview.Work fast = TerrainPreview.prepare(
-            looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, false) });
+            looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, true) });
         require(Arrays.equals(full, fast.bakeDetail(null, true)), "refinement ignores global fast setting");
         require(fast.stillCurrent(), "quality is not changed globally by refinement");
         TileBaker.setFast(false);

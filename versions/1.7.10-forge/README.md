@@ -121,3 +121,7 @@ as confirmed history by the refinement. Set `-Ddiorama.progressiveBake=false` to
 single-pass mode; `-Ddiorama.fastBake=true` controls that mode. `/dioramaterrain status` reports
 coarse preview completions. The coarse pass has 16,384 primary rays versus 1,048,576 in the full
 pass, but snapshot validation, shading and other costs mean this is not a measured speed ratio.
+
+When multiple bake workers are available, one slot is reserved for coarse coverage so expensive
+refinements cannot occupy every worker while exploring. Zoomed-out overviews discard evicted
+provisional children rather than retaining them as confirmed history.
