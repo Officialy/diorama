@@ -10,6 +10,8 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityClientPlayerMP;
@@ -44,7 +46,9 @@ import dev.diorama.gtnh.diagnostic.ProbePixels;
 public final class ClientMinimap {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
-    private static final int CACHE_TILES = 128;
+    private static final int CACHE_TILES = Math.max(96, Math.min(512, Integer.getInteger("diorama.residentTiles", 192)));
+    private static final int HISTORY_TILES = Math.max(0, Math.min(512, Integer.getInteger("diorama.historyTiles", 192)));
+    private static final int UPLOADS_PER_FRAME = Math.max(1, Math.min(4, Integer.getInteger("diorama.uploadsPerFrame", 3)));
     private static final boolean PROGRESSIVE = Boolean.parseBoolean(System.getProperty("diorama.progressiveBake", "true"));
     private static final int MAP_TILES = 24;
     private static final int OVERVIEW_TILES = 16;
@@ -58,7 +62,10 @@ public final class ClientMinimap {
         Math.min(12, Integer.getInteger("diorama.captureBudgetMs", 4))) * 1_000_000L;
     private static @Nullable ClientMinimap installed;
 
-    private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(CACHE_TILES + 1, 0.75f, true);
+    private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(CACHE_TILES + 1, 0.75f, false);
+    private final Map<TileKey, int[]> history = new LinkedHashMap<>(HISTORY_TILES + 1, 0.75f, true);
+    private final Set<TileKey> visibleKeys = new HashSet<>();
+    private long viewSequence;
     private final Map<TileKey, CachedTile> overviews = new LinkedHashMap<>(OVERVIEW_TILES + 1, 0.75f, true);
     private final MinimapOptions options;
     private final SharedTileIo io = new SharedTileIo();
@@ -296,6 +303,8 @@ public final class ClientMinimap {
             + (PROGRESSIVE ? "progressive" : TileBaker.fast() ? "fast" : "full")
             + "; coarse previews: "
             + hud.coarseBakes
+            + "; retained history: "
+            + hud.history.size()
             + "; active bakes: "
             + hud.activeBakes
             + "; completed: "
@@ -367,13 +376,16 @@ public final class ClientMinimap {
                 if (key.lod() == 0) wanted.add(key);
                 else for (int i = 0; i < 4; i++) wanted.add(PreviewOverview.childKey(key, i));
             }
+            visibleKeys.clear();
+            visibleKeys.addAll(wanted);
             List<TileKey> live = new ArrayList<>();
             for (TileKey key : wanted) {
                 boolean local = window.hasReady(key);
                 if (local) live.add(key);
                 boolean onDisk = persistent && !key.isCave();
-                if (onDisk || local) {
+                if (onDisk || local || history.containsKey(key) || tiles.containsKey(key)) {
                     CachedTile tile = detail(key);
+                    if (tile != null) tile.lastViewed = ++viewSequence;
                     if (onDisk && tile != null && !tile.readRequested) tile.readRequested = io.read(key);
                 }
             }
@@ -459,7 +471,10 @@ public final class ClientMinimap {
         TileKey refresh = null;
         for (TileKey key : wanted) {
             CachedTile entry = tiles.get(key);
-            if (entry == null) return key;
+            if (entry == null) {
+                if (history.containsKey(key) && !visibleKeys.contains(key)) continue;
+                return key;
+            }
             if (entry.job != null || !needsCoarse(entry)) continue;
             if (entry.pixels == null) return key;
             if (refresh == null) refresh = key;
@@ -578,25 +593,39 @@ public final class ClientMinimap {
         if (tile != null) return tile;
         if (tiles.size() >= CACHE_TILES && !evict(tiles, true)) return null;
         tile = new CachedTile();
+        tile.pixels = history.remove(key);
+        tile.lastViewed = ++viewSequence;
         tiles.put(key, tile);
         return tile;
     }
 
     private boolean evict(Map<TileKey, CachedTile> cache, boolean detail) {
-        var entries = cache.entrySet()
-            .iterator();
-        while (entries.hasNext()) {
-            var entry = entries.next();
-            CachedTile oldest = entry.getValue();
-            if (detail && (oldest.job != null || oldest.savePending)) continue;
-            entries.remove();
-            textureGeneration++;
-            if (oldest.texture != null) try (ProbeGlState state = new ProbeGlState()) {
-                oldest.release(state);
+        TileKey victim = null;
+        CachedTile oldest = null;
+        for (var entry : cache.entrySet()) {
+            CachedTile candidate = entry.getValue();
+            if (detail && (candidate.job != null || candidate.savePending || visibleKeys.contains(entry.getKey())))
+                continue;
+            if (oldest == null || candidate.lastViewed < oldest.lastViewed) {
+                victim = entry.getKey();
+                oldest = candidate;
             }
-            return true;
+            if (!detail) break;
         }
-        return false;
+        if (oldest == null || victim == null) return false;
+        cache.remove(victim);
+        if (detail && !victim.isCave() && HISTORY_TILES > 0) {
+            int[] confirmed = oldest.coarseShown ? oldest.confirmedPixels : oldest.pixels;
+            if (confirmed != null) {
+                history.put(victim, confirmed);
+                while (history.size() > HISTORY_TILES) history.remove(history.keySet().iterator().next());
+            }
+        }
+        textureGeneration++;
+        if (oldest.texture != null) try (ProbeGlState state = new ProbeGlState()) {
+            oldest.release(state);
+        }
+        return true;
     }
 
     private void restore(SharedTileIo.Read result) {
@@ -682,6 +711,9 @@ public final class ClientMinimap {
         List<CachedTile> released = new ArrayList<>(tiles.values());
         released.addAll(overviews.values());
         tiles.clear();
+        history.clear();
+        visibleKeys.clear();
+        viewSequence = 0;
         overviews.clear();
         textureGeneration++;
         for (CachedTile entry : released) {
@@ -724,12 +756,14 @@ public final class ClientMinimap {
         ClientCaptureLifecycle.Session shown = session;
         try (ProbeGlState state = new ProbeGlState()) {
             drawing = state;
+            int uploads = 0;
+            long uploadStart = System.nanoTime();
             for (MinimapViewport.Tile part : view.tiles()) {
                 CachedTile tile = tiles.get(part.key());
                 if (tile != null && tile.pixels != null
                     && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
                     if (!uploadPatch(mc, part.key(), tile, state, false)) upload(mc, part.key(), tile, state, false);
-                    break; // Never queue multiple full texture uploads on one render frame.
+                    if (++uploads >= UPLOADS_PER_FRAME || System.nanoTime() - uploadStart >= 3_000_000L) break;
                 }
             }
             float yaw = player.prevRotationYaw
@@ -738,6 +772,7 @@ public final class ClientMinimap {
             LegacyMinimapDraw
                 .draw(mc, event.resolution.getScaledWidth(), event.resolution.getScaledHeight(), view, key -> {
                     CachedTile tile = tiles.get(key);
+                    if (tile != null) tile.lastViewed = ++viewSequence;
                     return tile == null || tile.pixels == null ? -1 : tile.id;
                 },
                     ClientWaypoints.visibleBook(mc),
@@ -794,12 +829,18 @@ public final class ClientMinimap {
                 if (key.layer() == drawnLayer && view.clip(key) != null && !uploadKeys.contains(key))
                     uploadKeys.add(key);
             }
+            uploadKeys.sort(Comparator.comparingInt(key -> {
+                CachedTile tile = tileFor(key);
+                return tile != null && tile.id <= 0 ? 0 : 1;
+            }));
+            int uploads = 0;
+            long uploadStart = System.nanoTime();
             for (TileKey key : uploadKeys) {
                 CachedTile tile = tileFor(key);
                 if (tile != null && tile.pixels != null
                     && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
                     if (!uploadPatch(mc, key, tile, state, true)) upload(mc, key, tile, state, true);
-                    break;
+                    if (++uploads >= UPLOADS_PER_FRAME || System.nanoTime() - uploadStart >= 3_000_000L) break;
                 }
             }
             List<TileKey> keys = new ArrayList<>(overviews.keySet());
@@ -819,6 +860,7 @@ public final class ClientMinimap {
                 if (part == null) continue;
                 CachedTile tile = tileFor(key);
                 if (tile == null || tile.pixels == null || tile.id <= 0) continue;
+                tile.lastViewed = ++viewSequence;
                 if (preferred == 1 && key.lod() == 0) {
                     CachedTile parent = overviews.get(key.parent());
                     if (parent != null && parent.id > 0 && parent.pixels == parent.uploaded
@@ -916,6 +958,26 @@ public final class ClientMinimap {
     private void upload(Minecraft mc, TileKey key, CachedTile tile, ProbeGlState state, boolean map) {
         int[] scratch = tile.pixels;
         boolean anaglyph = mc.gameSettings.anaglyph;
+        if (tile.texture != null && tile.id > 0 && tile.anaglyph == anaglyph) {
+            int edge = Projection.TILE_PIXELS;
+            long started = TerrainMetrics.ENABLED ? System.nanoTime() : 0;
+            boolean ok = false;
+            try {
+                ok = HudTexturePatchUpload.upload(tile.id, edge, edge, scratch, 0, 0, edge, edge, anaglyph,
+                    () -> current(mc) && tileFor(key) == tile && tile.pixels == scratch
+                        && mc.gameSettings.anaglyph == anaglyph);
+                if (ok) {
+                    tile.uploaded = scratch;
+                    tile.pendingUpload = new BitSet();
+                    textureGeneration++;
+                }
+            } catch (RuntimeException failure) {
+                LOG.warn("Diorama in-place tile upload failed; replacing texture", failure);
+            } finally {
+                recordUpload(map, started, ok, !ok);
+            }
+            if (ok) return;
+        }
         DynamicTexture old = tile.texture;
         int oldId = tile.id;
         int edge = Projection.TILE_PIXELS;
@@ -970,7 +1032,7 @@ public final class ClientMinimap {
     private static final class CachedTile {
 
         private final BitSet dirty = new BitSet();
-        private long revision, lastAttempt, jobRevision;
+        private long revision, lastAttempt, jobRevision, lastViewed;
         private int jobTop;
         private @Nullable TerrainPreviewJob job;
         private int @Nullable [] jobHistory;

@@ -125,3 +125,11 @@ pass, but snapshot validation, shading and other costs mean this is not a measur
 When multiple bake workers are available, one slot is reserved for coarse coverage so expensive
 refinements cannot occupy every worker while exploring. Zoomed-out overviews discard evicted
 provisional children rather than retaining them as confirmed history.
+
+### Retained map tiles
+
+Visible tile access, not scheduler lookups, controls eviction. Confirmed surface tiles are retained
+in a secondary session cache even without multiplayer disk persistence. Set `-Ddiorama.residentTiles=192`,
+`-Ddiorama.historyTiles=192` and `-Ddiorama.uploadsPerFrame=3` to tune the defaults. Each retained raster
+uses approximately 1 MiB; resident texture and staging costs are additional. History clears on session
+reset. Texture updates reuse existing allocations when possible and uploads have a soft 3ms frame budget.

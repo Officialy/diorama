@@ -2,7 +2,7 @@ name: GTNH build
 on:
   workflow_dispatch:
   push:
-    branches: [feat/gtnh-progressive-baking]
+    branches: [feat/gtnh-navigation-and-retention]
 permissions:
   contents: read
 jobs:
