@@ -218,6 +218,7 @@ public final class ClientMinimap {
         if (input == null || !input.contains(cx, cz)) return;
         input.blockChanged(cx, cz, x, z);
         for (var entry : installed.tiles.entrySet()) {
+            if (!DirtyTerrainTiles.intersectsChunk(entry.getKey(), cx, cz)) continue;
             entry.getValue()
                 .invalidate(
                     DirtyTerrainTiles.block(entry.getKey(), cx * 16 + x, y, cz * 16 + z),
@@ -244,6 +245,7 @@ public final class ClientMinimap {
         // Fill and unload may affect adjacent biome samples and light. Unlike a single block
         // update, neither supplies a safe height bound.
         for (var entry : tiles.entrySet()) {
+            if (entry.getKey().isCave() && !DirtyTerrainTiles.intersectsChunk(entry.getKey(), cx, cz)) continue;
             entry.getValue()
                 .invalidate(
                     DirtyTerrainTiles
@@ -256,7 +258,7 @@ public final class ClientMinimap {
     private void dirtyChunk(int cx, int cz) {
         for (var entry : tiles.entrySet()) {
             if (!DirtyTerrainTiles.intersectsChunk(entry.getKey(), cx, cz)) continue;
-            entry.getValue().coverageChanged = true;
+            if (window != null && !window.hasSnapshot(cx, cz)) entry.getValue().coverageChanged = true;
             entry.getValue()
                 .invalidate(
                     DirtyTerrainTiles.chunk(entry.getKey(), cx, cz),

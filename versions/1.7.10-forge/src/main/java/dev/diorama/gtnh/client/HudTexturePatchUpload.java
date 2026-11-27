@@ -1,9 +1,13 @@
 package dev.diorama.gtnh.client;
 
 import java.nio.IntBuffer;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.function.BooleanSupplier;
 
 import net.minecraft.client.renderer.OpenGlHelper;
+
+import dev.diorama.Projection;
 
 import org.lwjgl.opengl.ContextCapabilities;
 import org.lwjgl.opengl.GL11;
@@ -18,6 +22,10 @@ final class HudTexturePatchUpload {
         GL11.GL_UNPACK_SKIP_ROWS, GL11.GL_UNPACK_SKIP_PIXELS, GL11.GL_UNPACK_SWAP_BYTES };
     private static final int[] TIGHT_UNPACK = { 4, 0, 0, 0, GL11.GL_FALSE };
 
+    private static final ThreadLocal<IntBuffer> STAGING = ThreadLocal.withInitial(() -> ByteBuffer
+        .allocateDirect(Projection.TILE_PIXELS * Projection.TILE_PIXELS * Integer.BYTES)
+        .order(ByteOrder.nativeOrder()).asIntBuffer());
+
     private HudTexturePatchUpload() {}
 
     /**
@@ -27,7 +35,7 @@ final class HudTexturePatchUpload {
     static boolean upload(int rawTextureId, int textureWidth, int textureHeight, int[] abgr, int x, int y, int width,
         int height, boolean anaglyph, BooleanSupplier current) {
         if (rawTextureId <= 0 || !current.getAsBoolean()) return false;
-        IntBuffer packed = HudTexturePatchPixels.pack(abgr, textureWidth, textureHeight, x, y, width, height, anaglyph);
+        IntBuffer packed = HudTexturePatchPixels.packInto(STAGING.get(), abgr, textureWidth, textureHeight, x, y, width, height, anaglyph);
         // A client pointer must never be interpreted as an offset into a bound unpack buffer.
         ContextCapabilities capabilities = GLContext.getCapabilities();
         if ((capabilities.OpenGL21 || capabilities.GL_ARB_pixel_buffer_object

@@ -12,6 +12,23 @@ final class HudTexturePatchPixels {
     private HudTexturePatchPixels() {}
 
     static IntBuffer pack(int[] abgr, int stride, int rows, int x, int y, int width, int height, boolean anaglyph) {
+        validate(abgr, stride, rows, x, y, width, height);
+        IntBuffer packed = ByteBuffer.allocateDirect(Math.multiplyExact(width * height, Integer.BYTES))
+            .order(ByteOrder.nativeOrder())
+            .asIntBuffer();
+        return fill(packed, abgr, stride, x, y, width, height, anaglyph);
+    }
+
+    static IntBuffer packInto(IntBuffer buffer, int[] abgr, int stride, int rows, int x, int y, int width,
+        int height, boolean anaglyph) {
+        validate(abgr, stride, rows, x, y, width, height);
+        if (!buffer.isDirect() || buffer.order() != ByteOrder.nativeOrder() || buffer.capacity() < width * height)
+            throw new IllegalArgumentException("Invalid reusable upload buffer");
+        buffer.clear();
+        return fill(buffer, abgr, stride, x, y, width, height, anaglyph);
+    }
+
+    private static void validate(int[] abgr, int stride, int rows, int x, int y, int width, int height) {
         if (stride <= 0 || rows <= 0
             || (long) stride * rows != abgr.length
             || x < 0
@@ -20,9 +37,10 @@ final class HudTexturePatchPixels {
             || height <= 0
             || x > stride - width
             || y > rows - height) throw new IllegalArgumentException("Invalid HUD texture patch bounds");
-        IntBuffer packed = ByteBuffer.allocateDirect(Math.multiplyExact(width * height, Integer.BYTES))
-            .order(ByteOrder.nativeOrder())
-            .asIntBuffer();
+    }
+
+    private static IntBuffer fill(IntBuffer packed, int[] abgr, int stride, int x, int y, int width, int height,
+        boolean anaglyph) {
         // TextureUtil uploads native integer 0xAARRGGBB words as BGRA / UNSIGNED_INT_8_8_8_8_REV.
         // It places source row zero at texture y=0; the patch must not reverse the row order either.
         for (int row = y; row < y + height; row++) {

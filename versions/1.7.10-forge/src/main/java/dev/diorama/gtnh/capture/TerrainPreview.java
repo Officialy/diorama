@@ -24,6 +24,8 @@ public final class TerrainPreview {
     public static final int MAX_SNAPSHOTS = 9;
     public static final int MAX_EXTENDED_SNAPSHOTS = 65 * 65;
     private static final int WORLD_TOP = 256;
+    private static final int COARSE_STRIDE = Integer.getInteger("diorama.coarseStride", 4) == 2 ? 2
+        : Integer.getInteger("diorama.coarseStride", 4) == 8 ? 8 : 4;
     // The canonical player-follow cut can round up just beyond the world storage span.
     private static final int MAX_CAVE_LAYER = WORLD_TOP + 4;
 
@@ -246,7 +248,7 @@ public final class TerrainPreview {
         public int @Nullable [] bakeCoarse(int @Nullable [] history) {
             if (history != null) checkRaster(history);
             this.validateForBake();
-            int[] fresh = TileBaker.bakeCoarse(this.key, this, this.looks, 4);
+            int[] fresh = TileBaker.bakeCoarse(this.key, this, this.looks, COARSE_STRIDE);
             if (!this.stillCurrent()) throw new IllegalStateException("Preview projection/style changed while baking");
             return PreviewTileStore.retain(fresh, history);
         }

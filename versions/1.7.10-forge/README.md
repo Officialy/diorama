@@ -152,3 +152,8 @@ At native resolution and above, magnification is nearest-neighbour to preserve c
 Snapshot selection now inverts the tile's projected lighting/ray bounds and visits only candidate
 chunk slots, caching detached input arrays until a capture changes. Minimap off-screen bearings use
 horizontal displacement rather than waypoint height, with a nearest-waypoint distance label.
+
+Repeated chunk refreshes no longer request another coarse preview unless coverage is new, and
+unrelated cave tiles no longer invalidate on every block edit. Texture subuploads reuse a fixed
+native staging buffer. For a sharper initial preview, `-Ddiorama.coarseStride=2` traces a 256x256
+preview (four times more primary rays than the default 128x128). `8` selects a 64x64 preview.

@@ -67,6 +67,11 @@ final class TerrainWindow {
         return refresh.radius();
     }
 
+    boolean hasSnapshot(int cx, int cz) {
+        int slot = refresh.slot(cx, cz);
+        return slot >= 0 && snapshots[slot] != null;
+    }
+
     boolean contains(int cx, int cz) {
         return refresh.slot(cx, cz) >= 0;
     }
@@ -288,9 +293,10 @@ final class TerrainWindow {
             return false;
         }
         if (availabilityChanged != null && snapshot != null) availabilityChanged.accept(cx, cz);
+        boolean changed = snapshots[slot] != snapshot;
         snapshots[slot] = snapshot;
         statuses[slot] = outcome;
-        return true;
+        return changed;
     }
 
     private void count() {
