@@ -138,7 +138,19 @@ final class LegacyGpuVolume {
 
     /** Render thread: poll without waiting, then admit one new job only if coarse work is idle. */
     static void frame(boolean maySubmit) {
-        if (readFence != null) poll();
+        if (readFence != null) {
+            try { poll(); }
+            catch (RuntimeException | LinkageError failure) {
+                CompletableFuture<int[]> future = readFuture;
+                if (future != null) future.complete(null);
+                failed = true;
+                LOG.warn("GPU fence polling failed; disabling voxel refinement",failure);
+                try { clearReadback(); }
+                catch (RuntimeException | LinkageError ignored) {
+                    readFence = null; readPbo = 0; readFuture = null;
+                }
+            }
+        }
         if (readFence != null || !maySubmit) return;
         Runnable request = REQUEST.getAndSet(null);
         if (request != null) request.run();

@@ -32,7 +32,7 @@ final class WaypointListScreen extends GuiScreen {
             String location = "  [" + point.x() + ", " + point.y() + ", " + point.z() + "]";
             String prefix = point.enabled() ? "" : "- ";
             String name = fontRendererObj
-                .trimStringToWidth(point.name(), 260 - fontRendererObj.getStringWidth(location + prefix));
+                .trimStringToWidth(new StringBuilder(point.icon()).append(" ").append(point.label()).toString(), 260 - fontRendererObj.getStringWidth(location + prefix));
             buttonList.add(new GuiButton(10 + i, left, 38 + (i % pageSize) * 22, 280, 20, prefix + name + location));
         }
         int bottom = height - 28;
