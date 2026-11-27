@@ -29,7 +29,6 @@ import dev.diorama.gtnh.capture.TerrainPreview;
 final class LegacyGpuBaker {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
-    private static final boolean ENABLED = Boolean.getBoolean("diorama.gpuBake") || Boolean.getBoolean("diorama.gpuRefine");
     private static final AtomicReference<FutureTask<int[]>> PENDING = new AtomicReference<>();
     private static final AtomicLong COMPLETED = new AtomicLong(), FALLBACKS = new AtomicLong();
     private static final int SIZE = 128;
@@ -51,7 +50,11 @@ final class LegacyGpuBaker {
     private LegacyGpuBaker() {}
 
     static int @Nullable [] preview(TerrainPreview.Work work) {
-        if (!ENABLED || failed || work.key().isCave() || PENDING.get() != null) return null;
+        return preview(work, ClientMinimap.options().gpuPreview);
+    }
+
+    static int @Nullable [] preview(TerrainPreview.Work work, boolean enabled) {
+        if (!enabled || failed || work.key().isCave() || PENDING.get() != null) return null;
         try {
             float[] columns = work.gpuColumns();
             double origin = work.key().minV() / Projection.sin();
@@ -97,7 +100,7 @@ final class LegacyGpuBaker {
     }
 
     static String stats() {
-        return new StringBuilder(ENABLED ? "enabled" : "off").append(", completed=").append(COMPLETED.get())
+        return new StringBuilder(ClientMinimap.options().gpuPreview ? "enabled" : "off").append(", completed=").append(COMPLETED.get())
             .append(", fallback=").append(FALLBACKS.get()).append(", disabled=").append(failed).toString();
     }
 

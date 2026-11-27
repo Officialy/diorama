@@ -22,7 +22,7 @@ final class MinimapOptionsScreen extends GuiScreen {
     public void initGui() {
         int buttonWidth = Math.min(200, Math.max(1, width - 12));
         int x = (width - buttonWidth) / 2;
-        int[] ids = advanced ? new int[] { 8,9,10,11,12,13,7 } : new int[] { 0,1,2,3,4,5,6,13,7 };
+        int[] ids = advanced ? new int[] { 8,9,10,11,12,14,13,7 } : new int[] { 0,1,2,3,4,5,6,13,7 };
         int columns = width >= 300 ? 2 : 1;
         int gap = 4;
         int rows = (ids.length + columns - 1) / columns;
@@ -50,6 +50,7 @@ final class MinimapOptionsScreen extends GuiScreen {
             case 10 -> I18n.format(LABEL + ".beams",state(options.beams));
             case 11 -> I18n.format(LABEL + ".volumetric",state(options.volumetricFog));
             case 12 -> I18n.format(LABEL + ".hd",state(options.highResolution));
+            case 14 -> "Rendering / performance";
             case 13 -> I18n.format(LABEL + (advanced ? ".basic" : ".advanced"));
             default -> I18n.format("gui.done");
         };
@@ -78,6 +79,10 @@ final class MinimapOptionsScreen extends GuiScreen {
             case 10 -> options.beams = !options.beams;
             case 11 -> options.volumetricFog = !options.volumetricFog;
             case 12 -> options.highResolution = !options.highResolution;
+            case 14 -> {
+                mc.displayGuiScreen(new RenderSettingsScreen(parent, this));
+                return;
+            }
             case 13 -> {
                 advanced = !advanced;
                 buttonList.clear();

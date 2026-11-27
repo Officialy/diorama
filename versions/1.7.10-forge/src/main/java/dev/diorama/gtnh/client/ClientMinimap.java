@@ -46,26 +46,16 @@ import dev.diorama.gtnh.diagnostic.ProbePixels;
 public final class ClientMinimap {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
-    private static final int CACHE_TILES = Math.max(96, Math.min(512, Integer.getInteger("diorama.residentTiles", 192)));
     private static final int HD_TILES = 4;
-    private static final int HISTORY_TILES = Math.max(0, Math.min(512, Integer.getInteger("diorama.historyTiles", 192)));
-    private static final int UPLOADS_PER_FRAME = Math.max(1, Math.min(4, Integer.getInteger("diorama.uploadsPerFrame", 3)));
-    private static final boolean PROGRESSIVE = Boolean.parseBoolean(System.getProperty("diorama.progressiveBake", "true"));
     private static final int MAP_TILES = 24;
     private static final int OVERVIEW_TILES = 16;
     private static final int PATCH_FALLBACK = 160;
     private static final int PATCH_SIDE = Projection.TILE_PIXELS / TileImage.BLOCK;
-    private static final int CAPTURES_PER_TICK = Math.max(
-        1,
-        Math.min(24, Integer.getInteger("diorama.capturesPerTick", 12)));
-    private static final long CAPTURE_BUDGET_NS = Math.max(
-        1,
-        Math.min(12, Integer.getInteger("diorama.captureBudgetMs", 4))) * 1_000_000L;
     private static @Nullable ClientMinimap installed;
 
-    private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(CACHE_TILES + 1, 0.75f, false);
+    private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(193, 0.75f, false);
     private final Map<TileKey, CachedTile> highRes = new LinkedHashMap<>(HD_TILES + 1, 0.75f, true);
-    private final Map<TileKey, int[]> history = new LinkedHashMap<>(HISTORY_TILES + 1, 0.75f, true);
+    private final Map<TileKey, int[]> history = new LinkedHashMap<>(193, 0.75f, true);
     private final Set<TileKey> visibleKeys = new HashSet<>();
     private long viewSequence;
     private final Map<TileKey, CachedTile> overviews = new LinkedHashMap<>(OVERVIEW_TILES + 1, 0.75f, true);
@@ -92,7 +82,6 @@ public final class ClientMinimap {
     private int retryTicks;
 
     ClientMinimap(Path optionsFile) {
-        TileBaker.setFast(Boolean.parseBoolean(System.getProperty("diorama.fastBake", "true")));
         options = new MinimapOptions(optionsFile);
         try {
             options.load();
@@ -100,14 +89,25 @@ public final class ClientMinimap {
             LOG.warn("Could not read Diorama minimap options; using defaults", failure);
         }
         installed = this;
+        applyRenderOptions();
     }
 
     static MinimapOptions options() {
         return java.util.Objects.requireNonNull(installed).options;
     }
 
+    static void applyRenderOptions() {
+        ClientMinimap hud = installed;
+        if (hud == null) return;
+        TerrainPreviewJob.setWorkerLimit(hud.options.workers);
+        TileBaker.setFast(hud.options.fast);
+        // Changing render quality is applied to new jobs. Previously accepted canonical pixels
+        // remain valid; pending results are fenced by the existing revision and style checks.
+    }
+
     static boolean saveOptions() {
         try {
+            applyRenderOptions();
             options().save();
             return true;
         } catch (IOException failure) {
@@ -304,7 +304,7 @@ public final class ClientMinimap {
             + "; resident tiles: "
             + hud.tiles.size()
             + "; quality: "
-            + (PROGRESSIVE ? "progressive" : TileBaker.fast() ? "fast" : "full")
+            + (hud.options.progressive ? "progressive" : TileBaker.fast() ? "fast" : "full")
             + "; coarse previews: "
             + hud.coarseBakes
             + "; GPU preview: " + LegacyGpuBaker.stats()
@@ -320,7 +320,7 @@ public final class ClientMinimap {
     }
 
     private static int captureRadius(Minecraft mc) {
-        int configured = Integer.getInteger("diorama.captureRadius", mc.gameSettings.renderDistanceChunks);
+        int configured = options().radius == 0 ? mc.gameSettings.renderDistanceChunks : options().radius;
         return Math.max(1, Math.min(TerrainPreviewRefresh.MAX_RADIUS, configured));
     }
 
@@ -370,7 +370,7 @@ public final class ClientMinimap {
             finish(mc);
             finishHighResolution(mc);
             if (!current(mc)) return;
-            window.tick(CAPTURES_PER_TICK, CAPTURE_BUDGET_NS);
+            window.tick(options.captures, options.captureMs * 1_000_000L);
             if (!current(mc)) return;
             io.drain(this::restore);
             flushWrites();
@@ -385,6 +385,8 @@ public final class ClientMinimap {
             }
             visibleKeys.clear();
             visibleKeys.addAll(wanted);
+            while (tiles.size() > options.resident && evict(tiles, true)) { }
+            while (history.size() > options.history) history.remove(history.keySet().iterator().next());
             List<TileKey> live = new ArrayList<>();
             for (TileKey key : wanted) {
                 boolean local = window.hasReady(key);
@@ -424,21 +426,21 @@ public final class ClientMinimap {
             // All first renders take priority over repeat refinements. Avoid holding a queue of
             // obsolete Work objects: only prepare when a worker is available.
             List<TileKey> candidates = new ArrayList<>(ordered);
-            if (candidates.size() > CACHE_TILES - 8) candidates = candidates.subList(0, CACHE_TILES - 8);
+            if (candidates.size() > options.resident - 8) candidates = candidates.subList(0, options.resident - 8);
             if (map != null && map.viewport().pixelsPerUnit() >= 6 && options.highResolution
                 && TerrainPreviewJob.availableDetailSlots() >= 2) scheduleHighResolution(live, map.viewport());
             int freeSlots = TerrainPreviewJob.availableDetailSlots();
             for (int slots = freeSlots; slots > 0; slots--) {
                 // Reserve the first available slot for visible coverage, then give visible
                 // refinements a turn before filling the remaining background slots.
-                boolean refinementTurn = PROGRESSIVE && ((bakeSequence & 3) == 3 || slots == freeSlots - 1);
+                boolean refinementTurn = options.progressive && ((bakeSequence & 3) == 3 || slots == freeSlots - 1);
                 TileKey selected = refinementTurn ? chooseRefinement(live) : null;
                 boolean forceRefine = selected != null;
-                if (selected == null && PROGRESSIVE && slots == freeSlots) selected = chooseCoarse(live);
+                if (selected == null && options.progressive && slots == freeSlots) selected = chooseCoarse(live);
                 if (selected == null && slots == freeSlots) selected = choose(live, window);
-                if (selected == null && PROGRESSIVE) selected = chooseCoarse(candidates);
+                if (selected == null && options.progressive) selected = chooseCoarse(candidates);
                 if (selected == null) selected = choose(candidates, window);
-                if (PROGRESSIVE && TerrainPreviewJob.workerLimit() > 1
+                if (options.progressive && TerrainPreviewJob.workerLimit() > 1
                     && activeRefinements() >= TerrainPreviewJob.workerLimit() - 1) {
                     selected = chooseCoarse(candidates);
                     forceRefine = false;
@@ -449,9 +451,9 @@ public final class ClientMinimap {
                 long revision = entry.revision;
                 TerrainPreview.Work work = window.prepare(selected);
                 if (!current(mc) || entry.revision != revision) return;
-                boolean coarse = PROGRESSIVE && !forceRefine && needsCoarse(entry);
+                boolean coarse = options.progressive && !forceRefine && needsCoarse(entry);
                 // With several workers, leave one slot available for newly explored terrain.
-                if (PROGRESSIVE && !coarse && TerrainPreviewJob.workerLimit() > 1
+                if (options.progressive && !coarse && TerrainPreviewJob.workerLimit() > 1
                     && activeRefinements() >= TerrainPreviewJob.workerLimit() - 1) break;
                 int[] history = coarse ? entry.pixels : entry.coarseShown || entry.gpuApproximate ? entry.confirmedPixels : entry.pixels;
                 BitSet patches = !coarse && !entry.coarseShown && !entry.gpuApproximate && !selected.isCave() && history != null
@@ -459,8 +461,8 @@ public final class ClientMinimap {
                     && entry.top == work.topY()
                     && !entry.dirty.isEmpty()
                     && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
-                TerrainPreviewJob job = coarse ? TerrainPreviewJob.startCoarse(work, history, () -> LegacyGpuBaker.preview(work))
-                    : PROGRESSIVE ? TerrainPreviewJob.startRefined(work, history, patches, () -> LegacyGpuVolume.refine(work))
+                TerrainPreviewJob job = coarse ? TerrainPreviewJob.startCoarse(work, history, options.stride, () -> LegacyGpuBaker.preview(work))
+                    : options.progressive ? TerrainPreviewJob.startRefined(work, history, patches, () -> LegacyGpuVolume.refine(work))
                         : patches == null ? TerrainPreviewJob.startDetail(work, history)
                             : TerrainPreviewJob.startDetailPatches(work, history, patches);
                 if (job == null) break;
@@ -696,7 +698,7 @@ public final class ClientMinimap {
     private @Nullable CachedTile detail(TileKey key) {
         CachedTile tile = tiles.get(key);
         if (tile != null) return tile;
-        if (tiles.size() >= CACHE_TILES && !evict(tiles, true)) return null;
+        while (tiles.size() >= options.resident) if (!evict(tiles, true)) return null;
         tile = new CachedTile();
         tile.pixels = history.remove(key);
         tile.lastViewed = ++viewSequence;
@@ -719,11 +721,11 @@ public final class ClientMinimap {
         }
         if (oldest == null || victim == null) return false;
         cache.remove(victim);
-        if (detail && !victim.isCave() && HISTORY_TILES > 0) {
+        if (detail && !victim.isCave() && options.history > 0) {
             int[] confirmed = oldest.coarseShown || oldest.gpuApproximate ? oldest.confirmedPixels : oldest.pixels;
             if (confirmed != null) {
                 history.put(victim, confirmed);
-                while (history.size() > HISTORY_TILES) history.remove(history.keySet().iterator().next());
+                while (history.size() > options.history) history.remove(history.keySet().iterator().next());
             }
         }
         textureGeneration++;
@@ -878,7 +880,7 @@ public final class ClientMinimap {
                 if (tile != null && tile.pixels != null
                     && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
                     if (!uploadPatch(mc, part.key(), tile, state, false)) upload(mc, part.key(), tile, state, false);
-                    if (++uploads >= UPLOADS_PER_FRAME || System.nanoTime() - uploadStart >= 3_000_000L) break;
+                    if (++uploads >= options.uploads || System.nanoTime() - uploadStart >= 3_000_000L) break;
                 }
             }
             float yaw = player.prevRotationYaw
@@ -955,7 +957,7 @@ public final class ClientMinimap {
                 if (tile != null && tile.pixels != null
                     && (tile.pixels != tile.uploaded || tile.anaglyph != mc.gameSettings.anaglyph)) {
                     if (!uploadPatch(mc, key, tile, state, true)) upload(mc, key, tile, state, true);
-                    if (++uploads >= UPLOADS_PER_FRAME || System.nanoTime() - uploadStart >= 3_000_000L) break;
+                    if (++uploads >= options.uploads || System.nanoTime() - uploadStart >= 3_000_000L) break;
                 }
             }
             List<TileKey> keys = new ArrayList<>(overviews.keySet());

@@ -440,6 +440,10 @@
     {
       "path": "dev/diorama/gtnh/client/LegacyGpuVolume.java",
       "fqn": "dev.diorama.gtnh.client.LegacyGpuVolume"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/RenderSettingsScreen.java",
+      "fqn": "dev.diorama.gtnh.client.RenderSettingsScreen"
     }
   ],
   "deferred": [

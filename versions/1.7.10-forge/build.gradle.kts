@@ -318,6 +318,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/client/LegacyGpuBaker.class",
                 "dev/diorama/gtnh/client/LegacyGpuVolume.class",
                 "dev/diorama/gtnh/client/MinimapOptionsScreen.class",
+                "dev/diorama/gtnh/client/RenderSettingsScreen.class",
                 "dev/diorama/gtnh/capture/MapDimensionIdentity.class",
                 "dev/diorama/gtnh/client/ClientPreviewStorage.class",
                 "dev/diorama/gtnh/client/SharedTerrainMapScreen.class",

@@ -414,9 +414,13 @@ public final class TerrainPreview {
 
         /** Only fill gaps in existing confirmed detail; provisional samples must never replace it. */
         public int @Nullable [] bakeCoarse(int @Nullable [] history) {
+            return bakeCoarse(history, COARSE_STRIDE);
+        }
+
+        public int @Nullable [] bakeCoarse(int @Nullable [] history, int stride) {
             if (history != null) checkRaster(history);
             this.validateForBake();
-            int[] fresh = TileBaker.bakeCoarse(this.key, this, this.looks, COARSE_STRIDE);
+            int[] fresh = TileBaker.bakeCoarse(this.key, this, this.looks, stride);
             if (!this.stillCurrent()) throw new IllegalStateException("Preview projection/style changed while baking");
             return PreviewTileStore.retain(fresh, history);
         }

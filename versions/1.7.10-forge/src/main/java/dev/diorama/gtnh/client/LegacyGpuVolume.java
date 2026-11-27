@@ -30,8 +30,6 @@ import dev.diorama.gtnh.capture.TerrainPreview;
 /** Optional full-resolution voxel raymarch. Approximate lighting; never authoritative disk data. */
 final class LegacyGpuVolume {
     private static final Logger LOG = LogManager.getLogger("Diorama");
-    private static final boolean ENABLED = Boolean.getBoolean("diorama.gpuRefine");
-    private static final boolean FOUR = Boolean.getBoolean("diorama.gpuFourSamples");
     private static final AtomicBoolean PREPARING = new AtomicBoolean();
     private static volatile boolean failed;
     private static int program;
@@ -89,7 +87,11 @@ final class LegacyGpuVolume {
     private LegacyGpuVolume() {}
 
     static int @Nullable [] refine(TerrainPreview.Work work) {
-        if (!ENABLED || failed || work.key().isCave() || !PREPARING.compareAndSet(false,true)) return null;
+        return refine(work, ClientMinimap.options().gpuRefine, ClientMinimap.options().gpuFour);
+    }
+
+    static int @Nullable [] refine(TerrainPreview.Work work, boolean enabled, boolean four) {
+        if (!enabled || failed || work.key().isCave() || !PREPARING.compareAndSet(false,true)) return null;
         try {
             short[] voxels = work.gpuVoxels();
             float[] palette = work.gpuPalette(), tints = work.gpuTints(), shapes = work.gpuShapes();
@@ -100,7 +102,7 @@ final class LegacyGpuVolume {
             Runnable request = () -> {
                 if (future.isCancelled()) return;
                 try {
-                    int[] pixels = bake(voxels,palette,tints,shapes,top,offset,future);
+                    int[] pixels = bake(voxels,palette,tints,shapes,top,offset,future,four);
                     if (pixels != null || readFuture != future) future.complete(pixels);
                 } catch (RuntimeException | LinkageError error) {
                     future.complete(null);
@@ -132,7 +134,7 @@ final class LegacyGpuVolume {
     }
 
     static String stats() {
-        return new StringBuilder(ENABLED ? "enabled" : "off").append(", completed=").append(COMPLETED.get())
+        return new StringBuilder(ClientMinimap.options().gpuRefine ? "enabled" : "off").append(", completed=").append(COMPLETED.get())
             .append(", fallback=").append(FALLBACKS.get()).append(", disabled=").append(failed).toString();
     }
 
@@ -204,7 +206,7 @@ final class LegacyGpuVolume {
     }
 
     private static int @Nullable [] bake(short[] voxels,float[] palette,float[] tints,float[] shapes,int top,float offset,
-        CompletableFuture<int[]> future) {
+        CompletableFuture<int[]> future, boolean four) {
         if (!GLContext.getCapabilities().OpenGL30 || GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM)!=0
             || GL11.glGetInteger(GL21.GL_PIXEL_PACK_BUFFER_BINDING)!=0
             || GL11.glGetInteger(GL21.GL_PIXEL_UNPACK_BUFFER_BINDING)!=0
@@ -260,7 +262,7 @@ final class LegacyGpuVolume {
             GL20.glUniform1f(GL20.glGetUniformLocation(program,"top"),top);
             GL20.glUniform1f(GL20.glGetUniformLocation(program,"offset"),offset);
             GL20.glUniform2f(GL20.glGetUniformLocation(program,"pitch"),(float)Projection.sin(),(float)Projection.cos());
-            GL20.glUniform1i(GL20.glGetUniformLocation(program,"samples"),FOUR?4:1);
+            GL20.glUniform1i(GL20.glGetUniformLocation(program,"samples"),four?4:1);
             GL11.glBegin(GL11.GL_QUADS);
             GL11.glVertex2f(-1,-1);GL11.glVertex2f(1,-1);GL11.glVertex2f(1,1);GL11.glVertex2f(-1,1);GL11.glEnd();
             GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT,4);GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH,0);

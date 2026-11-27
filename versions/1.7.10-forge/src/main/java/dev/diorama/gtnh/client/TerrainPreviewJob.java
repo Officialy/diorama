@@ -19,6 +19,7 @@ import dev.diorama.gtnh.capture.TerrainPreview;
 /** Single detached worker slot for bake, restore and separately accepted writes. */
 public final class TerrainPreviewJob implements AutoCloseable {
 
+    private static volatile int configuredWorkers;
     private static Thread busy;
     private static final List<Thread> detailWorkers = new ArrayList<>();
     private Supplier<TerrainPreviewFrame> task;
@@ -53,14 +54,14 @@ public final class TerrainPreviewJob implements AutoCloseable {
     }
 
     static @Nullable TerrainPreviewJob startCoarse(TerrainPreview.Work work, int @Nullable [] history) {
-        return startCoarse(work, history, () -> null);
+        return startCoarse(work, history, 0, () -> null);
     }
 
     static @Nullable TerrainPreviewJob startCoarse(TerrainPreview.Work work, int @Nullable [] history,
-        Supplier<int @Nullable []> accelerator) {
+        int stride, Supplier<int @Nullable []> accelerator) {
         return startParallel(() -> detailFrame(() -> {
             int[] gpu = accelerator.get();
-            return PreviewTileStore.retain(null, gpu) == null ? work.bakeCoarse(history) : PreviewTileStore.retain(gpu, history);
+            return PreviewTileStore.retain(null, gpu) == null ? (stride == 0 ? work.bakeCoarse(history) : work.bakeCoarse(history, stride)) : PreviewTileStore.retain(gpu, history);
         }), workerLimit());
     }
 
@@ -93,7 +94,10 @@ public final class TerrainPreviewJob implements AutoCloseable {
         return startParallel(() -> detailFrame(() -> work.bakeDetailPatches(history, detached)), workerLimit());
     }
 
+    static void setWorkerLimit(int count) { configuredWorkers = Math.max(1, Math.min(4, count)); }
+
     static int workerLimit() {
+        if (configuredWorkers > 0) return configuredWorkers;
         int recommended = Math.max(1, Math.min(3, Runtime.getRuntime().availableProcessors() / 4));
         return Math.max(1, Math.min(4, Integer.getInteger("diorama.bakeWorkers", recommended)));
     }

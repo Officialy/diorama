@@ -200,6 +200,10 @@ final class LegacyMinimapDraw {
 
     /** Texture-native detail remains crisp when magnified; linear filtering reduces distant shimmer. */
     static void filter(double pixelsPerUnit) {
+        // DynamicTexture defaults to repeat. Linear filtering at a tile border must never
+        // sample its opposite edge (or transparent black from an unrelated map location).
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, org.lwjgl.opengl.GL12.GL_CLAMP_TO_EDGE);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER,
             ClientMinimap.options().smoothZoom || pixelsPerUnit < Projection.PIXELS_PER_UNIT ? GL11.GL_LINEAR : GL11.GL_NEAREST);

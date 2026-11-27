@@ -8,7 +8,6 @@ import net.minecraft.client.resources.I18n;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.GL11;
 
 import dev.diorama.Projection;
 import dev.diorama.bake.TileKey;
@@ -31,7 +30,6 @@ final class SharedTerrainMapScreen extends GuiScreen {
     private boolean initialized, dragging;
     private @Nullable GuiButton followHeight;
     private int lastX, lastY;
-    private int rotation;
 
     SharedTerrainMapScreen(WorldClient world) {
         this.world = world;
@@ -48,7 +46,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
 
     @Override
     public void initGui() {
-        resizeView();
+        view.resize(0, 0, width, height);
         buttonList.add(
             new GuiButton(0, BUTTON_X, BUTTON_Y, BUTTON_WIDTH, BUTTON_HEIGHT, I18n.format("diorama.map.recenter")));
         buttonList.add(
@@ -72,7 +70,6 @@ final class SharedTerrainMapScreen extends GuiScreen {
             buttonList.add(followHeight);
             updateHeightControl();
         }
-        buttonList.add(new GuiButton(5, Math.max(6, width - 100), LAYER_Y, 94, 20, rotationLabel()));
         dragging = false;
         if (!initialized) {
             recenter();
@@ -80,40 +77,8 @@ final class SharedTerrainMapScreen extends GuiScreen {
         }
     }
 
-    int mapWidth() { return (rotation & 1) == 0 ? width : height; }
-    int mapHeight() { return (rotation & 1) == 0 ? height : width; }
-
-    private void resizeView() { view.resize(0, 0, mapWidth(), mapHeight()); }
-
-    private String rotationLabel() { return I18n.format("diorama.map.rotate",rotation*90); }
-
-    private double localX(double x, double y) {
-        double dx = x - width / 2.0, dy = y - height / 2.0;
-        return mapWidth() / 2.0 + switch (rotation) {
-            case 1 -> dy; case 2 -> -dx; case 3 -> -dy; default -> dx;
-        };
-    }
-
-    private double localY(double x, double y) {
-        double dx = x - width / 2.0, dy = y - height / 2.0;
-        return mapHeight() / 2.0 + switch (rotation) {
-            case 1 -> -dx; case 2 -> -dy; case 3 -> dx; default -> dy;
-        };
-    }
-
-    private double rotatedX(double x, double y) {
-        double dx = x - mapWidth() / 2.0, dy = y - mapHeight() / 2.0;
-        return width / 2.0 + switch (rotation) {
-            case 1 -> -dy; case 2 -> -dx; case 3 -> dy; default -> dx;
-        };
-    }
-
-    private double rotatedY(double x, double y) {
-        double dx = x - mapWidth() / 2.0, dy = y - mapHeight() / 2.0;
-        return height / 2.0 + switch (rotation) {
-            case 1 -> dx; case 2 -> -dy; case 3 -> -dx; default -> dy;
-        };
-    }
+    int mapWidth() { return width; }
+    int mapHeight() { return height; }
 
     private void updateHeightControl() {
         if (followHeight == null) return;
@@ -137,11 +102,6 @@ final class SharedTerrainMapScreen extends GuiScreen {
     protected void actionPerformed(GuiButton button) {
         if (!belongsTo(mc.theWorld)) return;
         if (button.id == 0) recenter();
-        if (button.id == 5) {
-            rotation = (rotation + 1) & 3;
-            resizeView();
-            button.displayString = rotationLabel();
-        }
         if (button.id == 1) mc.displayGuiScreen(new MinimapOptionsScreen(this));
         if (button.id == 3) {
             ClientMinimap.toggleLayer(mc);
@@ -183,7 +143,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
             }
             double x = (double) Mouse.getEventX() * width / mc.displayWidth;
             double y = height - (double) Mouse.getEventY() * height / mc.displayHeight - 1;
-            view.zoomAt(localX(x, y), localY(x, y), wheel > 0 ? 1 : -1);
+            view.zoomAt(x, y, wheel > 0 ? 1 : -1);
         }
     }
 
@@ -203,8 +163,6 @@ final class SharedTerrainMapScreen extends GuiScreen {
             && x < OPTIONS_X + BUTTON_WIDTH
             && y >= LAYER_Y
             && y < LAYER_Y + BUTTON_HEIGHT;
-        controls |= x >= Math.max(6, width - 100) && x < Math.max(6, width - 100) + 94
-            && y >= LAYER_Y && y < LAYER_Y + BUTTON_HEIGHT;
         if (button == 0 && !controls) {
             dragging = true;
             lastX = x;
@@ -215,7 +173,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
     @Override
     protected void mouseClickMove(int x, int y, int button, long elapsed) {
         if (button != 0 || !dragging) return;
-        view.panBy(localX(x, y) - localX(lastX, lastY), localY(x, y) - localY(lastX, lastY));
+        view.panBy(x - lastX, y - lastY);
         lastX = x;
         lastY = y;
     }
@@ -229,15 +187,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         drawRect(0, 0, width, height, 0xFF111820);
-        GL11.glPushMatrix();
-        try {
-            GL11.glTranslated(width / 2.0, height / 2.0, 0);
-            GL11.glRotatef(rotation * 90, 0, 0, 1);
-            GL11.glTranslated(-mapWidth() / 2.0, -mapHeight() / 2.0, 0);
-            ClientMinimap.drawMap(mc, this);
-        } finally {
-            GL11.glPopMatrix();
-        }
+        ClientMinimap.drawMap(mc, this);
         drawWaypoints(mouseX, mouseY);
         if (belongsTo(mc.theWorld)) {
             String status = dimension == null ? I18n.format("diorama.map.unsupported_dimension")
@@ -270,9 +220,6 @@ final class SharedTerrainMapScreen extends GuiScreen {
             if (!point.enabled()) continue;
             double px = view.screenX(Projection.u(point.x() + .5, point.z() + .5));
             double py = view.screenY(Projection.v(point.x() + .5, point.y(), point.z() + .5));
-            double rx = rotatedX(px, py), ry = rotatedY(px, py);
-            px = rx;
-            py = ry;
             if (px < 4 || px > width - 4 || py < 4 || py > height - 4) continue;
             int x = (int) Math.round(px), y = (int) Math.round(py);
             drawRect(x - 4, y - 4, x + 4, y + 4, 0xFF211909);
