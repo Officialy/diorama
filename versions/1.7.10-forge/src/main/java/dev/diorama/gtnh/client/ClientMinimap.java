@@ -391,8 +391,20 @@ public final class ClientMinimap {
                     if (onDisk && tile != null && !tile.readRequested) tile.readRequested = io.read(key);
                 }
             }
-            if (map != null && map.viewport()
-                .preferredLod() == 1) buildOverview(visible);
+            if (map != null && map.viewport().preferredLod() == 1) {
+                for (TileKey key : visible) {
+                    if (!persistent || key.isCave()) continue;
+                    CachedTile parent = overviews.get(key);
+                    if (parent == null) {
+                        if (overviews.size() >= OVERVIEW_TILES && !evict(overviews, false)) continue;
+                        parent = new CachedTile();
+                        parent.children = new int[4][];
+                        overviews.put(key, parent);
+                    }
+                    if (!parent.readRequested) parent.readRequested = io.read(key);
+                }
+                buildOverview(visible);
+            }
             if (retryTicks > 0 || TerrainPreviewJob.availableDetailSlots() == 0 || window.ready() == 0) return;
             // Visible tiles first, then pre-bake the rest of the received render-distance footprint.
             List<TileKey> background = window.candidates(layer);
@@ -653,7 +665,7 @@ public final class ClientMinimap {
     private void restore(SharedTileIo.Read result) {
         if (result.key()
             .isCave()) return;
-        CachedTile tile = tiles.get(result.key());
+        CachedTile tile = tileFor(result.key());
         if (tile == null) return;
         if (result.failure() != null) {
             LOG.warn("Diorama tile cache read failed: {}", result.key(), result.failure());
@@ -677,7 +689,13 @@ public final class ClientMinimap {
         if (!persistent) return;
         for (var entry : tiles.entrySet()) {
             CachedTile tile = entry.getValue();
-            if (tile.savePending && io.write(entry.getKey(), tile.pixels)) tile.savePending = false;
+            if (tile.savePending && io.write(entry.getKey(), tile.pixels)) {
+                tile.savePending = false;
+                TileKey parent = entry.getKey().parent();
+                int[][] children = new int[4][];
+                children[PreviewOverview.childIndex(entry.getKey())] = tile.pixels;
+                io.write(parent, PreviewOverview.build(parent, children));
+            }
         }
     }
 
@@ -707,12 +725,19 @@ public final class ClientMinimap {
                 if (overviews.size() >= OVERVIEW_TILES) evict(overviews, false);
                 parent = new CachedTile();
                 overviews.put(key, parent);
-            } else for (int i = 0; i < 4; i++) if ((retainChildren & (1 << i)) != 0 && parent.children[i] != null) {
+            } else if (parent.pixels != null) for (int i = 0; i < 4; i++) if ((retainChildren & (1 << i)) != 0 && parent.children[i] != null) {
                 // A child evicted from the detail cache leaves its already known quadrant intact.
                 int start = (i / 2) * half * edge + (i % 2) * half;
                 for (int y = 0; y < half; y++)
                     System.arraycopy(parent.pixels, start + y * edge, pixels, start + y * edge, half);
                 children[i] = parent.children[i];
+            }
+            if (parent.pixels != null) {
+                int[] remembered = parent.pixels;
+                for (int i = 0; i < 4; i++) if (children[i] == null && (parent.provisionalChildren & (1 << i)) == 0) {
+                    int start = (i / 2) * half * edge + (i % 2) * half;
+                    for (int y = 0; y < half; y++) System.arraycopy(remembered, start + y * edge, pixels, start + y * edge, half);
+                }
             }
             parent.children = children;
             parent.provisionalChildren = provisionalChildren;
@@ -874,7 +899,7 @@ public final class ClientMinimap {
             GL11.glEnable(GL11.GL_BLEND);
             OpenGlHelper.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
             Tessellator mesh = new Tessellator();
-            LegacyMinimapDraw.fog(mesh, 0, 0, screen.width, screen.height,
+            LegacyMinimapDraw.fog(mesh, 0, 0, screen.mapWidth(), screen.mapHeight(),
                 view.projectedU(0), view.projectedV(0), 1.0 / view.pixelsPerUnit(), drawnLayer != TileKey.SURFACE);
             GL11.glEnable(GL11.GL_TEXTURE_2D);
             GL11.glColor4f(1, 1, 1, 1);

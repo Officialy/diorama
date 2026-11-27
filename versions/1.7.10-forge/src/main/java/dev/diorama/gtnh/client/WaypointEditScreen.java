@@ -19,15 +19,18 @@ final class WaypointEditScreen extends GuiScreen {
     private final String[] values;
     private final GuiTextField[] fields = new GuiTextField[4];
     private boolean enabled, confirmDelete;
+    private int icon;
+    private static final String[] ICONS = { "", "[H] ", "[M] ", "[P] ", "[!] " };
     private String error = "";
 
     WaypointEditScreen(ClientWaypoints session, GuiScreen parent, int index, Point point) {
         this.session = session;
         this.parent = parent;
         this.index = index;
-        values = new String[] { point.name(), Integer.toString(point.x()), Integer.toString(point.y()),
+        values = new String[] { point.label(), Integer.toString(point.x()), Integer.toString(point.y()),
             Integer.toString(point.z()) };
         enabled = point.enabled();
+        for (int i = 1; i < ICONS.length; i++) if (point.name().startsWith(ICONS[i])) icon = i;
     }
 
     static void openNew(Minecraft mc, ClientWaypoints session, GuiScreen parent) {
@@ -62,7 +65,14 @@ final class WaypointEditScreen extends GuiScreen {
         buttonList.add(new GuiButton(1, left + 124, 112, 116, 20, text("save")));
         buttonList.add(new GuiButton(2, left, 136, 116, 20, I18n.format("gui.cancel")));
         if (index >= 0) buttonList.add(new GuiButton(3, left + 124, 136, 116, 20, deleteLabel()));
+        buttonList.add(new GuiButton(4, left, 160, 240, 20, iconLabel()));
         Keyboard.enableRepeatEvents(true);
+    }
+
+    private String iconLabel() {
+        return "Icon: " + switch (icon) {
+            case 1 -> "Home"; case 2 -> "Mine"; case 3 -> "Portal"; case 4 -> "Warning"; default -> "Default";
+        };
     }
 
     private String visibilityLabel() {
@@ -90,6 +100,7 @@ final class WaypointEditScreen extends GuiScreen {
                 } else if (session.change(mc, book -> book.remove(index))) mc.displayGuiScreen(parent);
                 else error = text("save_failed");
             }
+            case 4 -> { icon = (icon + 1) % ICONS.length; button.displayString = iconLabel(); }
             default -> {}
         }
     }
@@ -99,7 +110,7 @@ final class WaypointEditScreen extends GuiScreen {
         Point point;
         try {
             point = new Point(
-                values[0].trim(),
+                ICONS[icon] + values[0].trim(),
                 Integer.parseInt(values[1].trim()),
                 Integer.parseInt(values[2].trim()),
                 Integer.parseInt(values[3].trim()),
@@ -149,8 +160,8 @@ final class WaypointEditScreen extends GuiScreen {
         for (int i = 0; i < 3; i++)
             drawString(fontRendererObj, "XYZ".substring(i, i + 1), width / 2 - 120 + 82 * i, 70, -1);
         for (GuiTextField field : fields) field.drawTextBox();
-        drawCenteredString(fontRendererObj, error, width / 2, 161, 0xFFFF7777);
-        if (session.sessionOnly()) drawCenteredString(fontRendererObj, text("session_only"), width / 2, 175, -1);
+        drawCenteredString(fontRendererObj, error, width / 2, 184, 0xFFFF7777);
+        if (session.sessionOnly()) drawCenteredString(fontRendererObj, text("session_only"), width / 2, 198, -1);
         super.drawScreen(x, y, partial);
     }
 

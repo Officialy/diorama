@@ -2,7 +2,7 @@ name: GTNH build
 on:
   workflow_dispatch:
   push:
-    branches: [feat/gtnh-navigation-and-retention]
+    branches: [feat/gtnh-gpu-and-map-parity]
 permissions:
   contents: read
 jobs:

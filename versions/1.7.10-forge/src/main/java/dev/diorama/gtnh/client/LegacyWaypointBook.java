@@ -55,12 +55,30 @@ final class LegacyWaypointBook {
 
     record Point(String name, int x, int y, int z, boolean enabled) {
 
+        String icon() {
+            if (death()) return "X";
+            if (name.startsWith("[H] ")) return "H";
+            if (name.startsWith("[M] ")) return "M";
+            if (name.startsWith("[P] ")) return "P";
+            if (name.startsWith("[!] ")) return "!";
+            return "+";
+        }
+
+        String label() {
+            return name.length() > 4 && name.charAt(0) == '[' && name.charAt(2) == ']'
+                && name.charAt(3) == ' ' && "HMP!".indexOf(name.charAt(1)) >= 0 ? name.substring(4) : name;
+        }
+
         boolean death() {
             return name.startsWith("Death @ ");
         }
 
         int markerColor() {
-            return death() ? 0xFF6262 : 0xFFC53D;
+            if (death()) return 0xFF6262;
+            return switch (icon()) {
+                case "H" -> 0x8DE38D; case "M" -> 0xB8A6FF; case "P" -> 0x61B5FF;
+                case "!" -> 0xFF8D49; default -> 0xFFC53D;
+            };
         }
 
         Point {

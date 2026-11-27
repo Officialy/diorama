@@ -164,3 +164,13 @@ arriving data retains displayed coarse coverage without writing provisional pixe
 
 Map clouds, smooth zoom, world waypoints and death waypoints can be toggled from Minimap Settings.
 JVM properties specify initial defaults before a saved preference exists.
+
+### Navigation parity experiments
+
+The fullscreen map can rotate in 90-degree screen-space steps without rebaking or changing disk keys;
+this is not a new isometric camera facing. Enable local tracked-entity radar with `-Ddiorama.entityRadar=true`
+(and player markers separately with `-Ddiorama.playerRadar=true`, where permitted by server rules).
+Invisible entities and sneaking players are excluded. Waypoint icons can be chosen in the edit screen;
+DWP1-compatible name prefixes store the selection. `-Ddiorama.waypointBeams=true` enables optional
+nearby vertical beams. LOD1 overviews stream from disk on zoom-out and confirmed child writes also
+queue a parent update, preserving previously known quadrants. These features require native client testing.

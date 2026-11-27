@@ -5,6 +5,9 @@ import java.util.function.BooleanSupplier;
 import java.util.function.ToIntFunction;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.entity.monster.IMob;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.Tessellator;
@@ -77,6 +80,7 @@ final class LegacyMinimapDraw {
         if (!valid.getAsBoolean()) return false;
         OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
         GL11.glDisable(GL11.GL_TEXTURE_2D);
+        if (size >= 8 && Boolean.getBoolean("diorama.entityRadar")) drawRadar(mc, mesh, viewport, bounds);
         if (size >= 8 && !points.isEmpty()) {
             drawWaypoints(mesh, viewport, bounds, points, mc.thePlayer.posX, mc.thePlayer.posZ);
         }
@@ -116,7 +120,7 @@ final class LegacyMinimapDraw {
         if (nearest != null) {
             int labelY = textY + (coords == null || coords.isEmpty() ? 0 : font.FONT_HEIGHT + 2);
             if (labelY + font.FONT_HEIGHT <= height - MinimapViewport.MARGIN) {
-                String label = font.trimStringToWidth(new StringBuilder(nearest.name()).append(" ").append(Math.round(distance)).append("m").toString(), size + 24);
+                String label = font.trimStringToWidth(new StringBuilder(nearest.label()).append(" ").append(Math.round(distance)).append("m").toString(), size + 24);
                 int left = right - font.getStringWidth(label);
                 if (left >= MinimapViewport.MARGIN && valid.getAsBoolean()) {
                     GL11.glEnable(GL11.GL_TEXTURE_2D);
@@ -125,6 +129,29 @@ final class LegacyMinimapDraw {
             }
         }
         return true;
+    }
+
+    /** Only entities already tracked by the local client; no network requests or chunk loads. */
+    private static void drawRadar(Minecraft mc, Tessellator mesh, MinimapViewport viewport,
+        MinimapViewport.Bounds bounds) {
+        if (mc.theWorld == null || mc.thePlayer == null) return;
+        int size = bounds.size(), count = 0;
+        boolean players = Boolean.getBoolean("diorama.playerRadar");
+        mesh.startDrawingQuads();
+        for (Object item : mc.theWorld.loadedEntityList) {
+            if (!(item instanceof EntityLivingBase entity) || entity == mc.thePlayer || entity.isDead
+                || entity.isInvisible() || entity instanceof EntityPlayer && (!players || entity.isSneaking())) continue;
+            if (Math.abs(entity.posY - mc.thePlayer.posY) > 16) continue;
+            double x = viewport.normalizedX(Projection.u(entity.posX, entity.posZ)) * size;
+            double y = viewport.normalizedY(Projection.v(entity.posX, entity.posY, entity.posZ)) * size;
+            if (x < 3 || x > size - 3 || y < 3 || y > size - 3) continue;
+            int sx = bounds.x() + (int) x, sy = bounds.y() + (int) y;
+            waypointQuad(mesh, sx, sy, 2, 0x202020);
+            waypointQuad(mesh, sx, sy, 1, entity instanceof EntityPlayer ? 0x61B5FF
+                : entity instanceof IMob ? 0xFF6666 : 0x8DE38D);
+            if (++count >= 96) break;
+        }
+        mesh.draw();
     }
 
     private static void drawWaypoints(Tessellator mesh, MinimapViewport viewport, MinimapViewport.Bounds bounds,

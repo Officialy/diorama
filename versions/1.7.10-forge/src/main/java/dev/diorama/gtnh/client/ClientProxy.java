@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiChat;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.renderer.entity.RenderManager;
+import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.entity.Entity;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.resources.IReloadableResourceManager;
@@ -185,7 +186,23 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
                 if (distance < 0.25 || !Double.isFinite(distance)) continue;
                 double reach = Math.min(1, 64 / distance);
                 double scale = Math.max(.025, Math.min(distance, 64) * .0025);
-                String label = point.name() + " (" + Math.round(distance) + "m)";
+                if (Boolean.getBoolean("diorama.waypointBeams") && distance <= 128) {
+                    GL11.glEnable(GL11.GL_DEPTH_TEST);
+                    GL11.glDisable(GL11.GL_TEXTURE_2D);
+                    Tessellator beam = Tessellator.instance;
+                    beam.startDrawingQuads();
+                    beam.setColorRGBA_I(point.markerColor(), 90);
+                    double bottom = point.y() + 1 - cameraY, top = 256 - cameraY;
+                    double r = .16;
+                    beam.addVertex(dx-r, bottom, dz); beam.addVertex(dx+r, bottom, dz);
+                    beam.addVertex(dx+r, top, dz); beam.addVertex(dx-r, top, dz);
+                    beam.addVertex(dx, bottom, dz-r); beam.addVertex(dx, bottom, dz+r);
+                    beam.addVertex(dx, top, dz+r); beam.addVertex(dx, top, dz-r);
+                    beam.draw();
+                    GL11.glDisable(GL11.GL_DEPTH_TEST);
+                    GL11.glEnable(GL11.GL_TEXTURE_2D);
+                }
+                String label = point.icon() + " " + point.label() + " (" + Math.round(distance) + "m)";
                 GL11.glPushMatrix();
                 try {
                     GL11.glTranslated(dx * reach, dy * reach, dz * reach);
