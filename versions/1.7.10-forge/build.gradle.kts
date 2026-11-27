@@ -315,6 +315,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             }
             val expectedMr = setOf("dev/diorama/gtnh/capture/TerrainPreview.class",
                 "dev/diorama/gtnh/client/ClientProxy.class",
+                "dev/diorama/gtnh/client/LegacyGpuBaker.class",
                 "dev/diorama/gtnh/capture/MapDimensionIdentity.class",
                 "dev/diorama/gtnh/client/ClientPreviewStorage.class",
                 "dev/diorama/gtnh/client/SharedTerrainMapScreen.class",

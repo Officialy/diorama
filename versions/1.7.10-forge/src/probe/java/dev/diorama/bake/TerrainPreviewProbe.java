@@ -32,6 +32,7 @@ public final class TerrainPreviewProbe {
             realBake();
             progressiveBake();
             highResolution();
+            gpuColumns();
             patchBake();
             caveBake();
             partialAppearanceBake();
@@ -49,6 +50,20 @@ public final class TerrainPreviewProbe {
         System.out.println(
             "PASS bounded terrain preview: " + assertions
                 + " assertions; numeric identity/bounds/detachment, fail-closed style, full/patch surface and fixed-cut cave canonical ABGR bake; native capture/screen/epoch acceptance UNTESTED");
+    }
+
+    private static void gpuColumns() {
+        PreparedBlockLooks looks = table();
+        TerrainPreview.Work work = TerrainPreview.prepare(looks, looks.session(), KEY,
+            new ChunkSnapshot[] { snapshot(looks, 0, 0, true) });
+        float[] columns = work.gpuColumns();
+        require(columns.length == TerrainPreview.Work.GPU_COLUMNS * TerrainPreview.Work.GPU_ROWS * 4,
+            "GPU input is a bounded detached colour/height field");
+        require(columns[3] == 1, "floor at y=0 has top height one");
+        require(columns[0] > 0 && columns[1] == 0 && columns[2] == 0, "GPU colour is RGB");
+        require(columns[16 * 4 + 3] == -2, "missing columns remain unknown");
+        columns[3] = 99;
+        require(work.gpuColumns()[3] == 1, "GPU staging cannot mutate captured input");
     }
 
     private static void highResolution() {

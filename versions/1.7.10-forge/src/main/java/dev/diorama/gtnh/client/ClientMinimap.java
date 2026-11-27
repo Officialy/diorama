@@ -458,7 +458,7 @@ public final class ClientMinimap {
                     && entry.top == work.topY()
                     && !entry.dirty.isEmpty()
                     && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
-                TerrainPreviewJob job = coarse ? TerrainPreviewJob.startCoarse(work, history)
+                TerrainPreviewJob job = coarse ? TerrainPreviewJob.startCoarse(work, history, () -> LegacyGpuBaker.preview(work))
                     : PROGRESSIVE ? TerrainPreviewJob.startRefined(work, history, patches)
                         : patches == null ? TerrainPreviewJob.startDetail(work, history)
                             : TerrainPreviewJob.startDetailPatches(work, history, patches);
