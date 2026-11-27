@@ -190,3 +190,11 @@ single-sample canonical terrain raster for up to four visible tiles. It is not s
 512x512 cache. Stable base pixels stay visible until the optional higher-resolution tile arrives.
 Disable with `-Ddiorama.highResolution=false`. It requires at least two available worker slots
 and prioritizes the existing exploration pipeline. GPU previews do not substitute for this refinement.
+
+### Experimental volumetric-style fog
+
+`-Ddiorama.volumetricFog=true` selects a GLSL 1.20 eight-layer height-field cloud effect with
+world-anchored animated noise and a per-tile alpha-mask edge pass. The shader is a legacy
+approximation of upstream, not a byte-for-byte port of its global blurred coverage mask;
+tile seams, blending and Angelica compatibility still need visual testing. Unsupported contexts
+fall back to the procedural background. Disabled by default.

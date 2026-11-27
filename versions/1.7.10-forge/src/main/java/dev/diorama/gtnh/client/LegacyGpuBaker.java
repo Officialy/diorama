@@ -115,6 +115,9 @@ final class LegacyGpuBaker {
         int draw = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
         int read = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
         int active = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        GL13.glActiveTexture(GL13.GL_TEXTURE0);
+        int previousTexture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+        GL13.glActiveTexture(active);
         int fbo = 0, input = 0, output = 0;
         GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
         GL11.glPushClientAttrib(GL11.GL_CLIENT_PIXEL_STORE_BIT);
@@ -190,6 +193,8 @@ final class LegacyGpuBaker {
             if (output != 0) GL11.glDeleteTextures(output);
             GL11.glPopClientAttrib();
             GL11.glPopAttrib();
+            GL13.glActiveTexture(GL13.GL_TEXTURE0);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, previousTexture);
             GL13.glActiveTexture(active);
         }
     }

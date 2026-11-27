@@ -75,6 +75,8 @@ final class LegacyMinimapDraw {
             clippedQuad(mesh, bounds, tile);
             if (!valid.getAsBoolean()) return false;
             mesh.draw();
+            LegacyFogShader.edge(x + tile.x0()*size,y + tile.y0()*size,x + tile.x1()*size,y + tile.y1()*size,
+                tile.u0(),tile.v0(),tile.u1(),tile.v1(),tile.key().minU(),tile.key().minV(),tile.key().units(),tile.key().isCave());
         }
 
         if (!valid.getAsBoolean()) return false;
@@ -213,6 +215,7 @@ final class LegacyMinimapDraw {
             GL11.glColor4f(1, 1, 1, 1);
             return;
         }
+        if (LegacyFogShader.background(x,y,width,height,u,v,unit,cave)) return;
         int previousShade = GL11.glGetInteger(GL11.GL_SHADE_MODEL);
         GL11.glShadeModel(GL11.GL_SMOOTH);
         int step = Math.max(12, Math.max(width, height) / 48);

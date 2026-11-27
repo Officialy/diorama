@@ -432,6 +432,10 @@
     {
       "path": "dev/diorama/gtnh/client/LegacyGpuBaker.java",
       "fqn": "dev.diorama.gtnh.client.LegacyGpuBaker"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/LegacyFogShader.java",
+      "fqn": "dev.diorama.gtnh.client.LegacyFogShader"
     }
   ],
   "deferred": [

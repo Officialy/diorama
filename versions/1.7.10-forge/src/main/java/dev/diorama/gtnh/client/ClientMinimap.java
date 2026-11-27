@@ -485,6 +485,7 @@ public final class ClientMinimap {
         List<TileKey> ordered = new ArrayList<>(visible);
         ordered.sort(Comparator.comparingDouble(key -> Math.hypot(key.minU() + key.units() * .5 - view.centerU(),
             key.minV() + key.units() * .5 - view.centerV())));
+        if (ordered.size() > HD_TILES) ordered = ordered.subList(0, HD_TILES);
         for (TileKey key : ordered) {
             CachedTile base = tiles.get(key);
             if (base == null || base.pixels == null || base.coarseShown || base.needsFull || base.job != null) continue;
@@ -979,6 +980,8 @@ public final class ClientMinimap {
                 mesh.addVertexWithUV(part.x0(), part.y0(), 0, part.u0(), part.v0());
                 if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 mesh.draw();
+                LegacyFogShader.edge(part.x0(),part.y0(),part.x1(),part.y1(),part.u0(),part.v0(),part.u1(),part.v1(),
+                    key.minU(),key.minV(),key.units(),key.isCave());
             }
             if (HIGH_RESOLUTION && view.pixelsPerUnit() >= 6) drawHighResolution(mc, view, state, mesh, drawnLayer);
         } catch (RuntimeException failure) {
