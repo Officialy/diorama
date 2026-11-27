@@ -59,6 +59,10 @@ public final class TerrainPreviewJob implements AutoCloseable {
         }), workerLimit());
     }
 
+    static @Nullable TerrainPreviewJob startHighResolution(TerrainPreview.Work work) {
+        return startParallel(() -> detailFrame(work::bakeHighResolution), workerLimit());
+    }
+
     static @Nullable TerrainPreviewJob startRefined(TerrainPreview.Work work, int @Nullable [] history,
         @Nullable BitSet patches) {
         BitSet detached = patches == null ? null : (BitSet) patches.clone();

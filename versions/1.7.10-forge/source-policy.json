@@ -90,8 +90,8 @@
     {
       "path": "dev/diorama/bake/TileBaker.java",
       "fqn": "dev.diorama.bake.TileBaker",
-      "reviewedSha256": "8d3346b39d8795e2f24ee6d63568588db528a481e571bcc25db5dc57392a87ce",
-      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms.; adds explicit per-job coarse and full-quality entry points without changing existing callers."
+      "reviewedSha256": "19f45169bdbe7f9b740cd3af567d9ec18f2c8ca7348d3a1cf217308f8aaf1819",
+      "reason": "Canonical CPU bake closure; narrow platform adapters keep game input, RNG and logging outside shared algorithms.; adds explicit per-job coarse and full-quality entry points without changing existing callers.; close-zoom raster uses an explicit per-job pixel spacing."
     },
     {
       "path": "dev/diorama/bake/ChunkSource.java",

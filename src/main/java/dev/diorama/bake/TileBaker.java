@@ -616,6 +616,15 @@ public final class TileBaker {
 		return pixels;
 	}
 
+	/** Optional close-zoom raster: double spatial resolution, one ray per pixel, canonical lighting. */
+	public static int[] bakeHighResolution(TileKey key, ChunkSource source, Looks looks) {
+		int size = Projection.TILE_PIXELS * 2;
+		int[] pixels = new int[size * size];
+		TileBaker baker = new TileBaker(key, source, looks, false, null);
+		baker.bakePixels(0, 0, size, size, pixels, null, null, null, 0.5 / Projection.PIXELS_PER_UNIT, true);
+		return pixels;
+	}
+
 	/** Full antialiasing independent of the global Fast quality setting. */
 	public static TileImage bakeRefined(TileKey key, ChunkSource source, Looks looks, @Nullable BitSet blocks) {
 		return bakeQuality(key, source, looks, blocks, false, null, null, null, null, true);
@@ -759,6 +768,11 @@ public final class TileBaker {
 	 * (all but a side's darkening), then how strongly an outline darkens it, 0 for none.
 	 */
 	private void bakePixels(int px0, int py0, int width, int height, int[] out, byte @Nullable [] info, float @Nullable [] linear, byte @Nullable [] blockLight) {
+		this.bakePixels(px0, py0, width, height, out, info, linear, blockLight, 1.0 / Projection.PIXELS_PER_UNIT, false);
+	}
+
+	private void bakePixels(int px0, int py0, int width, int height, int[] out, byte @Nullable [] info, float @Nullable [] linear,
+		byte @Nullable [] blockLight, double unitsPerPixel, boolean singleSample) {
 		if (this.startY <= this.limitY) {
 			return;
 		}
@@ -772,8 +786,7 @@ public final class TileBaker {
 		float[] water = border == 0 ? null : new float[w * h];
 		double minU = this.key.minU();
 		double minV = this.key.minV();
-		double unitsPerPixel = 1.0 / Projection.PIXELS_PER_UNIT;
-		double[][] samples = fast && !this.fourSamples ? FAST_SAMPLES : SAMPLES;
+		double[][] samples = singleSample || fast && !this.fourSamples ? FAST_SAMPLES : SAMPLES;
 		for (int y = 0; y < h; y++) {
 			for (int x = 0; x < w; x++) {
 				float r = 0;

@@ -182,3 +182,11 @@ clients. It packs detached surface colour/height columns off-thread and submits 
 pending render-tick job. GPU readback is synchronous and bounded to 128x128; errors or timeouts
 fall back to CPU. The result is only a provisional surface preview, not the upstream full
 geometry/lighting GPU backend. Caves and final four-sample refinements stay on CPU. Disabled by default.
+
+### Dynamic close-zoom tiles
+
+Above six GUI pixels per projected map unit, idle workers can produce a separate 1024x1024
+single-sample canonical terrain raster for up to four visible tiles. It is not saved into the
+512x512 cache. Stable base pixels stay visible until the optional higher-resolution tile arrives.
+Disable with `-Ddiorama.highResolution=false`. It requires at least two available worker slots
+and prioritizes the existing exploration pipeline. GPU previews do not substitute for this refinement.

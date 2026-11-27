@@ -47,6 +47,8 @@ public final class ClientMinimap {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
     private static final int CACHE_TILES = Math.max(96, Math.min(512, Integer.getInteger("diorama.residentTiles", 192)));
+    private static final boolean HIGH_RESOLUTION = Boolean.parseBoolean(System.getProperty("diorama.highResolution", "true"));
+    private static final int HD_TILES = 4;
     private static final int HISTORY_TILES = Math.max(0, Math.min(512, Integer.getInteger("diorama.historyTiles", 192)));
     private static final int UPLOADS_PER_FRAME = Math.max(1, Math.min(4, Integer.getInteger("diorama.uploadsPerFrame", 3)));
     private static final boolean PROGRESSIVE = Boolean.parseBoolean(System.getProperty("diorama.progressiveBake", "true"));
@@ -63,6 +65,7 @@ public final class ClientMinimap {
     private static @Nullable ClientMinimap installed;
 
     private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(CACHE_TILES + 1, 0.75f, false);
+    private final Map<TileKey, CachedTile> highRes = new LinkedHashMap<>(HD_TILES + 1, 0.75f, true);
     private final Map<TileKey, int[]> history = new LinkedHashMap<>(HISTORY_TILES + 1, 0.75f, true);
     private final Set<TileKey> visibleKeys = new HashSet<>();
     private long viewSequence;
@@ -364,6 +367,7 @@ public final class ClientMinimap {
                 window = new TerrainWindow(session, cx, cz, radius, () -> current(mc), window, this::dirtyChunk);
             }
             finish(mc);
+            finishHighResolution(mc);
             if (!current(mc)) return;
             window.tick(CAPTURES_PER_TICK, CAPTURE_BUDGET_NS);
             if (!current(mc)) return;
@@ -420,6 +424,8 @@ public final class ClientMinimap {
             // obsolete Work objects: only prepare when a worker is available.
             List<TileKey> candidates = new ArrayList<>(ordered);
             if (candidates.size() > CACHE_TILES - 8) candidates = candidates.subList(0, CACHE_TILES - 8);
+            if (map != null && map.viewport().pixelsPerUnit() >= 6 && HIGH_RESOLUTION
+                && TerrainPreviewJob.availableDetailSlots() >= 2) scheduleHighResolution(live, map.viewport());
             int freeSlots = TerrainPreviewJob.availableDetailSlots();
             for (int slots = freeSlots; slots > 0; slots--) {
                 // Reserve the first available slot for visible coverage, then give visible
@@ -471,6 +477,45 @@ public final class ClientMinimap {
             backoff(failure);
         } finally {
             updating = false;
+        }
+    }
+
+    private void scheduleHighResolution(List<TileKey> visible, MapViewportController view) {
+        for (CachedTile item : highRes.values()) if (item.job != null) return;
+        List<TileKey> ordered = new ArrayList<>(visible);
+        ordered.sort(Comparator.comparingDouble(key -> Math.hypot(key.minU() + key.units() * .5 - view.centerU(),
+            key.minV() + key.units() * .5 - view.centerV())));
+        for (TileKey key : ordered) {
+            CachedTile base = tiles.get(key);
+            if (base == null || base.pixels == null || base.coarseShown || base.needsFull || base.job != null) continue;
+            CachedTile hd = highRes.get(key);
+            if (hd != null && hd.jobHistory == base.pixels && hd.pixels != null) continue;
+            if (hd == null) {
+                if (highRes.size() >= HD_TILES && !evict(highRes, false)) return;
+                hd = new CachedTile();
+                highRes.put(key, hd);
+            }
+            TerrainPreviewJob task = TerrainPreviewJob.startHighResolution(window.prepare(key));
+            if (task != null) {
+                hd.job = task;
+                hd.jobHistory = base.pixels;
+                hd.jobRevision = base.revision;
+            }
+            return;
+        }
+    }
+
+    private void finishHighResolution(Minecraft mc) {
+        for (var entry : highRes.entrySet()) {
+            CachedTile hd = entry.getValue();
+            if (hd.job == null || !hd.job.done()) continue;
+            TerrainPreviewFrame frame = hd.job.takeFrame();
+            hd.job.close();
+            hd.job = null;
+            CachedTile base = tiles.get(entry.getKey());
+            if (current(mc) && base != null && base.revision == hd.jobRevision && base.pixels == hd.jobHistory
+                && frame != null && frame.detail() != null) hd.pixels = frame.detail();
+            else hd.jobHistory = null;
         }
     }
 
@@ -619,6 +664,11 @@ public final class ClientMinimap {
             entry.jobPatches = null;
             entry.needsFull = true;
         }
+        for (CachedTile hd : highRes.values()) {
+            if (hd.job != null) hd.job.close();
+            hd.job = null;
+            hd.jobHistory = null;
+        }
         activeBakes = 0;
     }
 
@@ -757,6 +807,8 @@ public final class ClientMinimap {
         world = null;
         List<CachedTile> released = new ArrayList<>(tiles.values());
         released.addAll(overviews.values());
+        released.addAll(highRes.values());
+        highRes.clear();
         tiles.clear();
         history.clear();
         visibleKeys.clear();
@@ -928,11 +980,51 @@ public final class ClientMinimap {
                 if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 mesh.draw();
             }
+            if (HIGH_RESOLUTION && view.pixelsPerUnit() >= 6) drawHighResolution(mc, view, state, mesh, drawnLayer);
         } catch (RuntimeException failure) {
             drawing = null;
             backoff(failure);
         } finally {
             drawing = null;
+        }
+    }
+
+    private void drawHighResolution(Minecraft mc, MapViewportController view, ProbeGlState state,
+        Tessellator mesh, int drawnLayer) {
+        boolean uploaded = false;
+        for (TileKey key : new ArrayList<>(highRes.keySet())) {
+            if (key.layer() != drawnLayer) continue;
+            MapViewportController.Tile part = view.clip(key);
+            CachedTile hd = highRes.get(key), base = tiles.get(key);
+            if (part == null || hd == null || base == null || hd.pixels == null || hd.jobHistory != base.pixels
+                || hd.jobRevision != base.revision) continue;
+            if (!uploaded && (hd.uploaded != hd.pixels || hd.anaglyph != mc.gameSettings.anaglyph)) {
+                int edge = Projection.TILE_PIXELS * 2;
+                DynamicTexture texture = new DynamicTexture(edge, edge);
+                boolean success = false;
+                try {
+                    ProbePixels.copyToArgb(hd.pixels, texture.getTextureData());
+                    texture.updateDynamicTexture();
+                    if (hd.texture != null) hd.release(state);
+                    hd.texture = texture;
+                    hd.id = texture.getGlTextureId();
+                    hd.uploaded = hd.pixels;
+                    hd.anaglyph = mc.gameSettings.anaglyph;
+                    success = true;
+                } finally {
+                    if (!success) texture.deleteGlTexture();
+                }
+                uploaded = true;
+            }
+            if (hd.id <= 0 || hd.uploaded != hd.pixels) continue;
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, hd.id);
+            LegacyMinimapDraw.filter(view.pixelsPerUnit() / 2);
+            mesh.startDrawingQuads();
+            mesh.addVertexWithUV(part.x0(), part.y1(), 0, part.u0(), part.v1());
+            mesh.addVertexWithUV(part.x1(), part.y1(), 0, part.u1(), part.v1());
+            mesh.addVertexWithUV(part.x1(), part.y0(), 0, part.u1(), part.v0());
+            mesh.addVertexWithUV(part.x0(), part.y0(), 0, part.u0(), part.v0());
+            mesh.draw();
         }
     }
 

@@ -297,6 +297,13 @@ public final class TerrainPreview {
             return columns;
         }
 
+        public int[] bakeHighResolution() {
+            this.validateForBake();
+            int[] raster = TileBaker.bakeHighResolution(this.key, this, this.looks);
+            if (!this.stillCurrent()) throw new IllegalStateException("Stale high-resolution preview");
+            return raster;
+        }
+
         /** Only fill gaps in existing confirmed detail; provisional samples must never replace it. */
         public int @Nullable [] bakeCoarse(int @Nullable [] history) {
             if (history != null) checkRaster(history);

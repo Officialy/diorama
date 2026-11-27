@@ -31,6 +31,7 @@ public final class TerrainPreviewProbe {
             styles();
             realBake();
             progressiveBake();
+            highResolution();
             patchBake();
             caveBake();
             partialAppearanceBake();
@@ -48,6 +49,18 @@ public final class TerrainPreviewProbe {
         System.out.println(
             "PASS bounded terrain preview: " + assertions
                 + " assertions; numeric identity/bounds/detachment, fail-closed style, full/patch surface and fixed-cut cave canonical ABGR bake; native capture/screen/epoch acceptance UNTESTED");
+    }
+
+    private static void highResolution() {
+        PreparedBlockLooks looks = table();
+        TerrainPreview.Work work = TerrainPreview.prepare(looks, looks.session(), KEY,
+            new ChunkSnapshot[] { snapshot(looks, 0, 0, true) });
+        int[] hd = work.bakeHighResolution();
+        int edge = Projection.TILE_PIXELS * 2;
+        require(hd.length == edge * edge, "close zoom has twice the native spatial resolution");
+        require((hd[48 * edge + 64] >>> 24) == 255, "close zoom covers the same known world point");
+        require(hd[48 * edge + 800] == 0, "close zoom preserves unknown terrain");
+        require(work.stillCurrent(), "close zoom does not change global projection");
     }
 
     private static void progressiveBake() {
