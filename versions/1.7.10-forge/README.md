@@ -174,3 +174,11 @@ Invisible entities and sneaking players are excluded. Waypoint icons can be chos
 DWP1-compatible name prefixes store the selection. `-Ddiorama.waypointBeams=true` enables optional
 nearby vertical beams. LOD1 overviews stream from disk on zoom-out and confirmed child writes also
 queue a parent update, preserving previously known quadrants. These features require native client testing.
+
+### Experimental GPU terrain preview
+
+Enable `-Ddiorama.gpuBake=true` to use a GLSL heightfield raymarch on OpenGL 3.0-compatible
+clients. It packs detached surface colour/height columns off-thread and submits at most one
+pending render-tick job. GPU readback is synchronous and bounded to 128x128; errors or timeouts
+fall back to CPU. The result is only a provisional surface preview, not the upstream full
+geometry/lighting GPU backend. Caves and final four-sample refinements stay on CPU. Disabled by default.

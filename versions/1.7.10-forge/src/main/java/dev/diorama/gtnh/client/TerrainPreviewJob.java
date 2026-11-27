@@ -53,7 +53,10 @@ public final class TerrainPreviewJob implements AutoCloseable {
     }
 
     static @Nullable TerrainPreviewJob startCoarse(TerrainPreview.Work work, int @Nullable [] history) {
-        return startParallel(() -> detailFrame(() -> work.bakeCoarse(history)), workerLimit());
+        return startParallel(() -> detailFrame(() -> {
+            int[] gpu = LegacyGpuBaker.preview(work);
+            return gpu == null ? work.bakeCoarse(history) : PreviewTileStore.retain(gpu, history);
+        }), workerLimit());
     }
 
     static @Nullable TerrainPreviewJob startRefined(TerrainPreview.Work work, int @Nullable [] history,

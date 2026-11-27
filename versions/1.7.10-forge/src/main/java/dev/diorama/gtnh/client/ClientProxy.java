@@ -225,6 +225,7 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
 
     @SubscribeEvent
     public void onRenderTick(TickEvent.RenderTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) LegacyGpuBaker.frame();
         if (event.phase == TickEvent.Phase.START && TerrainMetrics.ENABLED)
             ClientMinimap.frameStart(Minecraft.getMinecraft());
     }

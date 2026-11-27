@@ -12,6 +12,7 @@ import dev.diorama.Facing;
 import dev.diorama.MapStyle;
 import dev.diorama.Projection;
 import dev.diorama.bake.PreparedBlockLooks;
+import dev.diorama.bake.Looks;
 import dev.diorama.bake.TileBaker;
 import dev.diorama.bake.TileImage;
 import dev.diorama.bake.TileKey;
@@ -242,6 +243,58 @@ public final class TerrainPreview {
                     TileImage.BLOCK);
             }
             return merged;
+        }
+
+        public static final int GPU_COLUMNS = 128, GPU_ROWS = 400;
+
+        /** Detached surface height/colour texture for the approximate GPU preview. */
+        public float[] gpuColumns() {
+            this.validateForBake();
+            if (this.key.isCave()) throw new IllegalStateException("GPU surface preview only");
+            float[] columns = new float[GPU_COLUMNS * GPU_ROWS * 4];
+            for (int i = 3; i < columns.length; i += 4) columns[i] = -2;
+            int x0 = (int) this.key.minU(), z0 = (int) Math.floor(this.key.minV() / Projection.sin());
+            for (ChunkSnapshot snapshot : this.snapshots) {
+                if (snapshot == null) continue;
+                int[][] ids = new int[16][];
+                boolean[] loaded = new boolean[16];
+                ChunkSnapshot.Tints tints = snapshot.bakeTints();
+                for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
+                    int u = snapshot.chunkX * 16 + x - x0, v = snapshot.chunkZ * 16 + z - z0;
+                    if (u < 0 || u >= GPU_COLUMNS || v < 0 || v >= GPU_ROWS) continue;
+                    int i = (v * GPU_COLUMNS + u) * 4;
+                    int y = snapshot.surface(x, z);
+                    if (y < 0 || y >= 256) { columns[i + 3] = -1; continue; }
+                    int section = y >> 4;
+                    if (!loaded[section]) {
+                        ids[section] = snapshot.sectionIds(section);
+                        loaded[section] = true;
+                    }
+                    int[] states = ids[section];
+                    if (states == null) continue;
+                    int id = states.length == 1 ? states[0] : states[((y & 15) << 8) | (z << 4) | x];
+                    if (id < 0 || !this.looks.isPrepared(id) || this.looks.kind[id] == Looks.AIR) continue;
+                    int tint = this.looks.constantTint[id];
+                    int col = (z << 4) | x;
+                    if (tint < 0) tint = switch (this.looks.tint[id]) {
+                        case Looks.TINT_GRASS -> tints.grass()[col];
+                        case Looks.TINT_FOLIAGE -> tints.foliage()[col];
+                        case Looks.TINT_DRY_FOLIAGE -> tints.dryFoliage()[col];
+                        case Looks.TINT_WATER -> tints.water()[col];
+                        default -> 0xFFFFFF;
+                    };
+                    float weight = this.looks.topTintWeight[id];
+                    for (int channel = 0; channel < 3; channel++) {
+                        int shift = 16 - channel * 8;
+                        float plain = ((this.looks.top[id] >> shift) & 255) / 255F;
+                        float tinted = ((this.looks.topTinted[id] >> shift) & 255) / 255F;
+                        float multiplier = ((tint >> shift) & 255) / 255F;
+                        columns[i + channel] = plain * (1 - weight) + tinted * multiplier * weight;
+                    }
+                    columns[i + 3] = y + 1;
+                }
+            }
+            return columns;
         }
 
         /** Only fill gaps in existing confirmed detail; provisional samples must never replace it. */

@@ -428,6 +428,10 @@
     {
       "path": "dev/diorama/gtnh/mixins/client/HealthPacketMixin.java",
       "fqn": "dev.diorama.gtnh.mixins.client.HealthPacketMixin"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/LegacyGpuBaker.java",
+      "fqn": "dev.diorama.gtnh.client.LegacyGpuBaker"
     }
   ],
   "deferred": [
