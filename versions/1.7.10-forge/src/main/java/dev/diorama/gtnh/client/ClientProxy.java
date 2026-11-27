@@ -186,7 +186,7 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
                 if (distance < 0.25 || !Double.isFinite(distance)) continue;
                 double reach = Math.min(1, 64 / distance);
                 double scale = Math.max(.025, Math.min(distance, 64) * .0025);
-                if (Boolean.getBoolean("diorama.waypointBeams") && distance <= 128) {
+                if (ClientMinimap.options().beams && distance <= 128) {
                     GL11.glEnable(GL11.GL_DEPTH_TEST);
                     GL11.glDisable(GL11.GL_TEXTURE_2D);
                     Tessellator beam = Tessellator.instance;

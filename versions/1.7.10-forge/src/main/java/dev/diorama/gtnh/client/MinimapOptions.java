@@ -21,6 +21,11 @@ final class MinimapOptions {
     boolean smoothZoom = Boolean.getBoolean("diorama.smoothZoom");
     boolean worldWaypoints = Boolean.parseBoolean(System.getProperty("diorama.worldWaypoints", "true"));
     boolean deathWaypoints = Boolean.parseBoolean(System.getProperty("diorama.deathWaypoints", "true"));
+    boolean radar = Boolean.getBoolean("diorama.entityRadar");
+    boolean playerRadar = Boolean.getBoolean("diorama.playerRadar");
+    boolean beams = Boolean.getBoolean("diorama.waypointBeams");
+    boolean volumetricFog = Boolean.getBoolean("diorama.volumetricFog");
+    boolean highResolution = Boolean.parseBoolean(System.getProperty("diorama.highResolution", "true"));
     private int size = DEFAULT_SIZE;
 
     MinimapOptions(Path file) {
@@ -48,6 +53,11 @@ final class MinimapOptions {
         smoothZoom = Boolean.parseBoolean(props.getProperty("smoothZoom", Boolean.toString(smoothZoom)));
         worldWaypoints = Boolean.parseBoolean(props.getProperty("worldWaypoints", Boolean.toString(worldWaypoints)));
         deathWaypoints = Boolean.parseBoolean(props.getProperty("deathWaypoints", Boolean.toString(deathWaypoints)));
+        radar = Boolean.parseBoolean(props.getProperty("radar",Boolean.toString(radar)));
+        playerRadar = Boolean.parseBoolean(props.getProperty("playerRadar",Boolean.toString(playerRadar)));
+        beams = Boolean.parseBoolean(props.getProperty("beams",Boolean.toString(beams)));
+        volumetricFog = Boolean.parseBoolean(props.getProperty("volumetricFog",Boolean.toString(volumetricFog)));
+        highResolution = Boolean.parseBoolean(props.getProperty("highResolution",Boolean.toString(highResolution)));
         String value = props.getProperty("size", "");
         size = "64".equals(value) ? 64 : "128".equals(value) ? 128 : DEFAULT_SIZE;
     }
@@ -61,6 +71,11 @@ final class MinimapOptions {
         props.setProperty("smoothZoom", Boolean.toString(smoothZoom));
         props.setProperty("worldWaypoints", Boolean.toString(worldWaypoints));
         props.setProperty("deathWaypoints", Boolean.toString(deathWaypoints));
+        props.setProperty("radar",Boolean.toString(radar));
+        props.setProperty("playerRadar",Boolean.toString(playerRadar));
+        props.setProperty("beams",Boolean.toString(beams));
+        props.setProperty("volumetricFog",Boolean.toString(volumetricFog));
+        props.setProperty("highResolution",Boolean.toString(highResolution));
         Path parent = Files.createDirectories(file.getParent());
         Path temp = Files.createTempFile(parent, "diorama-minimap-", ".tmp");
         try {

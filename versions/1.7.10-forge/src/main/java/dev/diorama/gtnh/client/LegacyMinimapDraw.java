@@ -82,7 +82,7 @@ final class LegacyMinimapDraw {
         if (!valid.getAsBoolean()) return false;
         OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
         GL11.glDisable(GL11.GL_TEXTURE_2D);
-        if (size >= 8 && Boolean.getBoolean("diorama.entityRadar")) drawRadar(mc, mesh, viewport, bounds);
+        if (size >= 8 && ClientMinimap.options().radar) drawRadar(mc, mesh, viewport, bounds);
         if (size >= 8 && !points.isEmpty()) {
             drawWaypoints(mesh, viewport, bounds, points, mc.thePlayer.posX, mc.thePlayer.posZ);
         }
@@ -138,7 +138,7 @@ final class LegacyMinimapDraw {
         MinimapViewport.Bounds bounds) {
         if (mc.theWorld == null || mc.thePlayer == null) return;
         int size = bounds.size(), count = 0;
-        boolean players = Boolean.getBoolean("diorama.playerRadar");
+        boolean players = ClientMinimap.options().playerRadar;
         mesh.startDrawingQuads();
         for (Object item : mc.theWorld.loadedEntityList) {
             if (!(item instanceof EntityLivingBase entity) || entity == mc.thePlayer || entity.isDead

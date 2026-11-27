@@ -47,7 +47,6 @@ public final class ClientMinimap {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
     private static final int CACHE_TILES = Math.max(96, Math.min(512, Integer.getInteger("diorama.residentTiles", 192)));
-    private static final boolean HIGH_RESOLUTION = Boolean.parseBoolean(System.getProperty("diorama.highResolution", "true"));
     private static final int HD_TILES = 4;
     private static final int HISTORY_TILES = Math.max(0, Math.min(512, Integer.getInteger("diorama.historyTiles", 192)));
     private static final int UPLOADS_PER_FRAME = Math.max(1, Math.min(4, Integer.getInteger("diorama.uploadsPerFrame", 3)));
@@ -424,7 +423,7 @@ public final class ClientMinimap {
             // obsolete Work objects: only prepare when a worker is available.
             List<TileKey> candidates = new ArrayList<>(ordered);
             if (candidates.size() > CACHE_TILES - 8) candidates = candidates.subList(0, CACHE_TILES - 8);
-            if (map != null && map.viewport().pixelsPerUnit() >= 6 && HIGH_RESOLUTION
+            if (map != null && map.viewport().pixelsPerUnit() >= 6 && options.highResolution
                 && TerrainPreviewJob.availableDetailSlots() >= 2) scheduleHighResolution(live, map.viewport());
             int freeSlots = TerrainPreviewJob.availableDetailSlots();
             for (int slots = freeSlots; slots > 0; slots--) {
@@ -997,7 +996,7 @@ public final class ClientMinimap {
                 LegacyFogShader.edge(part.x0(),part.y0(),part.x1(),part.y1(),part.u0(),part.v0(),part.u1(),part.v1(),
                     key.minU(),key.minV(),key.units(),key.isCave());
             }
-            if (HIGH_RESOLUTION && view.pixelsPerUnit() >= 6) drawHighResolution(mc, view, state, mesh, drawnLayer);
+            if (options.highResolution && view.pixelsPerUnit() >= 6) drawHighResolution(mc, view, state, mesh, drawnLayer);
         } catch (RuntimeException failure) {
             drawing = null;
             backoff(failure);

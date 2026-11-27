@@ -213,3 +213,7 @@ volume upload and synchronous readback can introduce frame-time spikes; benchmar
 Overview generation now happens on the disk worker after the confirmed child write, rather than
 composing on the client tick and competing for a second queue slot. Added detached regression
 coverage for GPU voxel/shape/tint packing and durable two-child overview updates.
+
+Advanced minimap settings exposes radar, player radar, beams, volumetric-style fog and high-resolution
+close zoom without restarting. The GPU terrain flags still require restart. Saved preferences override
+JVM defaults. Radar is disabled by default; only use it where the server permits it.

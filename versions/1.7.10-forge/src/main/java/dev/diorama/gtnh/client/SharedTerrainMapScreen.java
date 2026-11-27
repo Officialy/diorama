@@ -85,7 +85,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
 
     private void resizeView() { view.resize(0, 0, mapWidth(), mapHeight()); }
 
-    private String rotationLabel() { return "Rotate: " + rotation * 90; }
+    private String rotationLabel() { return I18n.format("diorama.map.rotate",rotation*90); }
 
     private double localX(double x, double y) {
         double dx = x - width / 2.0, dy = y - height / 2.0;

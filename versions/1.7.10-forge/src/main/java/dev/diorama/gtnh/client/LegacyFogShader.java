@@ -13,7 +13,6 @@ import org.apache.logging.log4j.Logger;
  */
 final class LegacyFogShader {
     private static final Logger LOG = LogManager.getLogger("Diorama");
-    private static final boolean ENABLED = Boolean.getBoolean("diorama.volumetricFog");
     private static int program;
     private static boolean failed;
     private static final String VERTEX = "#version 120\n"
@@ -56,7 +55,7 @@ final class LegacyFogShader {
 
     private static boolean draw(double x0,double y0,double x1,double y1,double u0,double v0,double u1,double v1,
         double originU,double originV,double units,boolean cave,boolean masked) {
-        if (!ENABLED || failed || !ClientMinimap.options().fog || units <= 0) return false;
+        if (!ClientMinimap.options().volumetricFog || failed || !ClientMinimap.options().fog || units <= 0) return false;
         try {
             if (!GLContext.getCapabilities().OpenGL20 || GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM) != 0)
                 return false;
