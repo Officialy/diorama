@@ -133,3 +133,10 @@ in a secondary session cache even without multiplayer disk persistence. Set `-Dd
 `-Ddiorama.historyTiles=192` and `-Ddiorama.uploadsPerFrame=3` to tune the defaults. Each retained raster
 uses approximately 1 MiB; resident texture and staging costs are additional. History clears on session
 reset. Texture updates reuse existing allocations when possible and uploads have a soft 3ms frame budget.
+
+### Waypoint navigation
+
+Death waypoints use the local player's alive-to-dead observation and the existing waypoint book
+and persistence rules. Instant respawn may bypass this observation. Death markers are red;
+enabled waypoints have minimap edge arrows and in-world camera-facing distance labels.
+Disable these features with `-Ddiorama.deathWaypoints=false` or `-Ddiorama.worldWaypoints=false`.

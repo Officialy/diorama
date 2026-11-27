@@ -110,16 +110,33 @@ final class LegacyMinimapDraw {
             if (!point.enabled()) continue;
             double sx = viewport.normalizedX(Projection.u(point.x() + .5, point.z() + .5)) * size;
             double sy = viewport.normalizedY(Projection.v(point.x() + .5, point.y(), point.z() + .5)) * size;
-            if (sx < 3 || sx > size - 3 || sy < 3 || sy > size - 3) continue;
+            if (sx < 5 || sx > size - 5 || sy < 5 || sy > size - 5) continue;
             if (!started) {
                 mesh.startDrawingQuads();
                 started = true;
             }
             int x = bounds.x() + (int) Math.round(sx), y = bounds.y() + (int) Math.round(sy);
             waypointQuad(mesh, x, y, 3, 0x211909);
-            waypointQuad(mesh, x, y, 2, 0xFFC53D);
+            waypointQuad(mesh, x, y, 2, point.markerColor());
         }
         if (started) mesh.draw();
+        if (size < 16) return;
+        mesh.startDrawing(GL11.GL_TRIANGLES);
+        for (Point point : points) {
+            if (!point.enabled()) continue;
+            double sx = viewport.normalizedX(Projection.u(point.x() + .5, point.z() + .5)) * size;
+            double sy = viewport.normalizedY(Projection.v(point.x() + .5, point.y(), point.z() + .5)) * size;
+            if (sx >= 5 && sx <= size - 5 && sy >= 5 && sy <= size - 5) continue;
+            double dx = sx - size / 2.0, dy = sy - size / 2.0;
+            double length = Math.hypot(dx, dy);
+            if (length == 0) continue;
+            double reach = (size / 2.0 - 6) / Math.max(Math.abs(dx), Math.abs(dy));
+            double x = bounds.x() + size / 2.0 + dx * reach;
+            double y = bounds.y() + size / 2.0 + dy * reach;
+            arrowLayer(mesh, x, y, dx / length, dy / length, 5, 0xFF211909);
+            arrowLayer(mesh, x, y, dx / length, dy / length, 3.5, 0xFF000000 | point.markerColor());
+        }
+        mesh.draw();
     }
 
     private static void waypointQuad(Tessellator mesh, int x, int y, int radius, int rgb) {

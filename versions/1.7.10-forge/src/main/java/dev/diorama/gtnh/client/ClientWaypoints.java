@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.WorldClient;
+import net.minecraft.util.MathHelper;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -26,6 +27,7 @@ final class ClientWaypoints {
     private final @Nullable Path file;
     private long lock;
     private boolean unavailable;
+    private boolean deathRecorded;
     private LegacyWaypointBook book = new LegacyWaypointBook();
 
     private ClientWaypoints(Minecraft mc, WorldClient world, ClientMapDimension dimension) {
@@ -62,6 +64,29 @@ final class ClientWaypoints {
             // Wait until the local server exposes a save identity rather than opening a RAM-only book for it.
             if (mc.isIntegratedServerRunning() && mc.getIntegratedServer() == null) return;
             current = new ClientWaypoints(mc, mc.theWorld, dimension);
+        }
+        if (current != null) current.observeDeath(mc);
+    }
+
+    private void observeDeath(Minecraft mc) {
+        var player = mc.thePlayer;
+        if (player == null || !valid(mc)) return;
+        if (player.getHealth() > 0 && !player.isDead) {
+            deathRecorded = false;
+            return;
+        }
+        if (deathRecorded) return;
+        deathRecorded = true;
+        if (!Boolean.parseBoolean(System.getProperty("diorama.deathWaypoints", "true")) || !writable()
+            || points().size() >= LegacyWaypointBook.MAX_POINTS) return;
+        try {
+            int x = MathHelper.floor_double(player.posX);
+            int y = Math.max(0, Math.min(255, MathHelper.floor_double(player.boundingBox.minY)));
+            int z = MathHelper.floor_double(player.posZ);
+            Point death = new Point("Death @ " + x + "," + y + "," + z, x, y, z, true);
+            change(mc, updated -> updated.add(death));
+        } catch (IllegalArgumentException invalid) {
+            LOG.warn("Diorama skipped invalid death waypoint", invalid);
         }
     }
 

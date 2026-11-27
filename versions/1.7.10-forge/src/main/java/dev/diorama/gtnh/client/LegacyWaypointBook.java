@@ -55,6 +55,14 @@ final class LegacyWaypointBook {
 
     record Point(String name, int x, int y, int z, boolean enabled) {
 
+        boolean death() {
+            return name.startsWith("Death @ ");
+        }
+
+        int markerColor() {
+            return death() ? 0xFF6262 : 0xFFC53D;
+        }
+
         Point {
             if (name == null || name.isEmpty() || name.length() > MAX_NAME)
                 throw new IllegalArgumentException("Invalid waypoint name length");

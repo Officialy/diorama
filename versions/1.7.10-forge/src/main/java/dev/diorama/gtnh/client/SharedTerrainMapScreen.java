@@ -220,7 +220,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
             if (px < 4 || px > width - 4 || py < 4 || py > height - 4) continue;
             int x = (int) Math.round(px), y = (int) Math.round(py);
             drawRect(x - 4, y - 4, x + 4, y + 4, 0xFF211909);
-            drawRect(x - 2, y - 2, x + 2, y + 2, 0xFFFFC53D);
+            drawRect(x - 2, y - 2, x + 2, y + 2, 0xFF000000 | point.markerColor());
             double distance = (px - mouseX) * (px - mouseX) + (py - mouseY) * (py - mouseY);
             if (distance < closest) {
                 closest = distance;
@@ -231,7 +231,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
             && !(mouseY >= BUTTON_Y && mouseY < BUTTON_Y + BUTTON_HEIGHT && mouseX < WAYPOINT_X + WAYPOINT_WIDTH)) {
             String name = fontRendererObj.trimStringToWidth(hovered.name(), Math.max(0, width - 8));
             int x = Math.max(3, Math.min(mouseX + 9, width - fontRendererObj.getStringWidth(name) - 3));
-            drawString(fontRendererObj, name, x, Math.max(2, mouseY - 11), 0xFFFFC53D);
+            drawString(fontRendererObj, name, x, Math.max(2, mouseY - 11), 0xFF000000 | hovered.markerColor());
         }
     }
 

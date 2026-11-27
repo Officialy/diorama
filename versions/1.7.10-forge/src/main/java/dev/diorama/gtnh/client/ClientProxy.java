@@ -2,6 +2,9 @@ package dev.diorama.gtnh.client;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiChat;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.renderer.entity.RenderManager;
+import net.minecraft.entity.Entity;
 import net.minecraft.client.multiplayer.WorldClient;
 import net.minecraft.client.resources.IReloadableResourceManager;
 import net.minecraft.client.resources.IResourceManager;
@@ -9,11 +12,13 @@ import net.minecraft.client.resources.IResourceManagerReloadListener;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraftforge.client.ClientCommandHandler;
 import net.minecraftforge.client.event.GuiOpenEvent;
+import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.world.WorldEvent;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.GL11;
 
 import cpw.mods.fml.client.registry.ClientRegistry;
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -147,6 +152,51 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
             && minecraft.currentScreen == originating
             && minecraft.theWorld == originatingWorld) {
             event.gui = new SharedTerrainMapScreen(originatingWorld);
+        }
+    }
+
+    /** Camera-facing markers rendered in the existing world pass; never query/load terrain. */
+    @SubscribeEvent
+    public void onWorldWaypoints(RenderWorldLastEvent event) {
+        Minecraft mc = Minecraft.getMinecraft();
+        Entity viewer = mc.renderViewEntity;
+        if (viewer == null || mc.theWorld == null || mc.gameSettings.hideGUI || mc.currentScreen != null
+            || !Boolean.parseBoolean(System.getProperty("diorama.worldWaypoints", "true"))) return;
+        var points = ClientWaypoints.visibleBook(mc);
+        if (points.isEmpty()) return;
+        double cameraX = RenderManager.renderPosX, cameraY = RenderManager.renderPosY, cameraZ = RenderManager.renderPosZ;
+        boolean depthWrite = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+        try (ProbeGlState state = new ProbeGlState()) {
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glDepthMask(false);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
+            for (var point : points) {
+                if (!point.enabled()) continue;
+                double dx = point.x() + .5 - cameraX, dy = point.y() + 1.5 - cameraY, dz = point.z() + .5 - cameraZ;
+                double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                if (distance < 0.25 || !Double.isFinite(distance)) continue;
+                double reach = Math.min(1, 64 / distance);
+                double scale = Math.max(.025, Math.min(distance, 64) * .0025);
+                String label = point.name() + " (" + Math.round(distance) + "m)";
+                GL11.glPushMatrix();
+                try {
+                    GL11.glTranslated(dx * reach, dy * reach, dz * reach);
+                    GL11.glRotatef(-RenderManager.instance.playerViewY, 0, 1, 0);
+                    GL11.glRotatef(RenderManager.instance.playerViewX, 1, 0, 0);
+                    GL11.glScaled(-scale, -scale, scale);
+                    int half = mc.fontRenderer.getStringWidth(label) / 2;
+                    Gui.drawRect(-half - 3, -12, half + 3, 1, 0xB0101418);
+                    Gui.drawRect(-3, 2, 3, 8, 0xFF000000 | point.markerColor());
+                    GL11.glEnable(GL11.GL_TEXTURE_2D);
+                    mc.fontRenderer.drawStringWithShadow(label, -half, -10, 0xFF000000 | point.markerColor());
+                } finally {
+                    GL11.glPopMatrix();
+                }
+            }
+        } finally {
+            GL11.glDepthMask(depthWrite);
         }
     }
 
