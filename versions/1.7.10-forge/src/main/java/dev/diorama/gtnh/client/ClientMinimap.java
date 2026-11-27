@@ -307,6 +307,8 @@ public final class ClientMinimap {
             + (PROGRESSIVE ? "progressive" : TileBaker.fast() ? "fast" : "full")
             + "; coarse previews: "
             + hud.coarseBakes
+            + "; GPU preview: " + LegacyGpuBaker.stats()
+            + "; GPU refinement: " + LegacyGpuVolume.stats()
             + "; retained history: "
             + hud.history.size()
             + "; active bakes: "

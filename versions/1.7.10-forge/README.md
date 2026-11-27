@@ -221,3 +221,8 @@ JVM defaults. Radar is disabled by default; only use it where the server permits
 The fork CI also runs the exact embedded GPU and fog shaders in a headless Mesa compatibility
 context, checking shader compilation/linking, known and unknown terrain, four-sample voxel
 coverage and the fully known fog mask. This is a shader-level test, not an Angelica runtime test.
+
+On GL 3.2+, voxel refinement now queues a pixel-pack buffer and a GPU fence, polls without waiting
+on later render ticks and copies only after completion. GL 3.0 uses synchronous readback. GPU
+preview/refinement completions, fallbacks and disable status are reported by `/dioramaterrain status`.
+The first large texture upload and driver execution are still on the render thread and need profiling.

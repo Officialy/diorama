@@ -3,16 +3,22 @@ package dev.diorama.gtnh.client;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GL32;
+import org.lwjgl.opengl.GLSync;
 import org.lwjgl.opengl.GLContext;
 import org.jspecify.annotations.Nullable;
 import org.apache.logging.log4j.LogManager;
@@ -29,6 +35,12 @@ final class LegacyGpuVolume {
     private static final AtomicBoolean PREPARING = new AtomicBoolean();
     private static volatile boolean failed;
     private static int program;
+    private static final AtomicReference<Runnable> REQUEST = new AtomicReference<>();
+    private static final AtomicLong COMPLETED = new AtomicLong(), FALLBACKS = new AtomicLong();
+    private static int readPbo;
+    private static @Nullable GLSync readFence;
+    private static @Nullable CompletableFuture<int[]> readFuture;
+    private static ByteBuffer readStaging;
     private static ShortBuffer voxelStaging;
     private static FloatBuffer floatStaging;
     private static final String VERTEX = "#version 130\nvoid main(){gl_Position=gl_Vertex;}";
@@ -84,13 +96,103 @@ final class LegacyGpuVolume {
             int top = work.topY();
             double origin = work.key().minV()/Projection.sin();
             float offset = (float)(origin-Math.floor(origin));
-            return LegacyGpuBaker.submit(new FutureTask<>(() -> bake(voxels,palette,tints,shapes,top,offset)));
+            CompletableFuture<int[]> future = new CompletableFuture<>();
+            Runnable request = () -> {
+                if (future.isCancelled()) return;
+                try {
+                    int[] pixels = bake(voxels,palette,tints,shapes,top,offset,future);
+                    if (pixels != null || readFuture != future) future.complete(pixels);
+                } catch (RuntimeException | LinkageError error) {
+                    future.complete(null);
+                }
+            };
+            if (!REQUEST.compareAndSet(null,request)) {
+                FALLBACKS.incrementAndGet();
+                return null;
+            }
+            try {
+                int[] pixels = future.get(1500,TimeUnit.MILLISECONDS);
+                if (pixels != null) COMPLETED.incrementAndGet(); else FALLBACKS.incrementAndGet();
+                return pixels;
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                FALLBACKS.incrementAndGet();
+                return null;
+            } catch (Exception unavailable) {
+                FALLBACKS.incrementAndGet();
+                return null;
+            } finally {
+                REQUEST.compareAndSet(request,null);
+                if (!future.isDone()) future.cancel(false);
+            }
         } catch (RuntimeException | LinkageError unsupported) {
+            FALLBACKS.incrementAndGet();
             return null;
         } finally { PREPARING.set(false); }
     }
 
-    private static int @Nullable [] bake(short[] voxels,float[] palette,float[] tints,float[] shapes,int top,float offset) {
+    static String stats() {
+        return new StringBuilder(ENABLED ? "enabled" : "off").append(", completed=").append(COMPLETED.get())
+            .append(", fallback=").append(FALLBACKS.get()).append(", disabled=").append(failed).toString();
+    }
+
+    /** Render thread: poll without waiting, then admit one new job only if coarse work is idle. */
+    static void frame(boolean maySubmit) {
+        if (readFence != null) poll();
+        if (readFence != null || !maySubmit) return;
+        Runnable request = REQUEST.getAndSet(null);
+        if (request != null) request.run();
+    }
+
+    private static void poll() {
+        GLSync fence = readFence;
+        CompletableFuture<int[]> future = readFuture;
+        if (fence == null || future == null) return;
+        if (future.isCancelled()) {
+            clearReadback();
+            return;
+        }
+        int state = GL32.glClientWaitSync(fence,0,0L);
+        if (state == GL32.GL_TIMEOUT_EXPIRED) return;
+        int previous = GL11.glGetInteger(GL21.GL_PIXEL_PACK_BUFFER_BINDING);
+        try {
+            if (state == GL32.GL_WAIT_FAILED) {
+                future.complete(null);
+                return;
+            }
+            int bytes = Projection.TILE_PIXELS * Projection.TILE_PIXELS * 4;
+            if (readStaging == null) readStaging = BufferUtils.createByteBuffer(bytes);
+            readStaging.clear();
+            GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER,readPbo);
+            GL15.glGetBufferSubData(GL21.GL_PIXEL_PACK_BUFFER,0L,readStaging);
+            future.complete(decode(readStaging));
+        } catch (RuntimeException | LinkageError error) {
+            LOG.warn("GPU readback failed; falling back to CPU",error);
+            failed = true;
+            future.complete(null);
+        } finally {
+            GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER,previous);
+            clearReadback();
+        }
+    }
+
+    private static void clearReadback() {
+        if (readFence != null) GL32.glDeleteSync(readFence);
+        if (readPbo != 0) GL15.glDeleteBuffers(readPbo);
+        readFence = null;
+        readPbo = 0;
+        readFuture = null;
+    }
+
+    private static int[] decode(ByteBuffer data) {
+        int[] pixels = new int[Projection.TILE_PIXELS * Projection.TILE_PIXELS];
+        for (int i=0;i<pixels.length;i++) pixels[i]=(data.get(i*4)&255)|((data.get(i*4+1)&255)<<8)
+            |((data.get(i*4+2)&255)<<16)|((data.get(i*4+3)&255)<<24);
+        return pixels;
+    }
+
+    private static int @Nullable [] bake(short[] voxels,float[] palette,float[] tints,float[] shapes,int top,float offset,
+        CompletableFuture<int[]> future) {
         if (!GLContext.getCapabilities().OpenGL30 || GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM)!=0
             || GL11.glGetInteger(GL21.GL_PIXEL_PACK_BUFFER_BINDING)!=0
             || GL11.glGetInteger(GL21.GL_PIXEL_UNPACK_BUFFER_BINDING)!=0
@@ -149,14 +251,33 @@ final class LegacyGpuVolume {
             GL20.glUniform1i(GL20.glGetUniformLocation(program,"samples"),FOUR?4:1);
             GL11.glBegin(GL11.GL_QUADS);
             GL11.glVertex2f(-1,-1);GL11.glVertex2f(1,-1);GL11.glVertex2f(1,1);GL11.glVertex2f(-1,1);GL11.glEnd();
-            ByteBuffer data=BufferUtils.createByteBuffer(edge*edge*4);
             GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT,4);GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH,0);
             GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS,0);GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS,0);
+            if (GLContext.getCapabilities().OpenGL32 && readFence == null) {
+                int pbo = GL15.glGenBuffers();
+                GLSync fence = null;
+                try {
+                    GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER,pbo);
+                    GL15.glBufferData(GL21.GL_PIXEL_PACK_BUFFER,(long) edge*edge*4,GL15.GL_STREAM_READ);
+                    GL11.glReadPixels(0,0,edge,edge,GL11.GL_RGBA,GL11.GL_UNSIGNED_BYTE,0L);
+                    fence = GL32.glFenceSync(GL32.GL_SYNC_GPU_COMMANDS_COMPLETE,0);
+                    if (fence == null) throw new IllegalStateException("GPU fence allocation failed");
+                    readPbo = pbo;
+                    readFence = fence;
+                    readFuture = future;
+                    pbo = 0;
+                    fence = null;
+                    GL11.glFlush();
+                    return null;
+                } finally {
+                    GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER,0);
+                    if (pbo != 0) GL15.glDeleteBuffers(pbo);
+                    if (fence != null) GL32.glDeleteSync(fence);
+                }
+            }
+            ByteBuffer data=BufferUtils.createByteBuffer(edge*edge*4);
             GL11.glReadPixels(0,0,edge,edge,GL11.GL_RGBA,GL11.GL_UNSIGNED_BYTE,data);
-            int[] pixels=new int[edge*edge];
-            for(int i=0;i<pixels.length;i++)pixels[i]=(data.get(i*4)&255)|((data.get(i*4+1)&255)<<8)
-                |((data.get(i*4+2)&255)<<16)|((data.get(i*4+3)&255)<<24);
-            return pixels;
+            return decode(data);
         } catch(RuntimeException|LinkageError failure){
             failed=true;LOG.warn("GPU voxel refinement disabled; falling back to CPU",failure);return null;
         } finally {

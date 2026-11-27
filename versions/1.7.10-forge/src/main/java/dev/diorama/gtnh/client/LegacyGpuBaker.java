@@ -5,6 +5,7 @@ import java.nio.FloatBuffer;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
@@ -30,6 +31,7 @@ final class LegacyGpuBaker {
     private static final Logger LOG = LogManager.getLogger("Diorama");
     private static final boolean ENABLED = Boolean.getBoolean("diorama.gpuBake") || Boolean.getBoolean("diorama.gpuRefine");
     private static final AtomicReference<FutureTask<int[]>> PENDING = new AtomicReference<>();
+    private static final AtomicLong COMPLETED = new AtomicLong(), FALLBACKS = new AtomicLong();
     private static final int SIZE = 128;
     private static int program;
     private static volatile boolean failed;
@@ -57,7 +59,9 @@ final class LegacyGpuBaker {
             FutureTask<int[]> task = new FutureTask<>(() -> bake(columns, offset));
             if (!PENDING.compareAndSet(null, task)) return null;
             try {
-                return task.get(750, TimeUnit.MILLISECONDS);
+                int[] pixels = task.get(750, TimeUnit.MILLISECONDS);
+                if (pixels != null) COMPLETED.incrementAndGet(); else FALLBACKS.incrementAndGet();
+                return pixels;
             } finally {
                 PENDING.compareAndSet(task, null);
                 if (!task.isDone()) task.cancel(false);
@@ -66,6 +70,7 @@ final class LegacyGpuBaker {
             Thread.currentThread().interrupt();
             return null;
         } catch (Exception | LinkageError unavailable) {
+            FALLBACKS.incrementAndGet();
             return null;
         }
     }
@@ -88,6 +93,12 @@ final class LegacyGpuBaker {
     static void frame() {
         FutureTask<int[]> task = PENDING.getAndSet(null);
         if (task != null && !task.isCancelled()) task.run();
+        LegacyGpuVolume.frame(task == null);
+    }
+
+    static String stats() {
+        return new StringBuilder(ENABLED ? "enabled" : "off").append(", completed=").append(COMPLETED.get())
+            .append(", fallback=").append(FALLBACKS.get()).append(", disabled=").append(failed).toString();
     }
 
     static int shaderProgram(String vertex, String fragment) {
