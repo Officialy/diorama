@@ -424,6 +424,10 @@
     {
       "path": "dev/diorama/gtnh/capture/RemoteWorldIdentity.java",
       "fqn": "dev.diorama.gtnh.capture.RemoteWorldIdentity"
+    },
+    {
+      "path": "dev/diorama/gtnh/mixins/client/HealthPacketMixin.java",
+      "fqn": "dev.diorama.gtnh.mixins.client.HealthPacketMixin"
     }
   ],
   "deferred": [

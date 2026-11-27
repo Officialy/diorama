@@ -237,7 +237,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             require(mixinConfig == mapOf("required" to true, "minVersion" to "0.8.5-GTNH",
                 "package" to "dev.diorama.gtnh.mixins", "refmap" to "mixins.diorama.refmap.json",
                 "compatibilityLevel" to "JAVA_8", "mixins" to emptyList<String>(),
-                "client" to listOf("client.ResourceReloadMixin", "client.BlockAtlasMixin", "client.ChunkMutationMixin", "client.RenderBlocksCaptureMixin", "client.TessellatorCaptureMixin"),
+                "client" to listOf("client.ResourceReloadMixin", "client.BlockAtlasMixin", "client.ChunkMutationMixin", "client.RenderBlocksCaptureMixin", "client.TessellatorCaptureMixin", "client.HealthPacketMixin"),
                 "server" to emptyList<String>(), "injectors" to mapOf("defaultRequire" to 1))) { "Client hook configuration drift" }
             @Suppress("UNCHECKED_CAST")
             val refmap = JsonSlurper().parse(zip.getInputStream(zip.getEntry("mixins.diorama.refmap.json"))) as Map<String, Any>
@@ -254,6 +254,8 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                     "addVertexWithUV(DDDDD)V" to "Lnet/minecraft/client/renderer/Tessellator;func_78374_a(DDDDD)V",
                     "setTextureUV(DD)V" to "Lnet/minecraft/client/renderer/Tessellator;func_78385_a(DD)V",
                     "addVertex(DDD)V" to "Lnet/minecraft/client/renderer/Tessellator;func_78377_a(DDD)V"),
+                "dev/diorama/gtnh/mixins/client/HealthPacketMixin" to mapOf(
+                    "handleUpdateHealth(Lnet/minecraft/network/play/server/S06PacketUpdateHealth;)V" to "Lnet/minecraft/client/network/NetHandlerPlayClient;func_147249_a(Lnet/minecraft/network/play/server/S06PacketUpdateHealth;)V"),
                 "dev/diorama/gtnh/mixins/client/ChunkMutationMixin" to mapOf(
                     "setBlockMetadata(IIII)Z" to "Lnet/minecraft/world/chunk/Chunk;func_76589_b(IIII)Z",
                     "fillChunk([BIIZ)V" to "Lnet/minecraft/world/chunk/Chunk;func_76607_a([BIIZ)V",

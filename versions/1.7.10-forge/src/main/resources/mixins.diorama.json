@@ -10,7 +10,8 @@
     "client.BlockAtlasMixin",
     "client.ChunkMutationMixin",
     "client.RenderBlocksCaptureMixin",
-    "client.TessellatorCaptureMixin"
+    "client.TessellatorCaptureMixin",
+    "client.HealthPacketMixin"
   ],
   "server": [],
   "injectors": {

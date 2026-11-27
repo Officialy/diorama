@@ -155,6 +155,12 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         }
     }
 
+    /** Health packet observation complements the tick fallback; never mutate the book off-thread. */
+    public static void healthPacketApplied() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.func_152345_ab() && mc.theWorld != null && mc.thePlayer != null) ClientWaypoints.observe(mc);
+    }
+
     /** Camera-facing markers rendered in the existing world pass; never query/load terrain. */
     @SubscribeEvent
     public void onWorldWaypoints(RenderWorldLastEvent event) {

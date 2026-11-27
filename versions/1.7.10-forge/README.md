@@ -137,7 +137,7 @@ reset. Texture updates reuse existing allocations when possible and uploads have
 ### Waypoint navigation
 
 Death waypoints use the local player's alive-to-dead observation and the existing waypoint book
-and persistence rules. Instant respawn may bypass this observation. Death markers are red;
+and persistence rules. An optional post-health-packet hook also observes brief death transitions before the next tick. Servers that do not transmit a death health state may still bypass it. Death markers are red;
 enabled waypoints have minimap edge arrows and in-world camera-facing distance labels.
 Disable these features with `-Ddiorama.deathWaypoints=false` or `-Ddiorama.worldWaypoints=false`.
 
