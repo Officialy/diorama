@@ -193,6 +193,7 @@ final class TerrainWindow {
             attempted.set(slot);
             changed |= captureSlot(slot);
         }
+        if (!attempted.isEmpty()) count();
         return changed;
     }
 
@@ -274,13 +275,11 @@ final class TerrainWindow {
         // A transient unresolved appearance must not remove the last usable snapshot.
         if (outcome == ChunkCapture.Status.PENDING_APPEARANCE && snapshots[slot] != null) {
             statuses[slot] = outcome;
-            count();
             return false;
         }
         if (availabilityChanged != null && snapshot != null) availabilityChanged.accept(cx, cz);
         snapshots[slot] = snapshot;
         statuses[slot] = outcome;
-        count();
         return true;
     }
 

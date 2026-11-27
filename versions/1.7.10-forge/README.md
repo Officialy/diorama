@@ -102,3 +102,11 @@ tile jobs run concurrently (default 1–3 workers depending on logical CPUs; cap
 4 ms budget, up to 12 chunk attempts per tick. Optional `-Ddiorama.captureBudgetMs=6` and
 `-Ddiorama.capturesPerTick=16` increase throughput at the cost of frame time.
 `-Ddiorama.backgroundCapture=true` keeps capture enabled with the minimap disabled.
+
+### Map throughput
+
+The client now defaults to the canonical single-ray Fast quality mode (one camera sample per pixel
+instead of four). Use `-Ddiorama.fastBake=false` to restore full antialiasing. The capture path caches
+state-to-appearance lookups within each synchronous chunk capture, preserving snow context and epoch
+checks; visible tiles receive the first available bake slot. This does not accelerate server chunk
+transmission or guarantee a fourfold end-to-end speedup.

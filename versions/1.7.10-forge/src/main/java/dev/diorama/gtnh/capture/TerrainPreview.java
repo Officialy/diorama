@@ -56,14 +56,13 @@ public final class TerrainPreview {
 
     public static boolean supported() {
         return MapStyle.get() == MapStyle.DEFAULT && Projection.facing() == Facing.NORTH
-            && !TileBaker.fast()
             && Projection.sin() == Math.sin(Math.toRadians(MapStyle.DEFAULT.pitchDegrees()))
             && Projection.cos() == Math.cos(Math.toRadians(MapStyle.DEFAULT.pitchDegrees()));
     }
 
     private static void requireSupported() {
         if (!supported())
-            throw new IllegalStateException("Preview requires unchanged default style, north facing and full quality");
+            throw new IllegalStateException("Preview requires unchanged default style and north facing");
     }
 
     /** Exclusive cave ray ceiling; the raw layer remains part of the cache key. */
@@ -95,6 +94,7 @@ public final class TerrainPreview {
         private final ChunkSnapshot[] snapshots;
         private final Map<Long, ChunkSnapshot> byCoordinate = new HashMap<>();
         private final boolean extended;
+        private final boolean fastQuality;
         private final int count;
         private final int top;
         private final float[] sunTint;
@@ -103,6 +103,7 @@ public final class TerrainPreview {
 
         private Work(PreparedBlockLooks looks, Object token, TileKey key, ChunkSnapshot[] snapshots, boolean extended) {
             this.extended = extended;
+            this.fastQuality = TileBaker.fast();
             this.looks = Objects.requireNonNull(looks, "looks");
             this.token = Objects.requireNonNull(token, "token");
             if (looks.session() != token) throw new IllegalArgumentException("Preview token does not own looks");
@@ -183,7 +184,8 @@ public final class TerrainPreview {
         /** Projection/style predicate only; the native owner must independently revalidate its epoch. */
         public boolean stillCurrent() {
             if (!this.current) return false;
-            if (!supported() || !Arrays.equals(this.sunTint, MapStyle.DEFAULT.sunTint())
+            if (!supported() || this.fastQuality != TileBaker.fast()
+                || !Arrays.equals(this.sunTint, MapStyle.DEFAULT.sunTint())
                 || !Arrays.equals(this.shadowTint, MapStyle.DEFAULT.shadowTint())) {
                 this.current = false;
                 return false;

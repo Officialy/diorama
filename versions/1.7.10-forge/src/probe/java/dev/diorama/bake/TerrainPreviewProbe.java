@@ -202,8 +202,12 @@ public final class TerrainPreviewProbe {
             .prepare(looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, false) });
         TileBaker.setFast(true);
         require(!work.stillCurrent(), "fast mode revokes full-quality work");
-        expect(IllegalStateException.class, () -> TerrainPreview.keyFor(0, 0, 0));
+        require(TerrainPreview.supported(), "fast quality is supported");
+        TerrainPreview.Work fast = TerrainPreview
+            .prepare(looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, false) });
+        require(fast.stillCurrent(), "fast work accepted");
         TileBaker.setFast(false);
+        require(!fast.stillCurrent(), "full quality revokes fast work");
         work = TerrainPreview
             .prepare(looks, looks.session(), KEY, new ChunkSnapshot[] { snapshot(looks, 0, 0, false) });
         MapStyle.set(MapStyle.BASELINE);

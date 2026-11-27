@@ -31,6 +31,7 @@ import org.lwjgl.opengl.GL11;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import dev.diorama.MapStyle;
 import dev.diorama.Projection;
+import dev.diorama.bake.TileBaker;
 import dev.diorama.bake.TileImage;
 import dev.diorama.bake.TileKey;
 import dev.diorama.gtnh.capture.PreviewOverview;
@@ -81,6 +82,7 @@ public final class ClientMinimap {
     private int retryTicks;
 
     ClientMinimap(Path optionsFile) {
+        TileBaker.setFast(Boolean.parseBoolean(System.getProperty("diorama.fastBake", "true")));
         options = new MinimapOptions(optionsFile);
         try {
             options.load();
@@ -288,6 +290,8 @@ public final class ClientMinimap {
             + input.missing()
             + "; resident tiles: "
             + hud.tiles.size()
+            + "; quality: "
+            + (TileBaker.fast() ? "fast" : "full")
             + "; active bakes: "
             + hud.activeBakes
             + "; completed: "
@@ -386,8 +390,10 @@ public final class ClientMinimap {
             // obsolete Work objects: only prepare when a worker is available.
             List<TileKey> candidates = new ArrayList<>(ordered);
             if (candidates.size() > CACHE_TILES - 8) candidates = candidates.subList(0, CACHE_TILES - 8);
-            for (int slots = TerrainPreviewJob.availableDetailSlots(); slots > 0; slots--) {
-                TileKey selected = choose(candidates, window);
+            int freeSlots = TerrainPreviewJob.availableDetailSlots();
+            for (int slots = freeSlots; slots > 0; slots--) {
+                TileKey selected = slots == freeSlots ? choose(live, window) : null;
+                if (selected == null) selected = choose(candidates, window);
                 if (selected == null) break;
                 CachedTile entry = detail(selected);
                 if (entry == null || !current(mc)) return;

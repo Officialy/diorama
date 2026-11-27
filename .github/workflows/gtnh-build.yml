@@ -1,6 +1,8 @@
 name: GTNH build
 on:
   workflow_dispatch:
+  push:
+    branches: [feat/gtnh-map-throughput]
 permissions:
   contents: read
 jobs:

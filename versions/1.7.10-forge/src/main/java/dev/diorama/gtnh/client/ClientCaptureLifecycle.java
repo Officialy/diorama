@@ -22,6 +22,7 @@ import dev.diorama.gtnh.capture.ChunkCapture;
 import dev.diorama.gtnh.capture.EpochFence;
 import dev.diorama.gtnh.capture.GrassContext;
 import dev.diorama.gtnh.capture.TintCapture;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 
 /**
  * Early resource hooks and owner-thread capture/acceptance gate. No worker, texture upload, disk
@@ -264,12 +265,16 @@ public final class ClientCaptureLifecycle {
         private final ClientCaptureAccess access;
         private final ClientBiomeColors biomes;
         private final Map<Long, Integer> missing = new HashMap<>();
+        private final Long2IntOpenHashMap captureLooks = new Long2IntOpenHashMap();
+        private static final int NOT_CACHED = -2;
+        private static final int CONTEXTUAL_GRASS = -3;
 
         private Session(Object token, ClientBlockAppearance appearance, ClientCaptureAccess access) {
             this.token = token;
             this.appearance = appearance;
             this.access = access;
             this.biomes = new ClientBiomeColors(access);
+            this.captureLooks.defaultReturnValue(NOT_CACHED);
         }
 
         public Object token() {
@@ -340,7 +345,12 @@ public final class ClientCaptureLifecycle {
 
         /** Explicit capture; preparation and snapshot production share one raw-state read. */
         public ChunkCapture.Result capture(int chunkX, int chunkZ) {
-            return ChunkCapture.capture(this.access, this, chunkX, chunkZ);
+            this.captureLooks.clear();
+            try {
+                return ChunkCapture.capture(this.access, this, chunkX, chunkZ);
+            } finally {
+                this.captureLooks.clear();
+            }
         }
 
         @Override
@@ -356,11 +366,25 @@ public final class ClientCaptureLifecycle {
 
         @Override
         public int lookId(int rawId, int metadata, int x, int y, int z, int aboveRawId) {
-            if (this.appearance.isGrass(rawId, metadata)) {
-                int context = y == 255 ? GrassContext.NORMAL : this.access.snowContext(aboveRawId);
-                return context == GrassContext.UNKNOWN ? -1 : this.appearance.find(rawId, metadata, context);
+            // ChunkCapture checks the live epoch around every callback. Looks are immutable within
+            // this synchronous capture; never retain a miss across a later appearance preparation.
+            long key = (((long) rawId << 16) | (metadata & 65535L)) << 2;
+            int id = this.captureLooks.get(key);
+            if (id == NOT_CACHED) {
+                id = this.appearance.isGrass(rawId, metadata) ? CONTEXTUAL_GRASS
+                    : this.appearance.find(rawId, metadata);
+                this.captureLooks.put(key, id);
             }
-            return this.appearance.find(rawId, metadata);
+            if (id != CONTEXTUAL_GRASS) return id;
+            int context = y == 255 ? GrassContext.NORMAL : this.access.snowContext(aboveRawId);
+            if (context == GrassContext.UNKNOWN) return -1;
+            long contextualKey = key | context;
+            id = this.captureLooks.get(contextualKey);
+            if (id == NOT_CACHED) {
+                id = this.appearance.find(rawId, metadata, context);
+                this.captureLooks.put(contextualKey, id);
+            }
+            return id;
         }
 
         @Override
