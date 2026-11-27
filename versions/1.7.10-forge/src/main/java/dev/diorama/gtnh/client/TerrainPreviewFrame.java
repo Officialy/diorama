@@ -12,7 +12,12 @@ import dev.diorama.gtnh.capture.PreviewTileStore;
 
 /** Detached, read-only pixel arrays. An unaccepted frame never writes to disk. */
 record TerrainPreviewFrame(int @Nullable [] detail, int @Nullable [] overview, @Nullable String storageFailure,
-    boolean needsSave) {
+    boolean needsSave, boolean gpuApproximate) {
+
+    TerrainPreviewFrame(int @Nullable [] detail, int @Nullable [] overview, @Nullable String storageFailure,
+        boolean needsSave) {
+        this(detail, overview, storageFailure, needsSave, false);
+    }
 
     static TerrainPreviewFrame assemble(TileKey key, @Nullable TileImage image, @Nullable PreviewTileStore store,
         @Nullable TerrainPreviewFrame previous) {

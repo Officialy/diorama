@@ -452,14 +452,14 @@ public final class ClientMinimap {
                 // With several workers, leave one slot available for newly explored terrain.
                 if (PROGRESSIVE && !coarse && TerrainPreviewJob.workerLimit() > 1
                     && activeRefinements() >= TerrainPreviewJob.workerLimit() - 1) break;
-                int[] history = coarse ? entry.pixels : entry.coarseShown ? entry.confirmedPixels : entry.pixels;
-                BitSet patches = !coarse && !entry.coarseShown && !selected.isCave() && history != null
+                int[] history = coarse ? entry.pixels : entry.coarseShown || entry.gpuApproximate ? entry.confirmedPixels : entry.pixels;
+                BitSet patches = !coarse && !entry.coarseShown && !entry.gpuApproximate && !selected.isCave() && history != null
                     && !entry.needsFull
                     && entry.top == work.topY()
                     && !entry.dirty.isEmpty()
                     && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
                 TerrainPreviewJob job = coarse ? TerrainPreviewJob.startCoarse(work, history, () -> LegacyGpuBaker.preview(work))
-                    : PROGRESSIVE ? TerrainPreviewJob.startRefined(work, history, patches)
+                    : PROGRESSIVE ? TerrainPreviewJob.startRefined(work, history, patches, () -> LegacyGpuVolume.refine(work))
                         : patches == null ? TerrainPreviewJob.startDetail(work, history)
                             : TerrainPreviewJob.startDetailPatches(work, history, patches);
                 if (job == null) break;
@@ -608,7 +608,7 @@ public final class ClientMinimap {
             // The session and history checks above still fence world changes and disk restores.
             boolean stable = entry.jobRevision == entry.revision && window.topY(key) == entry.jobTop;
             if (coarse) {
-                if (!entry.coarseShown) entry.confirmedPixels = entry.pixels;
+                if (!entry.coarseShown && !entry.gpuApproximate) entry.confirmedPixels = entry.pixels;
                 entry.coarseShown = true;
                 entry.coarseRevision = entry.jobRevision;
                 entry.coverageChanged = !stable;
@@ -621,10 +621,28 @@ public final class ClientMinimap {
                 coarseBakes++;
                 continue;
             }
-            if (!stable && entry.coarseShown) {
+            if (frame.gpuApproximate()) {
+                if (!entry.coarseShown && !entry.gpuApproximate) entry.confirmedPixels = entry.pixels;
+                entry.gpuApproximate = true;
+                entry.coarseShown = false;
+                entry.pixels = PreviewTileStore.retain(entry.pixels,frame.detail());
+                entry.pendingUpload = null;
+                entry.savePending = false;
+                entry.needsFull = !stable;
+                entry.top = entry.jobTop;
+                if (stable) {
+                    entry.dirty.clear();
+                    entry.coverageChanged = false;
+                    completedBakes++;
+                } else provisionalBakes++;
+                continue;
+            }
+            if (!stable && (entry.coarseShown || entry.gpuApproximate)) {
                 // The snapshot set changed mid-flight. Keep provisional coverage visible, but retain
                 // only the canonical result as confirmed history for the next refinement.
                 entry.confirmedPixels = frame.detail();
+                entry.coarseShown = true;
+                entry.gpuApproximate = false;
                 entry.pixels = PreviewTileStore.retain(entry.pixels, frame.detail());
                 entry.pendingUpload = null;
                 entry.needsFull = true;
@@ -632,8 +650,9 @@ public final class ClientMinimap {
                 provisionalBakes++;
                 continue;
             }
-            boolean wasCoarse = entry.coarseShown;
+            boolean wasCoarse = entry.coarseShown || entry.gpuApproximate;
             entry.coarseShown = false;
+            entry.gpuApproximate = false;
             entry.confirmedPixels = null;
             if (stable) {
                 entry.coverageChanged = false;
@@ -700,7 +719,7 @@ public final class ClientMinimap {
         if (oldest == null || victim == null) return false;
         cache.remove(victim);
         if (detail && !victim.isCave() && HISTORY_TILES > 0) {
-            int[] confirmed = oldest.coarseShown ? oldest.confirmedPixels : oldest.pixels;
+            int[] confirmed = oldest.coarseShown || oldest.gpuApproximate ? oldest.confirmedPixels : oldest.pixels;
             if (confirmed != null) {
                 history.put(victim, confirmed);
                 while (history.size() > HISTORY_TILES) history.remove(history.keySet().iterator().next());
@@ -723,13 +742,14 @@ public final class ClientMinimap {
             return;
         }
         if (result.pixels() == null) return;
-        int[] merged = PreviewTileStore.retain(result.pixels(), tile.coarseShown ? tile.confirmedPixels : tile.pixels);
+        int[] merged = PreviewTileStore.retain(result.pixels(), tile.coarseShown || tile.gpuApproximate ? tile.confirmedPixels : tile.pixels);
         if (merged != tile.pixels) {
             // A patch worker may hold the earlier history raster. Reject that job rather than
             // letting it overwrite pixels restored after its submission.
             tile.revision++;
             tile.pixels = merged;
             tile.coarseShown = false;
+            tile.gpuApproximate = false;
             tile.confirmedPixels = null;
             tile.needsFull = true;
             tile.pendingUpload = null;
@@ -762,7 +782,7 @@ public final class ClientMinimap {
                 CachedTile child = tiles.get(PreviewOverview.childKey(key, i));
                 children[i] = child == null ? null : child.pixels;
                 int bit = 1 << i;
-                if (child != null && child.coarseShown) provisionalChildren |= bit;
+                if (child != null && (child.coarseShown || child.gpuApproximate)) provisionalChildren |= bit;
                 if (child == null && parent != null && (parent.provisionalChildren & bit) == 0) {
                     retainChildren |= bit;
                 } else if (parent == null ? children[i] != null
@@ -1182,7 +1202,7 @@ public final class ClientMinimap {
         private int @Nullable [] jobHistory;
         private @Nullable BitSet jobPatches;
         private boolean readRequested, savePending;
-        private boolean coarseShown, jobCoarse, coverageChanged;
+        private boolean coarseShown, jobCoarse, coverageChanged, gpuApproximate;
         private long coarseRevision = -1, lastCoarseNanos;
         private int @Nullable [] confirmedPixels;
         private int[][] children;

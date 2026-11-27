@@ -297,6 +297,112 @@ public final class TerrainPreview {
             return columns;
         }
 
+        /** Unsigned 16-bit appearance ids; 65535 is unknown, zero is air. Layout x,z,y. */
+        public short[] gpuVoxels() {
+            this.validateForBake();
+            if (this.key.isCave() || this.top <= 0 || this.top > 256)
+                throw new IllegalStateException("GPU voxel refinement requires a nonempty surface tile");
+            short[] voxels = new short[GPU_COLUMNS * GPU_ROWS * this.top];
+            Arrays.fill(voxels, (short) -1);
+            int x0 = (int) this.key.minU(), z0 = (int) Math.floor(this.key.minV() / Projection.sin());
+            for (ChunkSnapshot snapshot : this.snapshots) {
+                if (snapshot == null) continue;
+                int sx = snapshot.chunkX * 16 - x0, sz = snapshot.chunkZ * 16 - z0;
+                if (sx >= GPU_COLUMNS || sx + 16 <= 0 || sz >= GPU_ROWS || sz + 16 <= 0) continue;
+                int lx0 = Math.max(0,-sx), lx1 = Math.min(16,GPU_COLUMNS-sx);
+                int lz0 = Math.max(0,-sz), lz1 = Math.min(16,GPU_ROWS-sz);
+                for (int section = 0; section < (this.top + 15) / 16; section++) {
+                    int[] ids = snapshot.sectionIds(section);
+                    for (int ly = 0; ly < 16 && section * 16 + ly < this.top; ly++) {
+                        int y = section * 16 + ly;
+                        for (int z = lz0; z < lz1; z++) {
+                            int dst = (y * GPU_ROWS + sz + z) * GPU_COLUMNS + sx;
+                            if (ids == null || ids.length == 1) {
+                                int id = ids == null ? snapshot.airId() : ids[0];
+                                Arrays.fill(voxels,dst+lx0,dst+lx1,(short) (id < 0 ? 65535 : id));
+                            } else {
+                                int from = (ly << 8) | (z << 4);
+                                for (int x = lx0; x < lx1; x++) {
+                                    int id = ids[from+x];
+                                    voxels[dst+x] = (short) (id < 0 ? 65535 : id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return voxels;
+        }
+
+        public float[] gpuPalette() {
+            this.validateForBake();
+            float[] result = new float[256 * 128 * 6 * 4];
+            for (int id = 1; id < this.looks.used(); id++) {
+                if (!this.looks.isPrepared(id)) continue;
+                int at = id * 4, stride = 32768 * 4;
+                gpuRgb(result,at,this.looks.top[id],this.looks.topTintWeight[id]);
+                gpuRgb(result,at+stride,this.looks.topTinted[id],this.looks.kind[id]);
+                gpuRgb(result,at+stride*2,this.looks.side[id],this.looks.sideTintWeight[id]);
+                gpuRgb(result,at+stride*3,this.looks.sideTinted[id],this.looks.tint[id]);
+                int tint = this.looks.constantTint[id];
+                gpuRgb(result,at+stride*4,tint < 0 ? 0xFFFFFF : tint,tint < 0 ? 0 : 1);
+                result[at+stride*5] = this.looks.shape[id];
+                result[at+stride*5+1] = this.looks.emission[id];
+            }
+            return result;
+        }
+
+        private static void gpuRgb(float[] target, int at, int rgb, float extra) {
+            target[at] = ((rgb >>> 16) & 255) / 255F;
+            target[at+1] = ((rgb >>> 8) & 255) / 255F;
+            target[at+2] = (rgb & 255) / 255F;
+            target[at+3] = extra;
+        }
+
+        public float[] gpuTints() {
+            this.validateForBake();
+            float[] result = new float[GPU_COLUMNS * 4 * GPU_ROWS * 4];
+            Arrays.fill(result,1);
+            int x0 = (int) this.key.minU(), z0 = (int) Math.floor(this.key.minV() / Projection.sin());
+            for (ChunkSnapshot snapshot : this.snapshots) {
+                if (snapshot == null) continue;
+                ChunkSnapshot.Tints t = snapshot.bakeTints();
+                for (int z = 0; z < 16; z++) for (int x = 0; x < 16; x++) {
+                    int u = snapshot.chunkX * 16 + x - x0, v = snapshot.chunkZ * 16 + z - z0;
+                    if (u < 0 || u >= GPU_COLUMNS || v < 0 || v >= GPU_ROWS) continue;
+                    int at = (v * GPU_COLUMNS * 4 + u * 4) * 4;
+                    int col = (z << 4) | x;
+                    gpuRgb(result,at,t.grass()[col],1);
+                    gpuRgb(result,at+4,t.foliage()[col],1);
+                    gpuRgb(result,at+8,t.dryFoliage()[col],1);
+                    gpuRgb(result,at+12,t.water()[col],1);
+                }
+            }
+            return result;
+        }
+
+        /** Each row holds up to 16 axis-aligned boxes, two texels per box. */
+        public float[] gpuShapes() {
+            this.validateForBake();
+            float[][] shapes = this.looks.shapes;
+            if (shapes.length > 8192) throw new IllegalStateException("GPU shape table exceeds limit");
+            float[] result = new float[Math.max(1,shapes.length) * 32 * 4];
+            for (int shape = 1; shape < shapes.length; shape++) {
+                float[] boxes = shapes[shape];
+                if (boxes == null || boxes.length == 0) continue;
+                if (boxes.length > 96 || boxes.length % 6 != 0)
+                    throw new IllegalStateException("GPU shape is not a bounded box union");
+                int count = boxes.length / 6;
+                for (int i = 0; i < count; i++) {
+                    int at = shape * 128 + i * 8;
+                    System.arraycopy(boxes,i*6,result,at,3);
+                    System.arraycopy(boxes,i*6+3,result,at+4,3);
+                    result[at+3] = count;
+                }
+            }
+            return result;
+        }
+
         public int[] bakeHighResolution() {
             this.validateForBake();
             int[] raster = TileBaker.bakeHighResolution(this.key, this, this.looks);

@@ -198,3 +198,14 @@ world-anchored animated noise and a per-tile alpha-mask edge pass. The shader is
 approximation of upstream, not a byte-for-byte port of its global blurred coverage mask;
 tile seams, blending and Angelica compatibility still need visual testing. Unsupported contexts
 fall back to the procedural background. Disabled by default.
+
+### Optional full-resolution GPU refinement
+
+`-Ddiorama.gpuRefine=true` enables a separate 512x512 surface voxel raymarch, with optional
+`-Ddiorama.gpuFourSamples=true`. This uploads 16-bit state ids, face colours, biome tints and
+bounded box geometry to a GL 3.0 texture pipeline. The shader traverses voxels and intersects
+shape boxes, with approximate directional shading and transparent material compositing. It does
+not yet reproduce upstream's shadow, sky occlusion or water passes. GPU raster results are kept
+separate from confirmed CPU history and never written to the authoritative map cache. Missing
+coverage, unsupported contexts or failed GL work fall back to canonical CPU rendering. The
+volume upload and synchronous readback can introduce frame-time spikes; benchmark before use.

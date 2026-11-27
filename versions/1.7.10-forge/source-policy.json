@@ -436,6 +436,10 @@
     {
       "path": "dev/diorama/gtnh/client/LegacyFogShader.java",
       "fqn": "dev.diorama.gtnh.client.LegacyFogShader"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/LegacyGpuVolume.java",
+      "fqn": "dev.diorama.gtnh.client.LegacyGpuVolume"
     }
   ],
   "deferred": [

@@ -28,7 +28,7 @@ import dev.diorama.gtnh.capture.TerrainPreview;
 final class LegacyGpuBaker {
 
     private static final Logger LOG = LogManager.getLogger("Diorama");
-    private static final boolean ENABLED = Boolean.getBoolean("diorama.gpuBake");
+    private static final boolean ENABLED = Boolean.getBoolean("diorama.gpuBake") || Boolean.getBoolean("diorama.gpuRefine");
     private static final AtomicReference<FutureTask<int[]>> PENDING = new AtomicReference<>();
     private static final int SIZE = 128;
     private static int program;
@@ -67,6 +67,21 @@ final class LegacyGpuBaker {
             return null;
         } catch (Exception | LinkageError unavailable) {
             return null;
+        }
+    }
+
+    static int @Nullable [] submit(FutureTask<int[]> task) {
+        if (!PENDING.compareAndSet(null,task)) return null;
+        try {
+            return task.get(1000,TimeUnit.MILLISECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (Exception unavailable) {
+            return null;
+        } finally {
+            PENDING.compareAndSet(task,null);
+            if (!task.isDone()) task.cancel(false);
         }
     }
 
