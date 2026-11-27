@@ -169,14 +169,11 @@ final class LegacyMinimapDraw {
         mesh.draw();
     }
 
-    private static final boolean SMOOTH_ZOOM = Boolean.getBoolean("diorama.smoothZoom");
-    private static final boolean MAP_FOG = Boolean.parseBoolean(System.getProperty("diorama.mapFog", "true"));
-
     /** Texture-native detail remains crisp when magnified; linear filtering reduces distant shimmer. */
     static void filter(double pixelsPerUnit) {
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER,
-            SMOOTH_ZOOM || pixelsPerUnit < Projection.PIXELS_PER_UNIT ? GL11.GL_LINEAR : GL11.GL_NEAREST);
+            ClientMinimap.options().smoothZoom || pixelsPerUnit < Projection.PIXELS_PER_UNIT ? GL11.GL_LINEAR : GL11.GL_NEAREST);
     }
 
     /** World-anchored cloud background: unknown raster alpha exposes it. */
@@ -184,7 +181,7 @@ final class LegacyMinimapDraw {
         double unit, boolean cave) {
         if (width <= 0 || height <= 0) return;
         GL11.glDisable(GL11.GL_TEXTURE_2D);
-        if (!MAP_FOG) {
+        if (!ClientMinimap.options().fog) {
             rect(mesh, x, y, x + width, y + height, 0xFF111820);
             GL11.glColor4f(1, 1, 1, 1);
             return;

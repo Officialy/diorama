@@ -22,8 +22,8 @@ final class MinimapOptionsScreen extends GuiScreen {
     public void initGui() {
         int buttonWidth = Math.min(200, Math.max(1, width - 12));
         int x = (width - buttonWidth) / 2;
-        int y = Math.max(20, (height - 92) / 2);
-        for (int id = 0; id < 4; id++) {
+        int y = Math.max(18, (height - 188) / 2);
+        for (int id = 0; id < 8; id++) {
             buttonList.add(new GuiButton(id, x, y + id * 24, buttonWidth, 20, label(id)));
         }
     }
@@ -33,6 +33,10 @@ final class MinimapOptionsScreen extends GuiScreen {
             case 0 -> I18n.format(LABEL + ".visible", state(options.visible));
             case 1 -> I18n.format(LABEL + ".coordinates", state(options.coordinates));
             case 2 -> I18n.format(LABEL + ".size", options.size());
+            case 3 -> I18n.format(LABEL + ".fog", state(options.fog));
+            case 4 -> I18n.format(LABEL + ".smooth", state(options.smoothZoom));
+            case 5 -> I18n.format(LABEL + ".world", state(options.worldWaypoints));
+            case 6 -> I18n.format(LABEL + ".death", state(options.deathWaypoints));
             default -> I18n.format("gui.done");
         };
     }
@@ -51,7 +55,11 @@ final class MinimapOptionsScreen extends GuiScreen {
             case 0 -> options.visible = !options.visible;
             case 1 -> options.coordinates = !options.coordinates;
             case 2 -> options.cycleSize();
-            case 3 -> {
+            case 3 -> options.fog = !options.fog;
+            case 4 -> options.smoothZoom = !options.smoothZoom;
+            case 5 -> options.worldWaypoints = !options.worldWaypoints;
+            case 6 -> options.deathWaypoints = !options.deathWaypoints;
+            case 7 -> {
                 mc.displayGuiScreen(parent);
                 return;
             }
@@ -77,13 +85,13 @@ final class MinimapOptionsScreen extends GuiScreen {
     @Override
     public void drawScreen(int x, int y, float delta) {
         drawDefaultBackground();
-        drawCenteredString(fontRendererObj, I18n.format(LABEL), width / 2, Math.max(5, (height - 92) / 2 - 16), -1);
+        drawCenteredString(fontRendererObj, I18n.format(LABEL), width / 2, Math.max(5, (height - 188) / 2 - 16), -1);
         if (saveFailed) {
             drawCenteredString(
                 fontRendererObj,
                 I18n.format(LABEL + ".save_failed"),
                 width / 2,
-                Math.max(20, (height - 92) / 2) + 98,
+                Math.max(20, (height - 92) / 2) + 194,
                 0xFFFF7777);
         }
         super.drawScreen(x, y, delta);

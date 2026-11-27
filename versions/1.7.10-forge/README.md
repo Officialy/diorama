@@ -161,3 +161,6 @@ preview (four times more primary rays than the default 128x128). `8` selects a 6
 The progressive scheduler now permits coalesced coarse gap updates while a tile is still provisional,
 with a 250 ms per-tile throttle and periodic refinement turns. A refinement invalidated by newly
 arriving data retains displayed coarse coverage without writing provisional pixels to storage.
+
+Map clouds, smooth zoom, world waypoints and death waypoints can be toggled from Minimap Settings.
+JVM properties specify initial defaults before a saved preference exists.

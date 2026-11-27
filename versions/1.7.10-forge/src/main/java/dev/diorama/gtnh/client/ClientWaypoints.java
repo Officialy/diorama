@@ -77,7 +77,7 @@ final class ClientWaypoints {
         }
         if (deathRecorded) return;
         deathRecorded = true;
-        if (!Boolean.parseBoolean(System.getProperty("diorama.deathWaypoints", "true")) || !writable()
+        if (!ClientMinimap.options().deathWaypoints || !writable()
             || points().size() >= LegacyWaypointBook.MAX_POINTS) return;
         try {
             int x = MathHelper.floor_double(player.posX);

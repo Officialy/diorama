@@ -893,7 +893,7 @@ public final class ClientMinimap {
                 }
                 if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, tile.id);
-                LegacyMinimapDraw.filter(view.pixelsPerUnit() / (1 << key.lod()));
+                LegacyMinimapDraw.filter(view.pixelsPerUnit() * (1 << key.lod()));
                 if (!mapCurrent(mc, screen, shown, shownTextures, drawnLayer)) return;
                 mesh.startDrawingQuads();
                 mesh.addVertexWithUV(part.x0(), part.y1(), 0, part.u0(), part.v1());

@@ -161,7 +161,7 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
         Minecraft mc = Minecraft.getMinecraft();
         Entity viewer = mc.renderViewEntity;
         if (viewer == null || mc.theWorld == null || mc.gameSettings.hideGUI || mc.currentScreen != null
-            || !Boolean.parseBoolean(System.getProperty("diorama.worldWaypoints", "true"))) return;
+            || !ClientMinimap.options().worldWaypoints) return;
         var points = ClientWaypoints.visibleBook(mc);
         if (points.isEmpty()) return;
         double cameraX = RenderManager.renderPosX, cameraY = RenderManager.renderPosY, cameraZ = RenderManager.renderPosZ;

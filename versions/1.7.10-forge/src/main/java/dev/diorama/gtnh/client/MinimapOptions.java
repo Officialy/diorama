@@ -17,6 +17,10 @@ final class MinimapOptions {
     private final Path file;
     boolean visible = true;
     boolean coordinates = true;
+    boolean fog = Boolean.parseBoolean(System.getProperty("diorama.mapFog", "true"));
+    boolean smoothZoom = Boolean.getBoolean("diorama.smoothZoom");
+    boolean worldWaypoints = Boolean.parseBoolean(System.getProperty("diorama.worldWaypoints", "true"));
+    boolean deathWaypoints = Boolean.parseBoolean(System.getProperty("diorama.deathWaypoints", "true"));
     private int size = DEFAULT_SIZE;
 
     MinimapOptions(Path file) {
@@ -40,6 +44,10 @@ final class MinimapOptions {
         }
         visible = !"false".equalsIgnoreCase(props.getProperty("visible"));
         coordinates = !"false".equalsIgnoreCase(props.getProperty("coordinates"));
+        fog = Boolean.parseBoolean(props.getProperty("fog", Boolean.toString(fog)));
+        smoothZoom = Boolean.parseBoolean(props.getProperty("smoothZoom", Boolean.toString(smoothZoom)));
+        worldWaypoints = Boolean.parseBoolean(props.getProperty("worldWaypoints", Boolean.toString(worldWaypoints)));
+        deathWaypoints = Boolean.parseBoolean(props.getProperty("deathWaypoints", Boolean.toString(deathWaypoints)));
         String value = props.getProperty("size", "");
         size = "64".equals(value) ? 64 : "128".equals(value) ? 128 : DEFAULT_SIZE;
     }
@@ -49,6 +57,10 @@ final class MinimapOptions {
         props.setProperty("visible", Boolean.toString(visible));
         props.setProperty("coordinates", Boolean.toString(coordinates));
         props.setProperty("size", Integer.toString(size));
+        props.setProperty("fog", Boolean.toString(fog));
+        props.setProperty("smoothZoom", Boolean.toString(smoothZoom));
+        props.setProperty("worldWaypoints", Boolean.toString(worldWaypoints));
+        props.setProperty("deathWaypoints", Boolean.toString(deathWaypoints));
         Path parent = Files.createDirectories(file.getParent());
         Path temp = Files.createTempFile(parent, "diorama-minimap-", ".tmp");
         try {
