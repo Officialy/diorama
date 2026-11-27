@@ -15,6 +15,7 @@ import org.jspecify.annotations.Nullable;
 import dev.diorama.Projection;
 import dev.diorama.bake.TileKey;
 import dev.diorama.gtnh.capture.PreviewTileStore;
+import dev.diorama.gtnh.capture.PreviewOverview;
 
 /** Session-scoped OMT restore and best-effort persistence, independent of the terrain bake worker. */
 final class SharedTileIo {
@@ -148,7 +149,15 @@ final class SharedTileIo {
                 if (this.beforeIo != null) this.beforeIo.run();
                 if (PreviewTileStore.retain(null, fresh) == null) return;
                 int[] disk = request.store.read(request.key);
-                request.store.write(request.key, PreviewTileStore.retain(disk, fresh));
+                int[] merged = PreviewTileStore.retain(disk, fresh);
+                request.store.write(request.key, merged);
+                if (request.key.lod() == 0) {
+                    TileKey parent = request.key.parent();
+                    int[][] children = new int[4][];
+                    children[PreviewOverview.childIndex(request.key)] = merged;
+                    int[] overview = PreviewOverview.build(parent, children);
+                    request.store.write(parent, PreviewTileStore.retain(request.store.read(parent), overview));
+                }
             } catch (IOException | RuntimeException failure) {
                 // Stale save locks, unsupported files, and ordinary I/O failures are not retried.
                 LOG.log(Level.FINE, "Could not persist preview tile " + request.key, failure);

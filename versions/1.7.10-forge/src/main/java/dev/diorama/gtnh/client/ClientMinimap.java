@@ -760,13 +760,7 @@ public final class ClientMinimap {
         if (!persistent) return;
         for (var entry : tiles.entrySet()) {
             CachedTile tile = entry.getValue();
-            if (tile.savePending && io.write(entry.getKey(), tile.pixels)) {
-                tile.savePending = false;
-                TileKey parent = entry.getKey().parent();
-                int[][] children = new int[4][];
-                children[PreviewOverview.childIndex(entry.getKey())] = tile.pixels;
-                io.write(parent, PreviewOverview.build(parent, children));
-            }
+            if (tile.savePending && io.write(entry.getKey(), tile.pixels)) tile.savePending = false;
         }
     }
 

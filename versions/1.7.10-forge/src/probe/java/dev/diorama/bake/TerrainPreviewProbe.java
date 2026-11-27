@@ -33,6 +33,7 @@ public final class TerrainPreviewProbe {
             progressiveBake();
             highResolution();
             gpuColumns();
+            gpuVolume();
             patchBake();
             caveBake();
             partialAppearanceBake();
@@ -50,6 +51,23 @@ public final class TerrainPreviewProbe {
         System.out.println(
             "PASS bounded terrain preview: " + assertions
                 + " assertions; numeric identity/bounds/detachment, fail-closed style, full/patch surface and fixed-cut cave canonical ABGR bake; native capture/screen/epoch acceptance UNTESTED");
+    }
+
+    private static void gpuVolume() {
+        PreparedBlockLooks looks = table();
+        TerrainPreview.Work work = TerrainPreview.prepare(looks, looks.session(), KEY,
+            new ChunkSnapshot[] { snapshot(looks, 0, 0, true) });
+        short[] ids = work.gpuVoxels();
+        require(ids.length == 128 * 400 * work.topY(), "GPU volume has exact captured height");
+        require((ids[0] & 65535) == 1, "GPU volume packs prepared block ids");
+        require((ids[16] & 65535) == 65535, "GPU volume distinguishes unknown and air");
+        float[] palette = work.gpuPalette();
+        require(palette[4] > 0 && palette[5] == 0 && palette[6] == 0, "GPU face palette retains colour");
+        require(palette[32768 * 4 + 7] == Looks.SOLID, "GPU palette retains material");
+        require(work.gpuShapes().length >= 128, "GPU shape table has full cube sentinel");
+        require(work.gpuTints().length == 128 * 400 * 16, "GPU tint field dimensions");
+        ids[0] = 0;
+        require(work.gpuVoxels()[0] == 1, "GPU volume staging is detached");
     }
 
     private static void gpuColumns() {

@@ -35,6 +35,7 @@ public final class SharedTileIoProbe {
             sessionReset(temp);
             coalesceAndBound(temp);
             lockChanged(temp);
+            overviewFromDetail(temp);
         } finally {
             Path[] paths;
             try (Stream<Path> tree = Files.walk(temp)) {
@@ -165,6 +166,23 @@ public final class SharedTileIoProbe {
                     .failure() instanceof IOException,
             "corruption is distinguishable from a miss");
         require(Arrays.equals(corrupt, Files.readAllBytes(omt)), "corrupt OMT is never replaced");
+    }
+
+    private static void overviewFromDetail(Path temp) throws Exception {
+        PreviewTileStore store = new PreviewTileStore(temp.resolve("pyramid"));
+        SharedTileIo io = new SharedTileIo();
+        io.reset(store);
+        int[] first = new int[Projection.TILE_PIXELS * Projection.TILE_PIXELS];
+        Arrays.fill(first, OLD);
+        int[] second = first.clone();
+        Arrays.fill(second, OTHER);
+        TileKey sibling = new TileKey(TileKey.SURFACE, DETAIL.tileU()-1, DETAIL.tileV());
+        require(io.write(DETAIL, first) && io.write(sibling, second), "two confirmed children accepted");
+        io.awaitIdle();
+        int[] parent = store.read(OVERVIEW);
+        require(parent != null, "detail writes generate durable parent without additional queue slots");
+        require(parent[0] == OTHER && parent[Projection.TILE_PIXELS/2] == OLD,
+            "parent preserves both child quadrants");
     }
 
     private static void lockChanged(Path temp) throws Exception {

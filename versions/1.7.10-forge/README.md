@@ -209,3 +209,7 @@ not yet reproduce upstream's shadow, sky occlusion or water passes. GPU raster r
 separate from confirmed CPU history and never written to the authoritative map cache. Missing
 coverage, unsupported contexts or failed GL work fall back to canonical CPU rendering. The
 volume upload and synchronous readback can introduce frame-time spikes; benchmark before use.
+
+Overview generation now happens on the disk worker after the confirmed child write, rather than
+composing on the client tick and competing for a second queue slot. Added detached regression
+coverage for GPU voxel/shape/tint packing and durable two-child overview updates.

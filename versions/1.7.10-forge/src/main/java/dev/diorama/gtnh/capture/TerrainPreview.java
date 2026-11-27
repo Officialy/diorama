@@ -337,7 +337,9 @@ public final class TerrainPreview {
         public float[] gpuPalette() {
             this.validateForBake();
             float[] result = new float[256 * 128 * 6 * 4];
-            for (int id = 1; id < this.looks.used(); id++) {
+            // The owner may append immutable appearances while workers read already published ids.
+            // used() is owner-only; scan the bounded published-kind array instead.
+            for (int id = 1; id < Math.min(32768, this.looks.kind.length); id++) {
                 if (!this.looks.isPrepared(id)) continue;
                 int at = id * 4, stride = 32768 * 4;
                 gpuRgb(result,at,this.looks.top[id],this.looks.topTintWeight[id]);
