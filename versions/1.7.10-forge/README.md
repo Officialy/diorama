@@ -217,3 +217,7 @@ coverage for GPU voxel/shape/tint packing and durable two-child overview updates
 Advanced minimap settings exposes radar, player radar, beams, volumetric-style fog and high-resolution
 close zoom without restarting. The GPU terrain flags still require restart. Saved preferences override
 JVM defaults. Radar is disabled by default; only use it where the server permits it.
+
+The fork CI also runs the exact embedded GPU and fog shaders in a headless Mesa compatibility
+context, checking shader compilation/linking, known and unknown terrain, four-sample voxel
+coverage and the fully known fog mask. This is a shader-level test, not an Angelica runtime test.

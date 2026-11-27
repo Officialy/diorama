@@ -26,6 +26,16 @@ jobs:
         run: |
           bash gradlew spotlessApply --build-cache
           git diff --no-ext-diff | tee "$RUNNER_TEMP/format.patch"
+      - name: Install headless GL test runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libgl1-mesa-dri
+      - name: Compile and exercise legacy GPU shaders
+        working-directory: versions/1.7.10-forge
+        env:
+          EGL_PLATFORM: surfaceless
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: python3 tools/validate_legacy_shaders.py
       - name: Build and verify
         working-directory: versions/1.7.10-forge
         run: bash gradlew assemble verifyBaseline --build-cache --continue
