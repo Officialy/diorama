@@ -2,6 +2,7 @@ package dev.diorama.gtnh.client;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import dev.diorama.Projection;
 import dev.diorama.bake.TileKey;
@@ -164,6 +165,43 @@ final class MapViewportController {
 
     private static double uv(double value) {
         return Math.max(0, Math.min(1, value));
+    }
+
+    /** Render detached ABGR tiles into a bounded ARGB PNG raster. Prefer detail over overview. */
+    static int[] exportRaster(Map<TileKey, int[]> tiles, int layer, double u0, double v0,
+        double u1, double v1, int width, int height) {
+        if (width < 1 || width > 2048 || height < 1 || height > 2048
+            || !Double.isFinite(u0) || !Double.isFinite(v0) || !Double.isFinite(u1) || !Double.isFinite(v1)
+            || u1 <= u0 || v1 <= v0) throw new IllegalArgumentException("Invalid export area");
+        int[] output = new int[width * height];
+        int edge = Projection.TILE_PIXELS;
+        int units = Projection.TILE_UNITS;
+        int[] col0 = new int[width], col1 = new int[width], x0 = new int[width], x1 = new int[width];
+        for (int x=0; x<width; x++) {
+            double u = u0 + (x+.5)*(u1-u0)/width;
+            col0[x] = (int)Math.floor(u/units);
+            col1[x] = (int)Math.floor(u/(2*units));
+            x0[x] = sampleIndex(u,col0[x],units,edge);
+            x1[x] = sampleIndex(u,col1[x],2*units,edge);
+        }
+        for (int y=0; y<height; y++) {
+            double v = v0 + (y+.5)*(v1-v0)/height;
+            int row0=(int)Math.floor(v/units), row1=(int)Math.floor(v/(2*units));
+            int y0=sampleIndex(v,row0,units,edge)*edge, y1=sampleIndex(v,row1,2*units,edge)*edge;
+            int[] detail=null, overview=null;
+            for (int x=0;x<width;x++) {
+                if(x==0||col0[x]!=col0[x-1]) detail=tiles.get(new TileKey(layer,col0[x],row0,0));
+                if(x==0||col1[x]!=col1[x-1]) overview=tiles.get(new TileKey(layer,col1[x],row1,1));
+                int p=detail==null?0:detail[y0+x0[x]];
+                if((p>>>24)==0&&overview!=null)p=overview[y1+x1[x]];
+                output[y*width+x]=(p&0xFF00FF00)|((p&255)<<16)|((p>>>16)&255);
+            }
+        }
+        return output;
+    }
+
+    private static int sampleIndex(double coordinate,int tile,int units,int edge) {
+        return Math.max(0,Math.min(edge-1,(int)Math.floor((coordinate-(double)tile*units)*edge/units)));
     }
 
     /** Clipped absolute GUI edges paired with normalized source texture edges. */

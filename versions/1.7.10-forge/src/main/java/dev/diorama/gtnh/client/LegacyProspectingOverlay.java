@@ -61,7 +61,17 @@ final class LegacyProspectingOverlay {
                 nextRefresh = now + 10_000_000_000L;
             }
         }
-        return markers;
+        List<Marker> visible = new ArrayList<>();
+        for (Marker marker : markers) {
+            double sx=view.screenX(marker.u()), sy=view.screenY(marker.v());
+            if(sx<0||sy<0||sx>view.screenX(view.centerU())*2||sy>view.screenY(view.centerV())*2)continue;
+            visible.add(marker);
+        }
+        if(visible.size()>512) {
+            visible.sort(java.util.Comparator.comparingDouble(marker->Math.hypot(marker.u()-view.centerU(),marker.v()-view.centerV())));
+            return visible.subList(0,512);
+        }
+        return visible;
     }
 
     private static List<Marker> snapshot(int dimension, int mode) throws ReflectiveOperationException {

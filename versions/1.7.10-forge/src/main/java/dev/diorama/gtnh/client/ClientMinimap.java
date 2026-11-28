@@ -2,6 +2,11 @@ package dev.diorama.gtnh.client;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.util.HashMap;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -52,6 +57,8 @@ public final class ClientMinimap {
     private static final int PATCH_FALLBACK = 160;
     private static final int PATCH_SIDE = Projection.TILE_PIXELS / TileImage.BLOCK;
     private static @Nullable ClientMinimap installed;
+    private static final AtomicBoolean EXPORTING = new AtomicBoolean();
+    private static volatile String exportStatus = "";
 
     private final Map<TileKey, CachedTile> tiles = new LinkedHashMap<>(193, 0.75f, false);
     private final Map<TileKey, CachedTile> highRes = new LinkedHashMap<>(HD_TILES + 1, 0.75f, true);
@@ -778,15 +785,17 @@ public final class ClientMinimap {
             return;
         }
         if (result.pixels() == null) return;
-        int[] merged = PreviewTileStore.retain(result.pixels(), tile.coarseShown || tile.gpuApproximate ? tile.confirmedPixels : tile.pixels);
-        if (merged != tile.pixels) {
-            // A patch worker may hold the earlier history raster. Reject that job rather than
-            // letting it overwrite pixels restored after its submission.
+        boolean provisional = tile.coarseShown || tile.gpuApproximate;
+        int[] previous = provisional ? tile.confirmedPixels : tile.pixels;
+        int[] merged = PreviewTileStore.retain(result.pixels(), previous);
+        if (merged != previous) {
+            // Keep provisional gap coverage visible while replacing overlapping pixels with saved,
+            // confirmed history. A later stable refinement can replace the remaining provisional data.
             tile.revision++;
-            tile.pixels = merged;
-            tile.coarseShown = false;
-            tile.gpuApproximate = false;
-            tile.confirmedPixels = null;
+            if (provisional) {
+                tile.confirmedPixels = merged;
+                tile.pixels = PreviewTileStore.retain(tile.pixels, merged);
+            } else tile.pixels = merged;
             tile.needsFull = true;
             tile.pendingUpload = null;
         }
@@ -815,6 +824,7 @@ public final class ClientMinimap {
                 if (child != null && (child.coarseShown || child.gpuApproximate)) provisionalChildren |= bit;
                 if (child == null && parent != null && (parent.provisionalChildren & bit) == 0) {
                     retainChildren |= bit;
+                    if (parent.children[i] != null) changed = true;
                 } else if (parent == null ? children[i] != null
                     : parent.children[i] != children[i] || (parent.provisionalChildren & bit) != (provisionalChildren & bit)) {
                     changed = true;
@@ -831,7 +841,7 @@ public final class ClientMinimap {
                 int start = (i / 2) * half * edge + (i % 2) * half;
                 for (int y = 0; y < half; y++)
                     System.arraycopy(parent.pixels, start + y * edge, pixels, start + y * edge, half);
-                children[i] = parent.children[i];
+                // Keep the quadrant in parent.pixels, not a second strong reference to the evicted child.
             }
             if (parent.pixels != null) {
                 int[] remembered = parent.pixels;
@@ -958,6 +968,79 @@ public final class ClientMinimap {
                         key.minV() + key.units() * .5 - view.centerV())))
             .limit(lod == 0 ? MAP_TILES : OVERVIEW_TILES)
             .collect(java.util.stream.Collectors.toList());
+    }
+
+    static String exportStatus() {
+        return exportStatus;
+    }
+
+    /** Explicit export: capture immutable tile references on the client thread; encode off-thread. */
+    static void exportMap(Minecraft mc, SharedTerrainMapScreen screen) {
+        ClientMinimap owner=installed;
+        if(owner==null||!owner.current(mc)||!screen.belongsTo(mc.theWorld)||!EXPORTING.compareAndSet(false,true)) return;
+        try {
+            MapViewportController view=screen.viewport();
+            double u0=view.projectedU(0),v0=view.projectedV(0),u1=view.projectedU(screen.width),v1=view.projectedV(screen.height);
+            int layer=owner.layer;
+            Map<TileKey,int[]> data=new HashMap<>();
+            for(var item:owner.history.entrySet()) {
+                if(item.getKey().layer()==layer&&view.clip(item.getKey())!=null)data.put(item.getKey(),item.getValue());
+            }
+            for(var item:owner.overviews.entrySet()) {
+                CachedTile tile=item.getValue();
+                if(item.getKey().layer()==layer&&view.clip(item.getKey())!=null&&tile.pixels!=null&&tile.provisionalChildren==0)
+                    data.put(item.getKey(),tile.pixels);
+            }
+            for(var item:owner.tiles.entrySet()) {
+                CachedTile tile=item.getValue();
+                int[] confirmed=tile.coarseShown||tile.gpuApproximate?tile.confirmedPixels:tile.pixels;
+                if(item.getKey().layer()==layer&&view.clip(item.getKey())!=null&&confirmed!=null)
+                    data.put(item.getKey(),confirmed);
+            }
+            if(data.isEmpty()) {
+                exportStatus="No confirmed map tiles in this viewport";
+                EXPORTING.set(false);
+                return;
+            }
+            double scale=Math.min(Projection.PIXELS_PER_UNIT,2048.0/Math.max(u1-u0,v1-v0));
+            int w=Math.max(1,Math.min(2048,(int)Math.round((u1-u0)*scale)));
+            int h=Math.max(1,Math.min(2048,(int)Math.round((v1-v0)*scale)));
+            Path directory=mc.mcDataDir.toPath().resolve("screenshots");
+            exportStatus="Exporting map...";
+            Thread worker=new Thread(()->writeExport(data,layer,u0,v0,u1,v1,w,h,directory),"Diorama-map-export");
+            worker.setDaemon(true);
+            worker.setPriority(Thread.MIN_PRIORITY+1);
+            worker.start();
+        } catch(RuntimeException|LinkageError failure) {
+            exportStatus="Map export could not start";
+            EXPORTING.set(false);
+            LOG.warn("Could not start Diorama export",failure);
+        }
+    }
+
+    private static void writeExport(Map<TileKey,int[]> data,int layer,double u0,double v0,double u1,double v1,
+        int w,int h,Path directory) {
+        Path temp=null;
+        try {
+            int[] argb=MapViewportController.exportRaster(data,layer,u0,v0,u1,v1,w,h);
+            BufferedImage image=new BufferedImage(w,h,BufferedImage.TYPE_INT_ARGB);
+            image.setRGB(0,0,w,h,argb,0,w);
+            Files.createDirectories(directory);
+            temp=Files.createTempFile(directory,"diorama-map-",".tmp");
+            if(!ImageIO.write(image,"png",temp.toFile()))throw new IOException("PNG writer unavailable");
+            String name=temp.getFileName().toString();
+            Path output=temp.resolveSibling(name.substring(0,name.length()-4)+".png");
+            Files.move(temp,output);
+            exportStatus=new StringBuilder("Saved screenshots/").append(output.getFileName()).toString();
+        } catch(IOException|RuntimeException|LinkageError failure) {
+            exportStatus="Map export failed; see log";
+            LOG.warn("Diorama PNG export failed",failure);
+        } finally {
+            if(temp!=null)try { Files.deleteIfExists(temp); } catch(IOException cleanup) {
+                LOG.warn("Could not remove unfinished Diorama export",cleanup);
+            }
+            EXPORTING.set(false);
+        }
     }
 
     static void drawMap(Minecraft mc, SharedTerrainMapScreen screen) {

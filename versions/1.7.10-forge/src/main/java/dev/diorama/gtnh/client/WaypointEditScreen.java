@@ -67,8 +67,8 @@ final class WaypointEditScreen extends GuiScreen {
         if (index >= 0) buttonList.add(new GuiButton(3, left + 124, 136, 116, 20, deleteLabel()));
         buttonList.add(new GuiButton(4, left, 160, 240, 20, iconLabel()));
         if (index >= 0) {
-            buttonList.add(new GuiButton(5, left, 184, 116, "Center map"));
-            buttonList.add(new GuiButton(6, left + 124, 184, 116, "Copy XYZ"));
+            buttonList.add(new GuiButton(5, left, 184, 116, 20, "Center map"));
+            buttonList.add(new GuiButton(6, left + 124, 184, 116, 20, "Copy XYZ"));
         }
         Keyboard.enableRepeatEvents(true);
     }

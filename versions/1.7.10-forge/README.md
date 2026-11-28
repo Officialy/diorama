@@ -265,3 +265,12 @@ measured deposit or terrain height. Fluid markers use the center of the prospect
 The overlay is off when a new map screen opens, does not persist records or send prospecting packets,
 and fails closed if the optional reflected API is incompatible. It limits each type to 8192 markers.
 Verified against the VisualProspecting master API source; native GTNH testing remains required.
+
+### PNG map export and restoration
+
+Export PNG on the fullscreen map writes the current projected viewport from confirmed resident,
+history and overview rasters to `screenshots/diorama-map-*.png`. Native pixel density is preserved
+up to a 2048-pixel longest edge. Unavailable pixels remain transparent; no fog, UI or waypoint text
+is baked into this first export implementation. Encoding is on a single background worker, with
+no GL readback or new terrain loads. Cache restoration now retains provisional coverage while
+merging confirmed disk pixels, and overview quadrants no longer hold evicted child pixel arrays.

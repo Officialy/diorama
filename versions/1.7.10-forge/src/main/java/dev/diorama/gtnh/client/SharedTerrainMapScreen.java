@@ -75,6 +75,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
         }
         if (dimension != null && LegacyProspectingOverlay.installed())
             buttonList.add(new GuiButton(5, WAYPOINT_X, LAYER_Y, WAYPOINT_WIDTH, BUTTON_HEIGHT, depositLabel()));
+        buttonList.add(new GuiButton(6, BUTTON_X, LAYER_Y + 24, BUTTON_WIDTH, BUTTON_HEIGHT, "Export PNG"));
         dragging = false;
         if (!initialized) {
             recenter();
@@ -122,6 +123,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
     protected void actionPerformed(GuiButton button) {
         if (!belongsTo(mc.theWorld)) return;
         if (button.id == 0) recenter();
+        if (button.id == 6) ClientMinimap.exportMap(mc,this);
         if (button.id == 5) {
             prospectMode = (prospectMode + 1) & 3;
             prospecting.clear();
@@ -190,6 +192,8 @@ final class SharedTerrainMapScreen extends GuiScreen {
             && y < LAYER_Y + BUTTON_HEIGHT;
         controls |= dimension != null && LegacyProspectingOverlay.installed()
             && x >= WAYPOINT_X && x < WAYPOINT_X + WAYPOINT_WIDTH && y >= LAYER_Y && y < LAYER_Y + BUTTON_HEIGHT;
+        controls |= x >= BUTTON_X && x < BUTTON_X + BUTTON_WIDTH
+            && y >= LAYER_Y + 24 && y < LAYER_Y + 24 + BUTTON_HEIGHT;
         if (button == 1 && !controls && isShiftKeyDown() && prospectMode != 0 && hoveredDeposit != null) {
             ClientWaypoints session = ClientWaypoints.active(mc);
             if (session != null && session.writable() && session.points().size() < LegacyWaypointBook.MAX_POINTS) {
@@ -241,6 +245,9 @@ final class SharedTerrainMapScreen extends GuiScreen {
                         : I18n.format("diorama.map.dimension." + dimension.suffix());
             int bottom = height - fontRendererObj.FONT_HEIGHT - 6;
             drawString(fontRendererObj, status, 6, bottom, 0xFFDDDDDD);
+            String export = ClientMinimap.exportStatus();
+            if (!export.isEmpty()) drawString(fontRendererObj, fontRendererObj.trimStringToWidth(export,Math.max(0,width-12)),
+                6, bottom - 48, 0xFFDDDDDD);
             int layer = ClientMinimap.layer(mc);
             if (layer != TileKey.SURFACE) {
                 drawString(

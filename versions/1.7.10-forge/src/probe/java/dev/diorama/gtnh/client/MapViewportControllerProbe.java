@@ -20,6 +20,7 @@ public final class MapViewportControllerProbe {
         checkCamera();
         checkClipping();
         checkOverview();
+        checkExport();
         checkFixedMinimapParity();
         StringBuilder hex = new StringBuilder();
         for (byte value : digest.digest()) {
@@ -30,6 +31,21 @@ public final class MapViewportControllerProbe {
         System.out.println(
             "PASS map viewport: " + assertions
                 + " assertions; pan, anchored zoom, recenter, LOD policy, tile clipping and minimap parity");
+    }
+
+    private static void checkExport() {
+        int edge=Projection.TILE_PIXELS;
+        int[] west=new int[edge*edge], east=new int[edge*edge], overview=new int[edge*edge];
+        java.util.Arrays.fill(west,0xFF0000FF);
+        java.util.Arrays.fill(overview,0xFFFF0000);
+        java.util.Map<TileKey,int[]> data=new java.util.HashMap<>();
+        data.put(new TileKey(TileKey.SURFACE,-1,0,0),west);
+        data.put(new TileKey(TileKey.SURFACE,0,0,0),east);
+        data.put(new TileKey(TileKey.SURFACE,0,0,1),overview);
+        int[] raster=MapViewportController.exportRaster(data,TileKey.SURFACE,-1,0,2,1,3,1);
+        require(raster[0]==0xFFFF0000,"negative detail tile ABGR to ARGB");
+        require(raster[1]==0xFF0000FF&&raster[2]==0xFF0000FF,"unknown detail falls back to overview");
+        require(MapViewportController.exportRaster(data,TileKey.SURFACE,-1,-2,0,-1,1,1)[0]==0,"missing export area stays transparent");
     }
 
     private static void checkCamera() {
