@@ -253,3 +253,15 @@ dimensions are filtered; legacy Nether x/z are divided by eight to match Journey
 Xaero text has no dimension field, so selection of the correct dimension is the user's responsibility.
 Source files remain unchanged; duplicate label/coordinate pairs are skipped and existing visibility is
 preserved. Maximum 128 points per book remains. JourneyMap 6 NBT files are not yet supported.
+
+### GTNH VisualProspecting overlay (optional)
+
+When VisualProspecting is installed, the fullscreen map has an Ores: Off / Ores / Fluids / Deposits
+button. It reads only the existing VisualProspecting **client** cache, filters to the active dimension,
+and refreshes at most every two seconds while enabled. Gold indicates known ore veins, blue known
+fluid areas, grey depleted/empty deposits. Shift+right-click a hovered marker to open the waypoint
+editor. The marker uses reference Y=65 (as VisualProspecting's waypoint integration does), not a
+measured deposit or terrain height. Fluid markers use the center of the prospected 8x8-chunk area.
+The overlay is off when a new map screen opens, does not persist records or send prospecting packets,
+and fails closed if the optional reflected API is incompatible. It limits each type to 8192 markers.
+Verified against the VisualProspecting master API source; native GTNH testing remains required.

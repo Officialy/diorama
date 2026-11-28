@@ -452,6 +452,10 @@
     {
       "path": "dev/diorama/gtnh/client/RenderBenchmarkScreen.java",
       "fqn": "dev.diorama.gtnh.client.RenderBenchmarkScreen"
+    },
+    {
+      "path": "dev/diorama/gtnh/client/LegacyProspectingOverlay.java",
+      "fqn": "dev.diorama.gtnh.client.LegacyProspectingOverlay"
     }
   ],
   "deferred": [

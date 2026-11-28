@@ -274,6 +274,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
             val expectedNested = setOf("dev/diorama/gtnh/client/LegacyWaypointBook\$Point.class",
+                "dev/diorama/gtnh/client/LegacyProspectingOverlay\$Marker.class",
                 "dev/diorama/gtnh/client/RenderBenchmark\$Result.class",
                 "dev/diorama/gtnh/capture/TerrainPreview\$Work.class",
                 "dev/diorama/gtnh/client/SharedTileIo\$Read.class",

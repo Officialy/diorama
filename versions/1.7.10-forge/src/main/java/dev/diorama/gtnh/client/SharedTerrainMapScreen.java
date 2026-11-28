@@ -30,6 +30,9 @@ final class SharedTerrainMapScreen extends GuiScreen {
     private boolean initialized, dragging;
     private @Nullable GuiButton followHeight;
     private int lastX, lastY;
+    private int prospectMode;
+    private final LegacyProspectingOverlay prospecting = new LegacyProspectingOverlay();
+    private @Nullable LegacyProspectingOverlay.Marker hoveredDeposit;
 
     SharedTerrainMapScreen(WorldClient world) {
         this.world = world;
@@ -70,6 +73,8 @@ final class SharedTerrainMapScreen extends GuiScreen {
             buttonList.add(followHeight);
             updateHeightControl();
         }
+        if (dimension != null && LegacyProspectingOverlay.installed())
+            buttonList.add(new GuiButton(5, WAYPOINT_X, LAYER_Y, WAYPOINT_WIDTH, BUTTON_HEIGHT, depositLabel()));
         dragging = false;
         if (!initialized) {
             recenter();
@@ -79,6 +84,15 @@ final class SharedTerrainMapScreen extends GuiScreen {
 
     int mapWidth() { return width; }
     int mapHeight() { return height; }
+
+    private String depositLabel() {
+        switch (prospectMode) {
+            case 1: return "Ores";
+            case 2: return "Fluids";
+            case 3: return "Deposits";
+            default: return "Ores: Off";
+        }
+    }
 
     private void updateHeightControl() {
         if (followHeight == null) return;
@@ -108,6 +122,11 @@ final class SharedTerrainMapScreen extends GuiScreen {
     protected void actionPerformed(GuiButton button) {
         if (!belongsTo(mc.theWorld)) return;
         if (button.id == 0) recenter();
+        if (button.id == 5) {
+            prospectMode = (prospectMode + 1) & 3;
+            prospecting.clear();
+            button.displayString = depositLabel();
+        }
         if (button.id == 1) mc.displayGuiScreen(new MinimapOptionsScreen(this));
         if (button.id == 3) {
             ClientMinimap.toggleLayer(mc);
@@ -169,6 +188,25 @@ final class SharedTerrainMapScreen extends GuiScreen {
             && x < OPTIONS_X + BUTTON_WIDTH
             && y >= LAYER_Y
             && y < LAYER_Y + BUTTON_HEIGHT;
+        controls |= dimension != null && LegacyProspectingOverlay.installed()
+            && x >= WAYPOINT_X && x < WAYPOINT_X + WAYPOINT_WIDTH && y >= LAYER_Y && y < LAYER_Y + BUTTON_HEIGHT;
+        if (button == 1 && !controls && isShiftKeyDown() && prospectMode != 0 && hoveredDeposit != null) {
+            ClientWaypoints session = ClientWaypoints.active(mc);
+            if (session != null && session.writable() && session.points().size() < LegacyWaypointBook.MAX_POINTS) {
+                LegacyProspectingOverlay.Marker marker = hoveredDeposit;
+                String name = marker.name.replaceAll("[\\p{Cntrl}§]", "").trim();
+                if (name.length() > LegacyWaypointBook.MAX_NAME - 4)
+                    name = name.substring(0, LegacyWaypointBook.MAX_NAME - 4);
+                try {
+                    Point point = new Point((marker.fluid ? "[P] " : "[M] ") + name, marker.x,
+                        LegacyProspectingOverlay.REFERENCE_Y, marker.z, true);
+                    mc.displayGuiScreen(new WaypointEditScreen(session, this, -1, point));
+                } catch (IllegalArgumentException invalid) {
+                    // Unsupported names can still be viewed as a map-only marker.
+                }
+            }
+            return;
+        }
         if (button == 0 && !controls) {
             dragging = true;
             lastX = x;
@@ -194,6 +232,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         drawRect(0, 0, width, height, 0xFF111820);
         ClientMinimap.drawMap(mc, this);
+        drawDeposits(mouseX, mouseY);
         drawWaypoints(mouseX, mouseY);
         if (belongsTo(mc.theWorld)) {
             String status = dimension == null ? I18n.format("diorama.map.unsupported_dimension")
@@ -216,6 +255,29 @@ final class SharedTerrainMapScreen extends GuiScreen {
         }
         updateHeightControl();
         super.drawScreen(mouseX, mouseY, partialTicks);
+    }
+
+    private void drawDeposits(int mouseX, int mouseY) {
+        hoveredDeposit = null;
+        if (!belongsTo(mc.theWorld) || dimension == null || prospectMode == 0) return;
+        double closest = 49;
+        for (LegacyProspectingOverlay.Marker marker : prospecting.visible(view, dimension.id(), prospectMode)) {
+            double px = view.screenX(marker.u()), py = view.screenY(marker.v());
+            if (px < 4 || px > width - 4 || py < 4 || py > height - 4) continue;
+            int x = (int)Math.round(px), y = (int)Math.round(py);
+            drawRect(x-3,y-3,x+4,y+4,0xFF171717);
+            drawRect(x-2,y-2,x+3,y+3,marker.color());
+            double distance = (px-mouseX)*(px-mouseX)+(py-mouseY)*(py-mouseY);
+            if (distance < closest) { closest=distance; hoveredDeposit=marker; }
+        }
+        drawString(fontRendererObj, prospecting.status(), 6, height - 42, 0xFFCCCCCC);
+        if (hoveredDeposit != null) {
+            String text = new StringBuilder(hoveredDeposit.name).append(hoveredDeposit.depleted ? " (depleted)" : "")
+                .append(" | Shift+right-click: waypoint").toString();
+            text = fontRendererObj.trimStringToWidth(text, Math.max(0,width-8));
+            int x = Math.max(3,Math.min(mouseX+9,width-fontRendererObj.getStringWidth(text)-3));
+            drawString(fontRendererObj,text,x,Math.max(2,mouseY+10),hoveredDeposit.color());
+        }
     }
 
     private void drawWaypoints(int mouseX, int mouseY) {
