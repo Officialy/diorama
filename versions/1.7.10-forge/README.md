@@ -274,3 +274,14 @@ up to a 2048-pixel longest edge. Unavailable pixels remain transparent; no fog, 
 is baked into this first export implementation. Encoding is on a single background worker, with
 no GL readback or new terrain loads. Cache restoration now retains provisional coverage while
 merging confirmed disk pixels, and overview quadrants no longer hold evicted child pixel arrays.
+
+### Multiplayer persistence without JVM editing
+
+While connected to a remote server, `/dioramaterrain world-label <your-world-label>` saves an
+explicit per-endpoint identity locally; reconnect to use it for terrain and waypoint storage.
+`/dioramaterrain world-label` shows active/saved identities, and `... world-label off` disables
+persistence on the next connection. Existing map data is not deleted. The selected profile is frozen
+for the current network connection; each dimension keeps its separate storage suffix. Existing
+`diorama.remoteServer`/`diorama.remoteWorld` JVM overrides retain precedence. Proxy/multiworld
+servers still need distinct deliberate labels when entering a different world at the same address;
+Diorama does not infer a world identifier or silently merge different worlds.

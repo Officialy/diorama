@@ -129,6 +129,17 @@ public final class PreviewStorageProbe {
     }
 
     private static void remoteStores(Path temp, int[] pixels) throws Exception {
+        require(RemoteWorldIdentity.profile(temp,"a")==null,"no default remote profile");
+        RemoteWorldIdentity.setProfile(temp,"a","alpha world");
+        RemoteWorldIdentity.setProfile(temp,"b","beta");
+        require("alpha world".equals(RemoteWorldIdentity.profile(temp,"a"))&&"beta".equals(RemoteWorldIdentity.profile(temp,"b")),
+            "profiles persist and remain endpoint-scoped");
+        RemoteWorldIdentity.setProfile(temp,"a","second");
+        require("second".equals(RemoteWorldIdentity.profile(temp,"a"))&&"beta".equals(RemoteWorldIdentity.profile(temp,"b")),
+            "changing one server preserves another");
+        RemoteWorldIdentity.setProfile(temp,"a",null);
+        require(RemoteWorldIdentity.profile(temp,"a")==null,"disabling a profile leaves it session-only");
+        expect(IllegalArgumentException.class,()->RemoteWorldIdentity.setProfile(temp,"a","bad\nlabel"));
         require(RemoteWorldIdentity.open(temp, "a", null, "world") == null, "opt-in required");
         require(RemoteWorldIdentity.open(temp, "a", "b", "world") == null, "endpoint must match");
         require(RemoteWorldIdentity.open(temp, "a", "a", "") == null, "explicit world required");

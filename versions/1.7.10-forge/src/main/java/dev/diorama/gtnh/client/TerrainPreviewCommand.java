@@ -21,7 +21,7 @@ public final class TerrainPreviewCommand extends CommandBase {
 
     @Override
     public String getCommandUsage(ICommandSender sender) {
-        return "/dioramaterrain [status|missing|import-waypoints]";
+        return "/dioramaterrain [status|missing|import-waypoints|world-label <label|off>]";
     }
 
     @Override
@@ -44,8 +44,14 @@ public final class TerrainPreviewCommand extends CommandBase {
                 : session.importStaged(mc)));
             return;
         }
+        if(arguments.length>=1&&"world-label".equals(arguments[0])) {
+            String label=arguments.length==1?null:String.join(" ",java.util.Arrays.copyOfRange(arguments,1,arguments.length));
+            sender.addChatMessage(new ChatComponentText(ClientPreviewStorage.remoteProfile(Minecraft.getMinecraft(),
+                "off".equals(label)?null:label,arguments.length>1)));
+            return;
+        }
         if (arguments.length != 0) {
-            sender.addChatMessage(new ChatComponentText("Usage: /dioramaterrain [status|missing|import-waypoints]"));
+            sender.addChatMessage(new ChatComponentText("Usage: /dioramaterrain [status|missing|import-waypoints|world-label <label|off>]"));
             return;
         }
         owner.requestTerrainPreview();

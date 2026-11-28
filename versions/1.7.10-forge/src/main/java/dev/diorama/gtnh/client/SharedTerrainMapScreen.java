@@ -32,7 +32,7 @@ final class SharedTerrainMapScreen extends GuiScreen {
     private int lastX, lastY;
     private int prospectMode;
     private final LegacyProspectingOverlay prospecting = new LegacyProspectingOverlay();
-    private @Nullable LegacyProspectingOverlay.Marker hoveredDeposit;
+    private LegacyProspectingOverlay.@Nullable Marker hoveredDeposit;
 
     SharedTerrainMapScreen(WorldClient world) {
         this.world = world;
