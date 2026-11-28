@@ -319,6 +319,8 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "Unexpected scaffold base classes: extra=${actualBase - allowedBase}, missing=${allowedBase - actualBase}"
             }
             val expectedMr = setOf("dev/diorama/gtnh/capture/TerrainPreview.class",
+                "dev/diorama/gtnh/client/LegacyProspectingOverlay.class",
+                "dev/diorama/gtnh/client/LegacyProspectingOverlay\$Marker.class",
                 "dev/diorama/gtnh/client/ClientProxy.class",
                 "dev/diorama/gtnh/client/LegacyGpuBaker.class",
                 "dev/diorama/gtnh/client/LegacyGpuVolume.class",
