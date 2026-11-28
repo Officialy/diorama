@@ -273,6 +273,7 @@ val verifyArtifact = tasks.register("verifyArtifact") {
             val expectedBase = (sharedEntries + platformEntries).map { it.getValue("fqn").replace('.', '/') + ".class" }.toSet()
             // Explicit reviewed nested products; no catch-all allowance for extra classes.
             val expectedNested = setOf("dev/diorama/gtnh/client/LegacyWaypointBook\$Point.class",
+                "dev/diorama/gtnh/client/RenderBenchmark\$Result.class",
                 "dev/diorama/gtnh/capture/TerrainPreview\$Work.class",
                 "dev/diorama/gtnh/client/SharedTileIo\$Read.class",
                 "dev/diorama/gtnh/client/SharedTileIo\$Request.class",
@@ -310,8 +311,10 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/capture/ChunkCapture\$Status.class",
                 "dev/diorama/gtnh/client/ClientCaptureAccess\$LiveChunk.class",
                 "dev/diorama/gtnh/client/ClientCaptureAccess\$LiveSection.class")
-            require(classes.keys.filterNot { it.startsWith("META-INF/versions/") }.toSet() == expectedBase + expectedNested) {
-                "Unexpected scaffold base classes: ${classes.keys}"
+            val actualBase = classes.keys.filterNot { it.startsWith("META-INF/versions/") }.toSet()
+            val allowedBase = expectedBase + expectedNested
+            require(actualBase == allowedBase) {
+                "Unexpected scaffold base classes: extra=${actualBase - allowedBase}, missing=${allowedBase - actualBase}"
             }
             val expectedMr = setOf("dev/diorama/gtnh/capture/TerrainPreview.class",
                 "dev/diorama/gtnh/client/ClientProxy.class",
@@ -320,6 +323,8 @@ val verifyArtifact = tasks.register("verifyArtifact") {
                 "dev/diorama/gtnh/client/MinimapOptionsScreen.class",
                 "dev/diorama/gtnh/client/RenderSettingsScreen.class",
                 "dev/diorama/gtnh/client/RenderBenchmark.class",
+                "dev/diorama/gtnh/client/RenderBenchmark\$Result.class",
+                "dev/diorama/gtnh/client/LegacyFogShader.class",
                 "dev/diorama/gtnh/client/RenderBenchmarkScreen.class",
                 "dev/diorama/gtnh/capture/MapDimensionIdentity.class",
                 "dev/diorama/gtnh/client/ClientPreviewStorage.class",
