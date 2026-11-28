@@ -239,6 +239,7 @@ public final class ClientProxy extends CommonProxy implements IResourceManagerRe
             openMap = toggleMinimap = newWaypoint = waypointList = false;
             return;
         }
+        ClientPreviewStorage.clearDisconnected(minecraft);
         ClientCaptureLifecycle.observeWorld();
         ClientWaypoints.observe(minecraft);
         finishBindingInput(minecraft);

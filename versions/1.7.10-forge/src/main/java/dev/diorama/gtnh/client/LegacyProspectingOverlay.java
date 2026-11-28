@@ -24,6 +24,8 @@ final class LegacyProspectingOverlay {
     private static final int LIMIT = 8192;
     static final int REFERENCE_Y = 65;
     private List<Marker> markers = Collections.emptyList();
+    private List<Marker> visibleMarkers = Collections.emptyList();
+    private double viewedU=Double.NaN,viewedV,viewedScale,viewedWidth,viewedHeight;
     private long nextRefresh;
     private int lastDimension = Integer.MIN_VALUE, lastMode;
     private boolean unavailable;
@@ -35,6 +37,8 @@ final class LegacyProspectingOverlay {
     void clear() {
         markers = Collections.emptyList();
         nextRefresh = 0;
+        visibleMarkers=Collections.emptyList();
+        viewedU=Double.NaN;
     }
 
     String status() {
@@ -53,25 +57,34 @@ final class LegacyProspectingOverlay {
             nextRefresh = now + 2_000_000_000L;
             try {
                 markers = snapshot(dimension, mode);
+                viewedU=Double.NaN;
                 unavailable = false;
             } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
                 markers = Collections.emptyList();
+                viewedU=Double.NaN;
                 if (!unavailable) LOG.warn("VisualProspecting client overlay unavailable", error);
                 unavailable = true;
                 nextRefresh = now + 10_000_000_000L;
             }
         }
+        double width=view.screenX(view.centerU())*2,height=view.screenY(view.centerV())*2;
+        if(viewedU==view.centerU()&&viewedV==view.centerV()&&viewedScale==view.pixelsPerUnit()
+            &&viewedWidth==width&&viewedHeight==height)return visibleMarkers;
+        viewedU=view.centerU(); viewedV=view.centerV(); viewedScale=view.pixelsPerUnit();
+        viewedWidth=width; viewedHeight=height;
         List<Marker> visible = new ArrayList<>();
         for (Marker marker : markers) {
             double sx=view.screenX(marker.u()), sy=view.screenY(marker.v());
-            if(sx<0||sy<0||sx>view.screenX(view.centerU())*2||sy>view.screenY(view.centerV())*2)continue;
+            if(sx<0||sy<0||sx>width||sy>height)continue;
             visible.add(marker);
         }
         if(visible.size()>512) {
             visible.sort(java.util.Comparator.comparingDouble(marker->Math.hypot(marker.u()-view.centerU(),marker.v()-view.centerV())));
-            return visible.subList(0,512);
+            visibleMarkers=new ArrayList<>(visible.subList(0,512));
+        } else {
+            visibleMarkers=visible;
         }
-        return visible;
+        return visibleMarkers;
     }
 
     private static List<Marker> snapshot(int dimension, int mode) throws ReflectiveOperationException {

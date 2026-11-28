@@ -22,6 +22,10 @@ public final class TerrainPreviewJobProbe {
     public static void main(String[] args) throws Exception {
         hash = MessageDigest.getInstance("SHA-256");
         require(!TerrainPreviewJob.isBusy(), "initial worker slot empty");
+        require(TerrainPreviewFrame.requiresCanonical(true,false,true),"persistent GPU surface must be canonicalized");
+        require(!TerrainPreviewFrame.requiresCanonical(false,false,true),"RAM-only GPU map need not run CPU pass");
+        require(!TerrainPreviewFrame.requiresCanonical(true,true,true),"cave GPU path remains unsupported");
+        require(!TerrainPreviewFrame.requiresCanonical(true,false,false),"CPU result is already canonical");
         TerrainPreviewFrame image = new TerrainPreviewFrame(new int[] { 0xFF030201 }, null, null, false);
         CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
         AtomicBoolean daemon = new AtomicBoolean();

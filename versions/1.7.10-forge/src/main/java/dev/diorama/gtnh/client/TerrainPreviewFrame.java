@@ -58,7 +58,12 @@ record TerrainPreviewFrame(int @Nullable [] detail, int @Nullable [] overview, @
         return new TerrainPreviewFrame(detail, overview, readFailure, store != null && fresh != null);
     }
 
+    static boolean requiresCanonical(boolean persistent,boolean cave,boolean gpuApproximate) {
+        return persistent&&!cave&&gpuApproximate;
+    }
+
     void save(PreviewTileStore store, TileKey key) throws IOException {
+        if (this.gpuApproximate) throw new IllegalStateException("Approximate GPU terrain cannot be persisted");
         if (!this.needsSave) return;
         // L0 is authoritative. If a later overview write fails, it can be rebuilt from L0.
         store.write(key, this.detail);

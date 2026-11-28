@@ -345,6 +345,8 @@ public final class ClientMinimap {
             + hud.coarseBakes
             + "; GPU preview: " + LegacyGpuBaker.stats()
             + "; GPU refinement: " + LegacyGpuVolume.stats()
+            + "; GPU tiles pending canonical persistence: "
+            + hud.tiles.values().stream().filter(t -> hud.persistent && t.gpuApproximate).count()
             + "; retained history: "
             + hud.history.size()
             + "; active bakes: "
@@ -471,12 +473,15 @@ public final class ClientMinimap {
                 // refinements a turn before filling the remaining background slots.
                 boolean refinementTurn = options.progressive && ((bakeSequence & 3) == 3 || slots == freeSlots - 1);
                 TileKey selected = refinementTurn ? chooseRefinement(live) : null;
+                if (selected == null && refinementTurn) selected = chooseRefinement(candidates);
                 boolean forceRefine = selected != null;
                 if (selected == null && options.progressive && slots == freeSlots) selected = chooseCoarse(live);
                 if (selected == null && slots == freeSlots) selected = choose(live, window);
                 if (selected == null && options.progressive) selected = chooseCoarse(candidates);
                 if (selected == null) selected = choose(candidates, window);
-                if (options.progressive && TerrainPreviewJob.workerLimit() > 1
+                boolean reserveCoverage = options.progressive && (window.pendingCount() > 0
+                    || chooseCoarse(candidates) != null);
+                if (reserveCoverage && TerrainPreviewJob.workerLimit() > 1
                     && activeRefinements() >= TerrainPreviewJob.workerLimit() - 1) {
                     selected = chooseCoarse(candidates);
                     forceRefine = false;
@@ -489,7 +494,7 @@ public final class ClientMinimap {
                 if (!current(mc) || entry.revision != revision) return;
                 boolean coarse = options.progressive && !forceRefine && needsCoarse(entry);
                 // With several workers, leave one slot available for newly explored terrain.
-                if (options.progressive && !coarse && TerrainPreviewJob.workerLimit() > 1
+                if (reserveCoverage && !coarse && TerrainPreviewJob.workerLimit() > 1
                     && activeRefinements() >= TerrainPreviewJob.workerLimit() - 1) break;
                 int[] history = coarse ? entry.pixels : entry.coarseShown || entry.gpuApproximate ? entry.confirmedPixels : entry.pixels;
                 BitSet patches = !coarse && !entry.coarseShown && !entry.gpuApproximate && !selected.isCave() && history != null
@@ -497,8 +502,10 @@ public final class ClientMinimap {
                     && entry.top == work.topY()
                     && !entry.dirty.isEmpty()
                     && entry.dirty.cardinality() <= PATCH_FALLBACK ? (BitSet) entry.dirty.clone() : null;
+                boolean canonical = TerrainPreviewFrame.requiresCanonical(persistent,selected.isCave(),entry.gpuApproximate);
                 TerrainPreviewJob job = coarse ? TerrainPreviewJob.startCoarse(work, history, options.stride, () -> LegacyGpuBaker.preview(work))
-                    : options.progressive ? TerrainPreviewJob.startRefined(work, history, patches, () -> LegacyGpuVolume.refine(work))
+                    : options.progressive ? (canonical ? TerrainPreviewJob.startRefined(work,history,patches)
+                        : TerrainPreviewJob.startRefined(work, history, patches, () -> LegacyGpuVolume.refine(work)))
                         : patches == null ? TerrainPreviewJob.startDetail(work, history)
                             : TerrainPreviewJob.startDetailPatches(work, history, patches);
                 if (job == null) break;
@@ -590,7 +597,8 @@ public final class ClientMinimap {
         long oldest = Long.MAX_VALUE;
         for (TileKey key : wanted) {
             CachedTile entry = tiles.get(key);
-            if (entry != null && entry.job == null && entry.coarseShown && entry.lastAttempt < oldest) {
+            if (entry != null && entry.job == null && (entry.coarseShown
+                || TerrainPreviewFrame.requiresCanonical(persistent,key.isCave(),entry.gpuApproximate)) && entry.lastAttempt < oldest) {
                 oldest = entry.lastAttempt;
                 selected = key;
             }
@@ -671,7 +679,7 @@ public final class ClientMinimap {
                 entry.pixels = PreviewTileStore.retain(entry.pixels,frame.detail());
                 entry.pendingUpload = null;
                 entry.savePending = false;
-                entry.needsFull = !stable;
+                entry.needsFull = !stable || TerrainPreviewFrame.requiresCanonical(persistent,key.isCave(),true);
                 entry.top = entry.jobTop;
                 if (stable) {
                     entry.dirty.clear();

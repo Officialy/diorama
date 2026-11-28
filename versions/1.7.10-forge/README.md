@@ -285,3 +285,13 @@ for the current network connection; each dimension keeps its separate storage su
 `diorama.remoteServer`/`diorama.remoteWorld` JVM overrides retain precedence. Proxy/multiworld
 servers still need distinct deliberate labels when entering a different world at the same address;
 Diorama does not infer a world identifier or silently merge different worlds.
+
+### GPU persistence and scheduler refinement
+
+In persistent surface maps, a GPU voxel result is displayed immediately and then marked for a
+canonical CPU background refinement, which alone may be written to disk. Already GPU-refined
+persistent tiles bypass repeat GPU submissions during that pass. RAM-only sessions can retain
+approximate GPU results without an extra CPU pass. `/dioramaterrain status` reports outstanding
+GPU tiles awaiting canonical persistence. The scheduler only reserves a coverage worker when
+capture/preview work is pending, and periodic refinement can serve background terrain as well.
+VisualProspecting's filtered marker list is reused until viewport or source data changes.

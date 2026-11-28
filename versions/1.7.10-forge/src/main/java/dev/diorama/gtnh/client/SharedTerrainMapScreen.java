@@ -195,6 +195,8 @@ final class SharedTerrainMapScreen extends GuiScreen {
         controls |= x >= BUTTON_X && x < BUTTON_X + BUTTON_WIDTH
             && y >= LAYER_Y + 24 && y < LAYER_Y + 24 + BUTTON_HEIGHT;
         if (button == 1 && !controls && isShiftKeyDown() && prospectMode != 0 && hoveredDeposit != null) {
+            double dx=view.screenX(hoveredDeposit.u())-x,dy=view.screenY(hoveredDeposit.v())-y;
+            if(dx*dx+dy*dy>49)return;
             ClientWaypoints session = ClientWaypoints.active(mc);
             if (session != null && session.writable() && session.points().size() < LegacyWaypointBook.MAX_POINTS) {
                 LegacyProspectingOverlay.Marker marker = hoveredDeposit;

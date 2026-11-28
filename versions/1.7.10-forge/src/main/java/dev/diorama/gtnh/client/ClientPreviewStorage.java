@@ -58,6 +58,14 @@ final class ClientPreviewStorage {
         }
     }
 
+    static void clearDisconnected(Minecraft mc) {
+        if(mc.theWorld==null&&mc.getNetHandler()==null) {
+            remoteConnection=null;
+            remoteEndpoint=null;
+            remoteLabel=null;
+        }
+    }
+
     static String remoteProfile(Minecraft mc,@Nullable String label,boolean change) {
         ServerData server=mc.func_147104_D();
         if(mc.theWorld==null||mc.isIntegratedServerRunning()||server==null)return "Remote server required";
