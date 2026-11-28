@@ -66,6 +66,10 @@ final class WaypointEditScreen extends GuiScreen {
         buttonList.add(new GuiButton(2, left, 136, 116, 20, I18n.format("gui.cancel")));
         if (index >= 0) buttonList.add(new GuiButton(3, left + 124, 136, 116, 20, deleteLabel()));
         buttonList.add(new GuiButton(4, left, 160, 240, 20, iconLabel()));
+        if (index >= 0) {
+            buttonList.add(new GuiButton(5, left, 184, 116, "Center map"));
+            buttonList.add(new GuiButton(6, left + 124, 184, 116, "Copy XYZ"));
+        }
         Keyboard.enableRepeatEvents(true);
     }
 
@@ -101,6 +105,13 @@ final class WaypointEditScreen extends GuiScreen {
                 else error = text("save_failed");
             }
             case 4 -> { icon = (icon + 1) % ICONS.length; button.displayString = iconLabel(); }
+            case 5 -> {
+                Point point = session.points().get(index);
+                SharedTerrainMapScreen target = new SharedTerrainMapScreen(mc.theWorld);
+                mc.displayGuiScreen(target);
+                target.centerOn(point);
+            }
+            case 6 -> GuiScreen.setClipboardString(new StringBuilder(values[1]).append(", ").append(values[2]).append(", ").append(values[3]).toString());
             default -> {}
         }
     }
@@ -160,8 +171,8 @@ final class WaypointEditScreen extends GuiScreen {
         for (int i = 0; i < 3; i++)
             drawString(fontRendererObj, "XYZ".substring(i, i + 1), width / 2 - 120 + 82 * i, 70, -1);
         for (GuiTextField field : fields) field.drawTextBox();
-        drawCenteredString(fontRendererObj, error, width / 2, 184, 0xFFFF7777);
-        if (session.sessionOnly()) drawCenteredString(fontRendererObj, text("session_only"), width / 2, 198, -1);
+        drawCenteredString(fontRendererObj, error, width / 2, 208, 0xFFFF7777);
+        if (session.sessionOnly()) drawCenteredString(fontRendererObj, text("session_only"), width / 2, 220, -1);
         super.drawScreen(x, y, partial);
     }
 

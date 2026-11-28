@@ -118,6 +118,22 @@ final class ClientWaypoints {
         return file == null && !unavailable;
     }
 
+    /** Explicit, dimension-scoped import; the source files are never modified. */
+    String importStaged(Minecraft mc) {
+        if (!valid(mc) || !writable()) return "Waypoint book unavailable";
+        Path folder = mc.mcDataDir.toPath().resolve("diorama-waypoint-import");
+        try {
+            List<Point> imported = LegacyWaypointBook.readImports(folder, dimensionId);
+            if (imported.isEmpty()) return "No valid points for this dimension. Copy JourneyMap 5 JSON or Xaero TXT here: " + folder;
+            int before = points().size();
+            if (!change(mc, updated -> updated.merge(imported))) return "Waypoint import could not be saved";
+            return "Imported " + (points().size() - before) + " of " + imported.size() + " matching points (duplicates/capacity skipped)";
+        } catch (IOException | RuntimeException failure) {
+            LOG.warn("Waypoint import failed", failure);
+            return "Waypoint import failed; check the import folder and log";
+        }
+    }
+
     boolean change(Minecraft mc, Consumer<LegacyWaypointBook> edit) {
         if (!valid(mc) || unavailable) return false;
         LegacyWaypointBook updated = new LegacyWaypointBook();

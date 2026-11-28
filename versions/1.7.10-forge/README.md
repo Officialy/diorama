@@ -242,3 +242,14 @@ RGB error are shown. The recommendation is quality-gated and frame-time penalize
 persist the suggested bake settings. Results never enter map storage. Capture budgets, radius and cache
 sizes remain independently adjustable; this controlled benchmark does not measure server chunk delivery,
 exploration capture throughput or every combined CPU/GPU scheduling profile. Escape cancels the test.
+
+### Waypoint interoperability and navigation
+
+Waypoint list supports name search, nearest/name/newest ordering (enabled first), and opening existing
+points in the map or copying XYZ from their editor. `/dioramaterrain import-waypoints` creates/reads
+`diorama-waypoint-import` inside the instance. Copy only the selected world's JourneyMap **5.x** JSON
+or the selected world AND dimension's Xaero text file there, then run the command. JourneyMap numeric
+dimensions are filtered; legacy Nether x/z are divided by eight to match JourneyMap 5's own display.
+Xaero text has no dimension field, so selection of the correct dimension is the user's responsibility.
+Source files remain unchanged; duplicate label/coordinate pairs are skipped and existing visibility is
+preserved. Maximum 128 points per book remains. JourneyMap 6 NBT files are not yet supported.

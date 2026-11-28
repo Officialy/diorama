@@ -105,6 +105,7 @@ public final class LegacyWaypointBookProbe {
             rejectsCorruption(file, SECOND, initial, book);
             Files.delete(file);
             digest.update(checkBounds(file));
+            imports();
         } finally {
             Files.deleteIfExists(file);
             Files.deleteIfExists(lock);
@@ -119,6 +120,23 @@ public final class LegacyWaypointBookProbe {
         System.out.println("FIXTURE-SHA256=" + hex);
         System.out
             .println("PASS waypoint book: " + checks + " checks; bounds, roundtrip, corruption and session fence");
+    }
+
+    private static void imports() throws IOException {
+        List<Point> xaero = LegacyWaypointBook.xaero(new java.io.StringReader(
+            "waypoint:Mine:M:-12:64:42:1:false:0\nwaypoint:Bad:B:0:~:0:1:false:0\n"
+                + "waypoint:Home:H:3:70:-5:2:true:0\n"));
+        require(xaero.equals(List.of(new Point("Mine",-12,64,42,true), new Point("Home",3,70,-5,false))),
+            "Xaero import preserves coordinates and visibility, skips unknown height");
+        String json = "{\"name\":\"Portal\",\"x\":-88,\"y\":64,\"z\":40,\"enable\":true,\"dimensions\":[-1,0]}";
+        require(LegacyWaypointBook.journeyMap(new java.io.StringReader(json),-1)
+            .equals(List.of(new Point("Portal",-11,64,5,true))), "JourneyMap Nether coordinate scaling");
+        require(LegacyWaypointBook.journeyMap(new java.io.StringReader(json),7).isEmpty(),
+            "JourneyMap excludes unrelated dimensions");
+        LegacyWaypointBook book = new LegacyWaypointBook();
+        book.add(new Point("Mine",-12,64,42,false));
+        require(book.merge(xaero) == 1 && book.merge(xaero) == 0, "repeat import is idempotent");
+        require(!book.points().get(0).enabled(), "import preserves edited visibility");
     }
 
     private static void rejectsCorruption(Path file, long lock, byte[] initial, LegacyWaypointBook book)

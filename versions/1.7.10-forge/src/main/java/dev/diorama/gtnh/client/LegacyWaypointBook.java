@@ -5,6 +5,8 @@ import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.Reader;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -16,6 +18,13 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 /** Bounded Overworld waypoints; the caller owns a book and serializes edits for its world session. */
 final class LegacyWaypointBook {
@@ -51,6 +60,106 @@ final class LegacyWaypointBook {
         List<Point> next = new ArrayList<>(points);
         next.remove(index);
         points = List.copyOf(next);
+    }
+
+    /** Merge without replacing an existing point or changing its visibility. */
+    int merge(List<Point> imported) {
+        Set<String> keys = new HashSet<>();
+        for (Point point : points) keys.add(importKey(point));
+        int added = 0;
+        for (Point point : imported) {
+            if (points.size() >= MAX_POINTS) break;
+            if (keys.add(importKey(point))) {
+                add(point);
+                added++;
+            }
+        }
+        return added;
+    }
+
+    private static String importKey(Point point) {
+        return new StringBuilder(point.label().toLowerCase(Locale.ROOT)).append((char) 0).append(point.x())
+            .append(',').append(point.y()).append(',').append(point.z()).toString();
+    }
+
+    /** Xaero text files describe a single dimension, explicitly selected by the user. */
+    static List<Point> xaero(Reader reader) throws IOException {
+        List<Point> points = new ArrayList<>();
+        java.io.BufferedReader lines = new java.io.BufferedReader(reader);
+        String line;
+        while ((line = lines.readLine()) != null && points.size() < MAX_POINTS) {
+            if (!line.startsWith("waypoint:") || line.length() > 4096) continue;
+            String[] fields = line.split(":", -1);
+            if (fields.length < 8 || !("true".equals(fields[7]) || "false".equals(fields[7]))) continue;
+            try {
+                points.add(new Point(fields[1], Integer.parseInt(fields[3]), Integer.parseInt(fields[4]),
+                    Integer.parseInt(fields[5]), !Boolean.parseBoolean(fields[7])));
+            } catch (IllegalArgumentException invalid) {
+                // Unknown heights, invalid names and coordinates cannot become actual pins.
+            }
+        }
+        return points;
+    }
+
+    /** Legacy JourneyMap 5.x serializes Nether x/z in Overworld units. Reject ambiguous dimensions. */
+    static List<Point> journeyMap(Reader reader, int dimension) {
+        JsonObject json = new JsonParser().parse(reader).getAsJsonObject();
+        if (!json.has("dimensions") || !json.get("dimensions").isJsonArray()) return List.of();
+        boolean matches = false;
+        for (JsonElement item : json.getAsJsonArray("dimensions")) {
+            if (item.isJsonPrimitive() && item.getAsJsonPrimitive().isNumber()
+                && exactInt(item) == dimension) matches = true;
+        }
+        if (!matches) return List.of();
+        int x = exactInt(json.get("x")), y = exactInt(json.get("y")), z = exactInt(json.get("z"));
+        if (dimension == -1) { x /= 8; z /= 8; }
+        JsonElement enabled = json.get("enable");
+        if (enabled == null || !enabled.isJsonPrimitive() || !enabled.getAsJsonPrimitive().isBoolean())
+            return List.of();
+        JsonElement name = json.get("name");
+        if (name == null || !name.isJsonPrimitive() || !name.getAsJsonPrimitive().isString()) return List.of();
+        return List.of(new Point(name.getAsString(), x, y, z, enabled.getAsBoolean()));
+    }
+
+    private static int exactInt(JsonElement value) {
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber())
+            throw new IllegalArgumentException("Expected an integer");
+        return new java.math.BigDecimal(value.getAsString()).intValueExact();
+    }
+
+    /** Reads only explicitly staged regular files; total source bytes and file count are bounded. */
+    static List<Point> readImports(Path directory, int dimension) throws IOException {
+        Files.createDirectories(directory);
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS))
+            throw new IOException("Import folder is not a regular directory");
+        List<Point> points = new ArrayList<>();
+        int files = 0;
+        long bytes = 0;
+        try (java.nio.file.DirectoryStream<Path> entries = Files.newDirectoryStream(directory)) {
+            for (Path entry : entries) {
+                if (++files > 512) throw new IOException("Import folder exceeds 512 entries");
+                String name = entry.getFileName().toString().toLowerCase(Locale.ROOT);
+                if (!name.endsWith(".json") && !name.endsWith(".txt")) continue;
+                BasicFileAttributes attrs = Files.readAttributes(entry, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                if (!attrs.isRegularFile() || attrs.size() > 262144) continue;
+                bytes += attrs.size();
+                if (bytes > 2097152) throw new IOException("Import exceeds 2 MiB");
+                try (InputStream input = Files.newInputStream(entry, LinkOption.NOFOLLOW_LINKS)) {
+                    byte[] content = input.readNBytes(262145);
+                    if (content.length > 262144) continue;
+                    String decoded = StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(content)).toString();
+                    Reader reader = new java.io.StringReader(decoded);
+                    List<Point> found = name.endsWith(".json") ? journeyMap(reader, dimension) : xaero(reader);
+                    for (Point point : found) {
+                        if (points.size() >= 4096) return points;
+                        points.add(point);
+                    }
+                } catch (IOException | RuntimeException invalid) {
+                    // A malformed source file cannot damage the existing waypoint book.
+                }
+            }
+        }
+        return points;
     }
 
     record Point(String name, int x, int y, int z, boolean enabled) {

@@ -1,9 +1,13 @@
 package dev.diorama.gtnh.client;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Locale;
 
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.gui.GuiTextField;
 
 import org.lwjgl.input.Keyboard;
 
@@ -13,7 +17,10 @@ final class WaypointListScreen extends GuiScreen {
 
     private final ClientWaypoints session;
     private final GuiScreen parent;
-    private int page, pageSize, lastPage;
+    private int page, pageSize, lastPage, sort;
+    private String query = "";
+    private GuiTextField search;
+    private List<Integer> shown = List.of();
 
     WaypointListScreen(ClientWaypoints session, GuiScreen parent) {
         this.session = session;
@@ -23,17 +30,38 @@ final class WaypointListScreen extends GuiScreen {
     @Override
     public void initGui() {
         int left = width / 2 - 140;
-        pageSize = Math.max(1, Math.min(8, (height - 88) / 22));
+        pageSize = Math.max(1, Math.min(8, (height - 116) / 22));
         List<Point> points = session.points();
-        lastPage = Math.max(0, (points.size() - 1) / pageSize);
-        page = Math.min(page, lastPage);
-        for (int i = page * pageSize; i < Math.min(points.size(), (page + 1) * pageSize); i++) {
+        search = new GuiTextField(fontRendererObj, left, 38, 174, 20);
+        search.setMaxStringLength(48);
+        search.setText(query);
+        button(4, left + 180, 38, 100, sort == 0 ? "Nearest" : sort == 1 ? "Name A-Z" : "Newest", true);
+        List<Integer> matching = new ArrayList<>();
+        String needle = query.toLowerCase(Locale.ROOT);
+        for (int i = 0; i < points.size(); i++) {
             Point point = points.get(i);
+            if (point.label().toLowerCase(Locale.ROOT).contains(needle)) matching.add(i);
+        }
+        Comparator<Integer> names = Comparator.comparing(i -> points.get(i).label().toLowerCase(Locale.ROOT));
+        double px = mc.thePlayer == null ? 0 : mc.thePlayer.posX;
+        double pz = mc.thePlayer == null ? 0 : mc.thePlayer.posZ;
+        Comparator<Integer> order = sort == 0 ? Comparator.comparingDouble(i -> {
+            Point p = points.get(i);
+            return Math.hypot(p.x() - px, p.z() - pz);
+        }) : sort == 1 ? names : Comparator.reverseOrder();
+        matching.sort(Comparator.<Integer, Boolean>comparing(i -> !points.get(i).enabled()).thenComparing(order)
+            .thenComparing(names));
+        shown = List.copyOf(matching);
+        lastPage = Math.max(0, (shown.size() - 1) / pageSize);
+        page = Math.min(page, lastPage);
+        for (int i = page * pageSize; i < Math.min(shown.size(), (page + 1) * pageSize); i++) {
+            int index = shown.get(i);
+            Point point = points.get(index);
             String location = "  [" + point.x() + ", " + point.y() + ", " + point.z() + "]";
             String prefix = point.enabled() ? "" : "- ";
             String name = fontRendererObj
                 .trimStringToWidth(new StringBuilder(point.icon()).append(" ").append(point.label()).toString(), 260 - fontRendererObj.getStringWidth(location + prefix));
-            buttonList.add(new GuiButton(10 + i, left, 38 + (i % pageSize) * 22, 280, 20, prefix + name + location));
+            buttonList.add(new GuiButton(10 + index, left, 62 + (i % pageSize) * 22, 280, 20, prefix + name + location));
         }
         int bottom = height - 28;
         button(0, left, bottom, 30, "<", page > 0);
@@ -61,6 +89,11 @@ final class WaypointListScreen extends GuiScreen {
             page += button.id == 0 ? -1 : 1;
             buttonList.clear();
             initGui();
+        } else if (button.id == 4) {
+            sort = (sort + 1) % 3;
+            page = 0;
+            buttonList.clear();
+            initGui();
         } else if (button.id == 2) {
             WaypointEditScreen.openNew(mc, session, this);
         } else if (button.id == 3) {
@@ -81,7 +114,14 @@ final class WaypointListScreen extends GuiScreen {
     @Override
     protected void keyTyped(char character, int key) {
         if (key == Keyboard.KEY_ESCAPE) mc.displayGuiScreen(session.valid(mc) ? parent : null);
-        else super.keyTyped(character, key);
+        else if (search.textboxKeyTyped(character, key)) {
+            query = search.getText();
+            page = 0;
+            buttonList.clear();
+            initGui();
+            search.setFocused(true);
+            search.setCursorPositionEnd();
+        } else super.keyTyped(character, key);
     }
 
     @Override
@@ -98,12 +138,21 @@ final class WaypointListScreen extends GuiScreen {
                 : session.points()
                     .isEmpty() ? WaypointEditScreen.text("empty") : "";
         drawCenteredString(fontRendererObj, status, width / 2, 22, 0xFFDDDDDD);
+        search.drawTextBox();
+        if (query.isEmpty() && !search.isFocused()) drawString(fontRendererObj, "Search waypoints", width / 2 - 136, 44, 0xFFAAAAAA);
         super.drawScreen(x, y, partial);
+    }
+
+    @Override
+    protected void mouseClicked(int x, int y, int button) {
+        super.mouseClicked(x, y, button);
+        search.mouseClicked(x, y, button);
     }
 
     @Override
     public void updateScreen() {
         if (!session.valid(mc)) mc.displayGuiScreen(null);
+        else search.updateCursorCounter();
     }
 
     @Override

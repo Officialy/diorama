@@ -91,6 +91,12 @@ final class SharedTerrainMapScreen extends GuiScreen {
             .format(ClientMinimap.layer(mc) == TileKey.SURFACE ? "diorama.map.show_caves" : "diorama.map.show_surface");
     }
 
+    void centerOn(Point point) {
+        if (!belongsTo(mc.theWorld)) return;
+        view.recenter(Projection.u(point.x() + .5, point.z() + .5),
+            Projection.v(point.x() + .5, point.y(), point.z() + .5));
+    }
+
     private void recenter() {
         if (mc.theWorld != world || mc.thePlayer == null) return;
         double x = mc.thePlayer.posX, z = mc.thePlayer.posZ, y = mc.thePlayer.boundingBox.minY;

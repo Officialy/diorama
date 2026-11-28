@@ -82,6 +82,7 @@ dependencies {
     add(probe.compileOnlyConfigurationName, "org.jspecify:jspecify:1.0.0")
     // Same primitive map library requested by pinned GTNHLib; no Minecraft or Forge on this classpath.
     add(probe.implementationConfigurationName, "it.unimi.dsi:fastutil:8.5.18")
+    add(probe.implementationConfigurationName, "com.google.code.gson:gson:2.2.4")
     add(probeApi.name, "xyz.wagyourtail.jvmdowngrader:jvmdowngrader-java-api:2.0.1:downgraded-8")
 }
 val probeJar = tasks.register<Jar>("probeJar") {
